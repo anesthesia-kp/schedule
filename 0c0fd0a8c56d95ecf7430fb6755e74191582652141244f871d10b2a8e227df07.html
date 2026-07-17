@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <script>
   var PAGE = 'admin';
-  var BUILD = 1;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 4;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -72,6 +72,8 @@ table.grid .wkend{background:var(--s3)}
   <a onclick="nav('requests',this)">📥 Requests <span id="reqBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
   <a onclick="nav('swaps',this)">🔁 Swaps <span id="swapBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
   <a onclick="nav('open',this)">📢 Open Shifts</a>
+  <div class="nav-section">People</div>
+  <a onclick="nav('users',this)">👤 Users</a>
   <div class="nav-section">Setup</div>
   <a onclick="nav('elig',this)">🎯 Shift Eligibility</a>
   <a onclick="nav('catalog',this)">🧰 Shift Catalog</a>
@@ -134,6 +136,26 @@ table.grid .wkend{background:var(--s3)}
     <div class="card"><div class="card-title">Posted</div><div id="openAdminList"></div></div>
   </div>
 
+  <!-- USERS — shared roster with the Vacation Auction: add/remove here affects both sites. -->
+  <div class="panel" id="panel-users">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Users</div>
+    <div class="page-sub" style="margin-bottom:12px">Shared with the Vacation Auction — adding or removing a user here changes their roster too.</div>
+    <div class="card">
+      <div class="card-title">Add user</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="text" class="inp" id="uInitials" style="width:110px;text-transform:uppercase" placeholder="Initials" maxlength="10">
+        <input type="text" class="inp" id="uFullName" style="width:200px" placeholder="Full name">
+        <input type="email" class="inp" id="uEmail" style="width:220px" placeholder="email@address.com">
+        <button class="btn btn-primary" onclick="addSchedUser()">Add</button>
+      </div>
+      <div id="uMsg" style="font-size:12px;margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">All Users (<span id="uCount">0</span>)</div>
+      <div style="overflow-x:auto"><table class="grid" id="usersGrid" style="width:100%"></table></div>
+    </div>
+  </div>
+
   <!-- ELIGIBILITY -->
   <div class="panel" id="panel-elig">
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Shift Eligibility</div>
@@ -153,6 +175,12 @@ table.grid .wkend{background:var(--s3)}
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="text" class="inp" id="catLabel" placeholder="Label e.g. D10 or Call 16" style="width:170px">
         <select class="sel" id="catKind"><option value="day">Day shift</option><option value="call">Call shift</option></select>
+        <select class="sel" id="catFamily" onchange="applyFamilyColor()">
+          <option value="">Color family…</option>
+          <option value="ob">OB / Obstetric</option><option value="ap">AP coverage</option><option value="call">Call</option>
+          <option value="icu">ICU</option><option value="pedi">Pediatric</option><option value="pcv">P / PCV</option>
+          <option value="admin">Admin / other</option><option value="dshift">D-shift</option>
+        </select>
         <input type="color" class="inp" id="catColor" value="#fef9c3" style="padding:2px;width:52px;height:36px">
         <button class="btn btn-primary" onclick="addShift()">Add</button>
       </div>
@@ -231,13 +259,14 @@ const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);
 // vacations — READ-ONLY: roster, admin list, approved vacation weeks
 const userListRef   = doc(db,"vacations","userList");
 const usernamesRef  = doc(db,"vacations","usernames");
+const emailsRef      = doc(db,"vacations","emails"); // shared with the Vacation Auction — same roster, same contact info
 const adminAccessRef= doc(db,"vacations","adminAccess");
 const vPhasesRef    = doc(db,"vacations","phases");
 const vApprovalsRef = doc(db,"vacations","approvals");
 
 const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-let names=[], usernamesData={}, vPhases={}, vApprovals={};
+let names=[], usernamesData={}, emailsData={}, vPhases={}, vApprovals={};
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, totals={}, monthData={days:{}};
 let curYM=null, unsubMonth=null, cellSel=null;
 
@@ -250,16 +279,131 @@ function shiftList(kind){ return Object.entries(catalog.shifts||{}).filter(([,s]
 function chipHtml(id){ const s=catalog.shifts?.[id]||{}; return '<span class="chipp" style="background:'+esc(s.color||'#fef9c3')+'">'+esc(s.label||id)+'</span>'; }
 function allowed(u,id){ return elig?.[u]?.[id]===true; }
 
+// ── Color families ── shifts are grouped like QGenda groups them — every
+// shift in the same clinical family shares a color, so the grid reads at a
+// glance (all ICU rotations teal, all Pedi pink, all call purple, etc.)
+// rather than each shift getting an arbitrary unique color. FAMILY_PRESETS
+// feeds the Add Shift form's family picker AND the recolor migration below —
+// change a hex here and both stay in sync since they read the same object.
+const FAMILY_PRESETS={
+  ob:      {label:'OB / Obstetric',   colors:['#fde68a','#fcd34d']},
+  ap:      {label:'AP coverage',      colors:['#bfdbfe','#93c5fd']},
+  call:    {label:'Call',             colors:['#ddd6fe','#c4b5fd']},
+  icu:     {label:'ICU',              colors:['#99f6e4','#5eead4']},
+  pedi:    {label:'Pediatric',        colors:['#fbcfe8','#f9a8d4']},
+  pcv:     {label:'P / PCV',          colors:['#bbf7d0','#86efac']},
+  admin:   {label:'Admin / other',    colors:['#e2e8f0','#cbd5e1']},
+  dshift:  {label:'D-shift',          colors:['#fef9c3','#fde047']},
+};
+const fam=(f,i)=>FAMILY_PRESETS[f].colors[i%FAMILY_PRESETS[f].colors.length];
+
 // ── Default catalog seeded on first run (admin edits freely afterwards) ──
 const DEFAULT_SHIFTS={
-  OBD:{label:'OBD',kind:'day',color:'#fde68a',order:1},
-  D10:{label:'D10',kind:'day',color:'#fef9c3',order:2},
-  AP_CRNA:{label:'AP (CRNA)',kind:'day',color:'#bfdbfe',order:3},
-  AP_MD:{label:'AP (MD)',kind:'day',color:'#93c5fd',order:4},
-  CALL16:{label:'Call 16',kind:'call',color:'#ddd6fe',order:10},
-  CALL24:{label:'Call 24',kind:'call',color:'#c4b5fd',order:11},
-  OBPM:{label:'OB PM',kind:'call',color:'#fbcfe8',order:12},
+  OBD:{label:'OBD',kind:'day',color:fam('ob',0),order:1},
+  D10:{label:'D10',kind:'day',color:fam('dshift',0),order:2},
+  AP_CRNA:{label:'AP (CRNA)',kind:'day',color:fam('ap',0),order:3},
+  AP_MD:{label:'AP (MD)',kind:'day',color:fam('ap',1),order:4},
+  CALL16:{label:'Call 16',kind:'call',color:fam('call',0),order:10},
+  CALL24:{label:'Call 24',kind:'call',color:fam('call',1),order:11},
+  OBPM:{label:'OB PM',kind:'call',color:fam('call',0),order:12},
 };
+
+// ── Second batch, imported from QGenda screenshots. Added by a ONE-TIME
+// migration (see the catalogRef listener below) so it merges into an
+// existing catalog without touching anything admin already edited or
+// deleted. A few labels were transcribed from a handheld photo and may be
+// slightly off (marked below) — fix the label/color in the Shift Catalog
+// tab if so; nothing else needs to change since assignments reference IDs.
+const ADDITIONAL_SHIFTS_V2={
+  '4_TO_8':{label:'4 to 8',kind:'day',color:fam('dshift',0),order:20},
+  '6_TO_8':{label:'6 to 8',kind:'day',color:fam('dshift',1),order:21},
+  AP_PLUS:{label:'AP+',kind:'day',color:fam('ap',0),order:22},
+  AP_PLUS_MD:{label:'AP+ (MD)',kind:'day',color:fam('ap',1),order:23},
+  PA:{label:'PA',kind:'day',color:fam('ap',0),order:24},
+  OBAP:{label:'OBAP',kind:'day',color:fam('ob',0),order:25},
+  OBPA:{label:'OBPA',kind:'day',color:fam('ob',1),order:26},
+  EV:{label:'EV',kind:'day',color:fam('dshift',0),order:27},
+  CH:{label:'CH',kind:'day',color:fam('dshift',1),order:28},
+  C2PA:{label:'C2PA',kind:'call',color:fam('call',0),order:29},
+  C2AP:{label:'C2AP',kind:'call',color:fam('call',1),order:30},
+  EYE_CALL:{label:'Eye Call',kind:'call',color:fam('call',0),order:31},
+  CALL8:{label:'Call 8',kind:'call',color:fam('call',1),order:32},
+  CALL12AM:{label:'Call 12 AM',kind:'call',color:fam('call',0),order:33},
+  CALL12PM:{label:'Call 12 PM',kind:'call',color:fam('call',1),order:34},
+  NICU9_PLUS:{label:'NICU9+',kind:'day',color:fam('icu',0),order:35}, // photo unclear — verify
+  RC0_PLUS:{label:'RC0+',kind:'day',color:fam('icu',1),order:36},     // photo unclear — verify
+  R9_5:{label:'R9/5',kind:'day',color:fam('icu',0),order:38},         // photo unclear — verify
+  R10:{label:'R10',kind:'day',color:fam('icu',1),order:39},
+  R11_PLUS:{label:'R11+',kind:'day',color:fam('icu',0),order:40},     // photo unclear — verify
+  RFL:{label:'RFL',kind:'day',color:fam('icu',1),order:41},
+  RB_MD:{label:'RB MD',kind:'day',color:fam('icu',0),order:42},
+  RBL_8:{label:'RBL 8',kind:'day',color:fam('icu',1),order:43},
+  CV8_PLUS:{label:'CV8+',kind:'day',color:fam('icu',0),order:44},     // photo unclear — verify
+  PAIN:{label:'Pain',kind:'day',color:fam('admin',0),order:45},
+  ADMIN:{label:'Admin',kind:'day',color:fam('admin',0),order:46},
+  ADMIN_AM:{label:'Admin AM',kind:'day',color:fam('admin',1),order:47},
+  ADMIN_PM:{label:'Admin PM',kind:'day',color:fam('admin',0),order:48},
+  OAK_ICU_SWING:{label:'Oak ICU Swing',kind:'day',color:fam('icu',1),order:49},
+  ICU3:{label:'ICU3',kind:'day',color:fam('icu',0),order:50},
+  ICU7A12:{label:'ICU7A12',kind:'day',color:fam('icu',1),order:51},
+  ICU7A8:{label:'ICU7A8',kind:'day',color:fam('icu',0),order:52},
+  ICU7B12:{label:'ICU7B12',kind:'day',color:fam('icu',1),order:53},
+  ICU7B8:{label:'ICU7B8',kind:'day',color:fam('icu',0),order:54},
+  ICU7C12:{label:'ICU7C12',kind:'day',color:fam('icu',1),order:55},
+  ICU7C8:{label:'ICU7C8',kind:'day',color:fam('icu',0),order:56},
+  RCH_ICU_A:{label:'RCH-ICU A',kind:'day',color:fam('icu',1),order:57},
+  RCH_ICU_B:{label:'RCH-ICU B',kind:'day',color:fam('icu',0),order:58},
+  TCC:{label:'TCC',kind:'day',color:fam('admin',1),order:59},
+  PEDI_ADMIN:{label:'Pedi Admin',kind:'day',color:fam('pedi',0),order:60},
+  PEDI_ADMIN_AM:{label:'Pedi Admin AM',kind:'day',color:fam('pedi',1),order:61},
+  PEDI_ADMIN_PM:{label:'Pedi Admin PM',kind:'day',color:fam('pedi',0),order:62},
+  PEDI_AM:{label:'Pedi AM',kind:'day',color:fam('pedi',1),order:63},
+  PEDI_PM:{label:'Pedi PM',kind:'day',color:fam('pedi',0),order:64},
+  PEDI_CHARGE:{label:'Pedi Charge',kind:'day',color:fam('pedi',1),order:65},
+  PEDI_FLOAT:{label:'Pedi Float',kind:'day',color:fam('pedi',0),order:66},
+  MRI1:{label:'MRI1',kind:'day',color:fam('pedi',1),order:67},
+  NORA:{label:'NORA',kind:'day',color:fam('pedi',0),order:68},
+  NORA2:{label:'NORA2',kind:'day',color:fam('pedi',1),order:69},
+  PURPLE_ROOM:{label:'Purple Room',kind:'day',color:fam('pedi',0),order:70},
+  P1:{label:'P1',kind:'day',color:fam('pcv',0),order:71},
+  P2:{label:'P2',kind:'day',color:fam('pcv',1),order:72},
+  P3:{label:'P3',kind:'day',color:fam('pcv',0),order:73},
+  P4:{label:'P4',kind:'day',color:fam('pcv',1),order:74},
+  PCV1:{label:'PCV 1',kind:'day',color:fam('pcv',0),order:75},
+  PCV2:{label:'PCV 2',kind:'day',color:fam('pcv',1),order:76},
+  PCV3:{label:'PCV 3',kind:'day',color:fam('pcv',0),order:77},
+  PCV_CALL:{label:'PCV Call',kind:'call',color:fam('call',0),order:78},
+  PEDI_CARDIAC:{label:'Pedi Cardiac',kind:'day',color:fam('pedi',1),order:79},
+  LEARNER:{label:'Learner',kind:'day',color:fam('admin',0),order:80},
+  SIMA:{label:'SIMA',kind:'day',color:fam('admin',1),order:81},
+  MD_SAT_D:{label:'MD Sat D',kind:'day',color:fam('dshift',0),order:82},
+  PODIATRY:{label:'Podiatry',kind:'day',color:fam('pedi',0),order:83},
+  ORIENT:{label:'Orient',kind:'day',color:fam('admin',0),order:84},
+  AIC:{label:'AIC',kind:'day',color:fam('admin',1),order:85},
+  APS:{label:'APS',kind:'day',color:fam('admin',0),order:86},
+  D_PM:{label:'D pm',kind:'day',color:fam('dshift',1),order:87},
+  PACU_MD:{label:'PACU MD',kind:'day',color:fam('dshift',0),order:88},
+  OFL:{label:'OFL',kind:'day',color:fam('dshift',1),order:89},
+  D:{label:'D',kind:'day',color:fam('dshift',0),order:90},
+  PEDI_B:{label:'Pedi B',kind:'day',color:fam('pedi',1),order:91},
+  SMOB_URO:{label:'SMOB Uro',kind:'day',color:fam('dshift',0),order:92},
+  D10_PLUS:{label:'D10+',kind:'day',color:fam('dshift',1),order:93},
+  D10_FLOAT:{label:'D10 Float',kind:'day',color:fam('dshift',0),order:94},
+  D10_FLOAT2:{label:'D10Float2',kind:'day',color:fam('dshift',1),order:95},
+  CVPM:{label:'CVpm',kind:'day',color:fam('dshift',0),order:96},
+  D6:{label:'D6',kind:'day',color:fam('dshift',1),order:97},
+  CRNA_SWING:{label:'CRNA Swing',kind:'day',color:fam('ap',0),order:98},
+  D_AM:{label:'D am',kind:'day',color:fam('dshift',0),order:99},
+  D_11_7_30:{label:'11-7:30',kind:'day',color:fam('dshift',1),order:100},
+  OUT_OF_OR_D10:{label:'Out of OR D10',kind:'day',color:fam('dshift',0),order:101},
+  D_IR:{label:'D-IR',kind:'day',color:fam('dshift',1),order:102},
+  P1_TASKS:{label:'P1 Tasks',kind:'day',color:fam('pcv',0),order:103},
+  AVAILABLE:{label:'Available',kind:'day',color:fam('admin',0),order:104},
+};
+// Flat id → color map used by both the v4 recolor migration (for shifts that
+// already exist in a live catalog) and available to the Add Shift family
+// picker as a reference of "this is what family X looks like".
+const COLOR_BY_ID={}; for(const [id,s] of Object.entries({...DEFAULT_SHIFTS,...ADDITIONAL_SHIFTS_V2})) COLOR_BY_ID[id]=s.color;
 
 // ── Vacation overlay (identical logic to the user site) ──
 function vacationDays(){
@@ -508,6 +652,59 @@ window.removeOpen=async function(id){
   await setDoc(openRef,{list:(openShifts.list||[]).filter(o=>o.id!==id)},{merge:true});
 };
 
+// ── Users — shared roster with the Vacation Auction (vacations/userList,
+// usernames, emails). Adding/removing here changes BOTH sites' roster; the
+// confirmation dialog says so explicitly. New users get no FTE set — that's
+// still controlled from the Vacation Auction admin's Users tab before they
+// can participate in the auction; here they just need a name to be
+// schedulable and to appear in Shift Eligibility. ──
+function renderUsersGrid(){
+  const g=document.getElementById('usersGrid'); if(!g) return;
+  const count=document.getElementById('uCount'); if(count) count.textContent=names.length;
+  let head='<tr><th style="text-align:left">Initials</th><th style="text-align:left">Full name</th><th style="text-align:left">E-mail</th><th></th></tr>';
+  let rows='';
+  for(const u of names){
+    rows+=`<tr>
+      <td style="text-align:left"><strong class="mono">${esc(u)}</strong></td>
+      <td style="text-align:left"><input type="text" class="inp" id="ufn_${esc(u)}" style="width:180px" value="${esc(usernamesData[u]||'')}" placeholder="not set"></td>
+      <td style="text-align:left"><input type="email" class="inp" id="uem_${esc(u)}" style="width:200px" value="${esc(emailsData[u]||'')}" placeholder="not set"></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-success" style="font-size:11px;padding:4px 10px" onclick="saveSchedUser('${esc(u)}')">Save</button>
+        <button class="btn btn-danger" style="font-size:11px;padding:4px 10px" onclick="removeSchedUser('${esc(u)}')">🗑 Remove</button>
+      </td>
+    </tr>`;
+  }
+  g.innerHTML=head+rows;
+}
+window.addSchedUser=async function(){
+  const msg=document.getElementById('uMsg'); msg.textContent='';
+  const initials=document.getElementById('uInitials').value.trim().toUpperCase();
+  const fullName=document.getElementById('uFullName').value.trim();
+  const email=document.getElementById('uEmail').value.trim();
+  if(!initials){ msg.textContent='Enter initials.'; msg.style.color='var(--red)'; return; }
+  if(initials.length>10){ msg.textContent='Initials — max 10 characters.'; msg.style.color='var(--red)'; return; }
+  if(names.includes(initials)){ msg.textContent=initials+' already exists.'; msg.style.color='var(--red)'; return; }
+  const updated=[...names,initials].sort();
+  await setDoc(userListRef,{users:updated});
+  if(fullName) await setDoc(usernamesRef,{[initials]:fullName},{merge:true});
+  if(email) await setDoc(emailsRef,{[initials]:email},{merge:true});
+  document.getElementById('uInitials').value=''; document.getElementById('uFullName').value=''; document.getElementById('uEmail').value='';
+  msg.style.color='var(--green)'; msg.textContent='Added '+initials+' — remember to set their FTE on the Vacation Auction admin before the auction opens.';
+};
+window.saveSchedUser=async function(u){
+  const fn=document.getElementById('ufn_'+u).value.trim();
+  const em=document.getElementById('uem_'+u).value.trim();
+  if(fn) await setDoc(usernamesRef,{[u]:fn},{merge:true}); else await updateDoc(usernamesRef,{[u]:deleteField()}).catch(()=>{});
+  if(em) await setDoc(emailsRef,{[u]:em},{merge:true}); else await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
+};
+window.removeSchedUser=async function(u){
+  if(!confirm('Remove '+u+' from the shared roster?\n\nThis removes them from BOTH the Daily Schedule and the Vacation Auction — they will no longer be selectable anywhere. Any shifts or vacation weeks already assigned to them stay in the history but they will disappear from user lists. This cannot be undone from here.')) return;
+  await setDoc(userListRef,{users:names.filter(n=>n!==u)});
+  await updateDoc(usernamesRef,{[u]:deleteField()}).catch(()=>{});
+  await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
+  await updateDoc(eligRef,{[u]:deleteField()}).catch(()=>{});
+};
+
 // ── Eligibility ──
 function renderElig(){
   const g=document.getElementById('eligGrid'); if(!g) return;
@@ -542,6 +739,15 @@ function renderCatalog(){
       <span style="margin-left:auto"><button class="btn btn-ghost" style="font-size:11px;color:var(--red)" onclick="delShift('${esc(id)}')">Delete</button></span>
     </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No shifts yet — add one above.</div>';
 }
+// Picking a color family sets a starting shade from that family (alternating
+// shade based on how many shifts already use it, so same-family shifts don't
+// all land on the exact same hex) — admin can still fine-tune with the raw
+// color picker right next to it before clicking Add.
+window.applyFamilyColor=function(){
+  const f=document.getElementById('catFamily').value; if(!f) return;
+  const usedInFamily=Object.values(catalog.shifts||{}).filter(s=>FAMILY_PRESETS[f].colors.includes(s.color)).length;
+  document.getElementById('catColor').value=fam(f,usedInFamily);
+};
 window.addShift=async function(){
   const label=document.getElementById('catLabel').value.trim();
   const kind=document.getElementById('catKind').value;
@@ -585,7 +791,7 @@ function renderStats(){
   g.innerHTML=head+rows;
 }
 
-function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderStats(); fillOpenShiftSel(); }
+function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderStats(); renderUsersGrid(); fillOpenShiftSel(); }
 
 // ── Admin auth gate — SAME admin list (vacations/adminAccess) as the auction ──
 const DEFAULT_ADMIN_EMAILS=['dr.vacation.goddess@gmail.com','aaronjfrankel@gmail.com'];
@@ -633,13 +839,45 @@ setMonth(ymKey(new Date()));
 authReady.then(()=>{
   onSnapshot(userListRef,snap=>{ const d=snap.exists()?snap.data():{}; if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort(); renderAll(); });
   onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; renderAll(); });
+  onSnapshot(emailsRef,snap=>{ emailsData=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(catalogRef,async snap=>{
     if(!snap.exists()||!snap.data().shifts||!Object.keys(snap.data().shifts).length){
       await setDoc(catalogRef,{shifts:DEFAULT_SHIFTS},{merge:true}); return; // seed once; listener refires
     }
-    catalog=snap.data(); renderAll();
+    catalog=snap.data();
+    // One-time migration: merge in the QGenda-imported shift list (v2) without
+    // touching anything admin already added, edited, or deleted. Runs once —
+    // marked by _v2Seeded on the catalog doc — then never runs again, so
+    // deleting one of these shifts later won't bring it back.
+    if(!catalog._v2Seeded){
+      const patch={}; for(const [id,s] of Object.entries(ADDITIONAL_SHIFTS_V2)) if(!catalog.shifts?.[id]) patch[id]=s;
+      await setDoc(catalogRef,{shifts:patch,_v2Seeded:true},{merge:true});
+      return; // listener refires with the merged catalog
+    }
+    // Second cleanup pass — corrects 3 transcription errors from the v2 import
+    // (drop BS+, rename RBL B → RBL 8, rename Pediatry → Podiatry). Runs once,
+    // and only touches these 3 shifts — safe even if v2 already went live.
+    if(!catalog._v3Fixed){
+      const patch={};
+      if(catalog.shifts?.BS_PLUS) patch.BS_PLUS=deleteField();
+      if(catalog.shifts?.RBL_B&&!catalog.shifts?.RBL_8){ patch.RBL_8={...catalog.shifts.RBL_B,label:'RBL 8'}; patch.RBL_B=deleteField(); }
+      if(catalog.shifts?.PEDIATRY&&!catalog.shifts?.PODIATRY){ patch.PODIATRY={...catalog.shifts.PEDIATRY,label:'Podiatry'}; patch.PEDIATRY=deleteField(); }
+      await setDoc(catalogRef,{shifts:patch,_v3Fixed:true},{merge:true});
+      return;
+    }
+    // Color-code by clinical family (matches how QGenda groups shift colors)
+    // — recolors any shift whose id we recognize, once. Never touches a
+    // shift id we don't know about (i.e. anything admin added by hand),
+    // and never re-runs, so a manual recolor afterward always sticks.
+    if(!catalog._v4Colors){
+      const patch={};
+      for(const [id,color] of Object.entries(COLOR_BY_ID)) if(catalog.shifts?.[id]&&catalog.shifts[id].color!==color) patch[id]={color};
+      await setDoc(catalogRef,{shifts:patch,_v4Colors:true},{merge:true});
+      return;
+    }
+    renderAll();
   });
   onSnapshot(eligRef,snap=>{ elig=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(requestsRef,snap=>{ requests=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(requests.list))requests.list=[]; renderRequests(); });
