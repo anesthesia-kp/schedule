@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Schedule</title>
+<script>
+  // ── Auto-refresh: reload when a newer build is deployed ──
+  var PAGE = 'index';
+  var BUILD = 1;      // bump this AND versions.json[PAGE] on each deploy of this file
+  (function(){
+    function chk(){
+      fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
+        if(v && typeof v[PAGE]==='number' && v[PAGE]>BUILD) location.reload(true);
+      }).catch(function(){});
+    }
+    setInterval(chk, 5*60*1000); chk();
+  })();
+</script>
+<style>
+:root{
+  --bg:#f4f7fa; --s1:#ffffff; --s2:#f8fafc; --s3:#eef2f7;
+  --b1:#e3e9f0; --b2:#cbd5e1;
+  --t1:#1e293b; --t2:#5b6b7c; --t3:#94a3b8;
+  --blue:#2563eb; --green:#059669; --red:#dc2626; --yellow:#b45309; --purple:#7c3aed;
+  --mono:'SF Mono',Consolas,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px}
+.top{background:var(--s1);border-bottom:1px solid var(--b1);padding:14px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:sticky;top:0;z-index:50}
+.top h1{font-size:17px;font-weight:800;letter-spacing:.01em}
+.top .sub{font-size:12px;color:var(--t2)}
+.wrap{max-width:1500px;margin:0 auto;padding:18px 22px 60px}
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.card-title{font-size:12px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.btn{border:1px solid var(--b2);background:var(--s1);color:var(--t1);border-radius:8px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer}
+.btn:hover{background:var(--s3)}
+.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn-primary:hover{background:#1d4ed8}
+.btn-ghost{background:transparent}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.sel,.inp{border:1px solid var(--b2);border-radius:8px;padding:7px 10px;font-size:13px;background:var(--s1);color:var(--t1)}
+.pill{display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:9px;letter-spacing:.03em}
+table.grid{border-collapse:collapse;width:100%;font-size:11px}
+table.grid th,table.grid td{border:1px solid var(--b1);padding:3px 4px;text-align:center;white-space:nowrap}
+table.grid th{background:var(--s2);font-size:10px;color:var(--t2);position:sticky;top:64px}
+table.grid td.me{background:#eff6ff}
+table.grid .wkend{background:var(--s3)}
+.cell-day{color:var(--blue);font-weight:700}
+.cell-call{color:var(--purple);font-weight:700}
+.cell-off{color:var(--t3);font-weight:700}
+.cell-vac{color:var(--green);font-weight:800}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal .dh{font-size:10px;font-weight:800;color:var(--t3);text-align:center;text-transform:uppercase}
+.cal .d{background:var(--s2);border:1px solid var(--b1);border-radius:9px;min-height:74px;padding:5px 7px;font-size:11px}
+.cal .d .dn{font-size:10px;color:var(--t3);font-weight:700}
+.cal .d.today{outline:2px solid var(--blue)}
+.rowline{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px dashed var(--b1);font-size:13px;flex-wrap:wrap}
+.status-pending{color:var(--yellow)} .status-approved{color:var(--green)} .status-denied{color:var(--red)}
+.mono{font-family:var(--mono)}
+#signGate{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:200;padding:18px}
+#signCard{background:var(--s1);border-radius:14px;max-width:380px;width:100%;padding:28px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--t2);margin:6px 0 12px}
+@media (max-width:700px){ .wrap{padding:12px 8px 60px} table.grid{font-size:9px} }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>📅 Daily Schedule</h1>
+  <span class="sub">Anesthesia — call, shifts, days off &amp; vacation</span>
+  <span style="margin-left:auto"></span>
+  <span id="whoami" style="font-size:12px;color:var(--t2)"></span>
+  <button class="btn btn-ghost" style="font-size:12px" onclick="switchUser()">Switch user</button>
+  <a class="btn" style="text-decoration:none;font-size:12px" href="https://anesthesia-kp.github.io/vacation/" target="_blank" rel="noopener">🏖️ Vacation Auction →</a>
+</div>
+
+<div class="wrap">
+
+  <!-- Month navigation -->
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn" onclick="moveMonth(-1)">⟨</button>
+    <div id="monthLabel" style="font-size:16px;font-weight:800;min-width:170px;text-align:center"></div>
+    <button class="btn" onclick="moveMonth(1)">⟩</button>
+    <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
+    <span style="margin-left:auto;font-size:11px;color:var(--t3)">Schedule updates live as admin assigns.</span>
+  </div>
+
+  <!-- Quick view: my next 7 days -->
+  <div class="card">
+    <div class="card-title">My Quick View — next 7 days</div>
+    <div id="quickView" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px"></div>
+  </div>
+
+  <!-- Open shifts users can apply for -->
+  <div class="card">
+    <div class="card-title">Available Shifts</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:8px">Unfilled shifts posted by admin — apply and admin will confirm.</div>
+    <div id="openList"></div>
+  </div>
+
+  <!-- My month -->
+  <div class="card">
+    <div class="card-title">My Schedule — <span id="myName"></span></div>
+    <div class="legend">
+      <span><b class="cell-day">■</b> day shift</span>
+      <span><b class="cell-call">■</b> call</span>
+      <span><b class="cell-off">■</b> day off</span>
+      <span><b class="cell-vac">■</b> vacation (from auction)</span>
+    </div>
+    <div class="cal" id="myCal"></div>
+  </div>
+
+  <!-- Everyone -->
+  <div class="card">
+    <div class="card-title">Everyone</div>
+    <div style="overflow-x:auto">
+      <table class="grid" id="allGrid"></table>
+    </div>
+  </div>
+
+  <!-- Requests -->
+  <div class="card">
+    <div class="card-title">My Requests</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Ask for a specific shift, a day off, a no-call day, or anything else. Admin reviews every request.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="date" class="inp" id="reqDate">
+      <select class="sel" id="reqType" onchange="onReqType()">
+        <option value="shift">Specific shift</option>
+        <option value="dayoff">Day off</option>
+        <option value="nocall">No call that day</option>
+        <option value="other">Other</option>
+      </select>
+      <select class="sel" id="reqShift" style="display:none"></select>
+      <input type="text" class="inp" id="reqNote" placeholder="Note (optional)" style="min-width:200px;flex:1">
+      <button class="btn btn-primary" onclick="submitRequest()">Submit request</button>
+    </div>
+    <div id="reqMsg" style="font-size:12px;margin-top:8px"></div>
+    <div id="myReqList" style="margin-top:10px"></div>
+  </div>
+
+  <!-- Swaps -->
+  <div class="card">
+    <div class="card-title">Swap Requests</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Propose trading one of your assignments with another user. Admin confirms with both of you before approving.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="date" class="inp" id="swapDate">
+      <select class="sel" id="swapPart">
+        <option value="day">Day shift</option>
+        <option value="call">Call</option>
+      </select>
+      <span style="font-size:12px;color:var(--t2)">with</span>
+      <select class="sel" id="swapWith"></select>
+      <input type="text" class="inp" id="swapNote" placeholder="Note (optional)" style="min-width:180px;flex:1">
+      <button class="btn btn-primary" onclick="submitSwap()">Request swap</button>
+    </div>
+    <div id="swapMsg" style="font-size:12px;margin-top:8px"></div>
+    <div id="mySwapList" style="margin-top:10px"></div>
+  </div>
+
+</div>
+
+<!-- Sign-in gate -->
+<div id="signGate">
+  <div id="signCard">
+    <div style="font-size:32px;margin-bottom:8px">📅</div>
+    <div style="font-size:17px;font-weight:800;margin-bottom:4px">Daily Schedule</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:16px">Select your name to continue (same roster as the Vacation Auction).</div>
+    <select class="sel" id="signSel" style="width:100%;margin-bottom:10px"></select>
+    <input type="password" class="inp" id="signPass" placeholder="Passcode" style="width:100%;margin-bottom:10px;display:none">
+    <button class="btn btn-primary" style="width:100%" onclick="doSignIn()">Continue</button>
+    <div id="signErr" style="font-size:12px;color:var(--red);margin-top:8px"></div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, setDoc, updateDoc, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+// ── Firebase — same project as the Vacation Auction, but ALL scheduling data
+// lives in its own 'dailysched' collection so the two systems never mix.
+// Named app keeps this page's anonymous auth out of other pages' auth slots.
+const app = initializeApp({
+  apiKey:"AIzaSyDcOesDATWAKWt1i7innHNu5aK_xdpGxTk",
+  authDomain:"vacation-25e8e.firebaseapp.com",
+  projectId:"vacation-25e8e",
+  storageBucket:"vacation-25e8e.firebasestorage.app",
+  messagingSenderId:"390938040016",
+  appId:"1:390938040016:web:2dece784efd16db34a70d5"
+}, 'sched-user-site');
+const db=getFirestore(app), auth=getAuth(app);
+const onSnapshot=(r,cb)=>{ try{ return _onSnapshot(r,cb,err=>console.warn('listener',err&&err.code)); }catch(e){ console.warn(e); return ()=>{}; } };
+
+// dailysched — this site's own data
+const catalogRef  = doc(db,"dailysched","shiftCatalog");
+const eligRef     = doc(db,"dailysched","eligibility");
+const requestsRef = doc(db,"dailysched","requests");
+const swapsRef    = doc(db,"dailysched","swaps");
+const openRef     = doc(db,"dailysched","openShifts"); // admin-posted unfilled shifts users can apply for
+const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);
+
+// vacations — READ-ONLY: shared roster + approved vacation weeks
+const userListRef  = doc(db,"vacations","userList");
+const usernamesRef = doc(db,"vacations","usernames");
+const passcodesRef = doc(db,"vacations","passcodes");
+const vAdminRef    = doc(db,"vacations","adminSettings");
+const vPhasesRef   = doc(db,"vacations","phases");
+const vApprovalsRef= doc(db,"vacations","approvals");
+
+const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+let names=[], usernamesData={}, passcodesData={}, vAdmin={}, vPhases={}, vApprovals={};
+let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, monthData={days:{}};
+let me=null, curYM=null, unsubMonth=null;
+
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const ymKey=d=>d.getFullYear()+'-'+pad(d.getMonth()+1);
+const dKey=d=>ymKey(d)+'-'+pad(d.getDate());
+function displayName(u){ return usernamesData[u]||u; }
+function shiftList(kind){ return Object.entries(catalog.shifts||{}).filter(([,s])=>!kind||s.kind===kind).sort((a,b)=>(a[1].order??99)-(b[1].order??99)); }
+function shiftLabel(id){ return catalog.shifts?.[id]?.label||id; }
+async function sha256(t){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+
+// ── Approved vacation weeks from the auction → {user|date: true} ──
+// A week approved in ANY completed phase, or decided live in the current
+// phase, paints all 7 days (Sun–Sat) of that week as vacation.
+function vacationDays(){
+  const map={};
+  const addWeek=(u,wk)=>{
+    const [y,m,d]=wk.split('-').map(Number); const base=new Date(y,m-1,d);
+    for(let i=0;i<7;i++){ const dd=new Date(base); dd.setDate(base.getDate()+i); map[u+'|'+dKey(dd)]=true; }
+  };
+  const cps=vPhases?.completedPhases||{};
+  for(const ph in cps){ const ap=cps[ph]?.approvals||{}; for(const wk in ap) for(const u of (ap[wk]||[])) addWeek(u,wk); }
+  for(const wk in (vApprovals||{})) for(const u of (vApprovals[wk]||[])) addWeek(u,wk);
+  return map;
+}
+
+// ── Month navigation ──
+function setMonth(ym){
+  curYM=ym;
+  if(unsubMonth) unsubMonth();
+  monthData={days:{}};
+  unsubMonth=onSnapshot(monthRef(ym),snap=>{ monthData=snap.exists()?snap.data():{days:{}}; if(!monthData.days)monthData.days={}; renderAll(); });
+  renderAll();
+}
+window.moveMonth=function(dir){
+  const [y,m]=curYM.split('-').map(Number);
+  const d=new Date(y,m-1+dir,1); setMonth(ymKey(d));
+};
+window.gotoToday=function(){ setMonth(ymKey(new Date())); };
+
+function cellOf(u,dk){ const dd=monthData.days?.[dk.slice(8)]||{}; return dd[u]||{}; }
+// Colored chip per assignment — colors come from the shift catalog (QGenda-style).
+function chip(id){
+  const s=catalog.shifts?.[id]||{}; const bg=s.color||(s.kind==='call'?'#ede9fe':'#fef9c3');
+  return '<span style="display:inline-block;background:'+esc(bg)+';color:#1e293b;border-radius:4px;padding:0 4px;font-weight:700">'+esc(s.label||id)+'</span>';
+}
+function cellHtml(u,dk,vac){
+  const c=cellOf(u,dk); const bits=[];
+  if(vac[u+'|'+dk]) bits.push('<span style="display:inline-block;background:#bbf7d0;color:#065f46;border-radius:4px;padding:0 4px;font-weight:800">VAC</span>');
+  if(c.off) bits.push('<span style="display:inline-block;background:#e2e8f0;color:#475569;border-radius:4px;padding:0 4px;font-weight:700">OFF</span>');
+  if(c.day) bits.push(chip(c.day));
+  if(c.call) bits.push(chip(c.call));
+  return bits.join('<br>')||'<span style="color:var(--b2)">·</span>';
+}
+
+// ── Rendering ──
+function renderAll(){
+  if(!curYM) return;
+  const [y,m]=curYM.split('-').map(Number);
+  document.getElementById('monthLabel').textContent=MS[m-1]+' '+y;
+  const vac=vacationDays();
+  const nDays=new Date(y,m,0).getDate();
+  const todayK=dKey(new Date());
+
+  // My calendar
+  if(me){
+    document.getElementById('myName').textContent=displayName(me);
+    const cal=document.getElementById('myCal');
+    let h=DS.map(d=>'<div class="dh">'+d+'</div>').join('');
+    const first=new Date(y,m-1,1).getDay();
+    for(let i=0;i<first;i++) h+='<div></div>';
+    for(let d=1;d<=nDays;d++){
+      const dk=curYM+'-'+pad(d);
+      h+='<div class="d'+(dk===todayK?' today':'')+'"><div class="dn">'+d+'</div>'+cellHtml(me,dk,vac)+'</div>';
+    }
+    cal.innerHTML=h;
+  }
+
+  // Everyone grid
+  const g=document.getElementById('allGrid');
+  let head='<tr><th style="text-align:left">User</th>';
+  for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); head+='<th class="'+((wd===0||wd===6)?'wkend':'')+'">'+d+'<br>'+DS[wd]+'</th>'; }
+  head+='</tr>';
+  let rows='';
+  for(const u of names){
+    rows+='<tr><td style="text-align:left;font-weight:700'+(u===me?';color:var(--blue)':'')+'">'+esc(displayName(u))+'</td>';
+    for(let d=1;d<=nDays;d++){
+      const dk=curYM+'-'+pad(d); const wd=new Date(y,m-1,d).getDay();
+      rows+='<td class="'+(u===me?'me ':'')+((wd===0||wd===6)?'wkend':'')+'">'+cellHtml(u,dk,vac)+'</td>';
+    }
+    rows+='</tr>';
+  }
+  g.innerHTML=head+rows;
+
+  renderMyRequests(); renderMySwaps(); fillSwapWith(); fillReqShift(); renderQuickView(vac); renderOpenShifts();
+}
+
+function renderQuickView(vac){
+  const el=document.getElementById('quickView'); if(!el||!me) return;
+  let h='';
+  for(let i=0;i<7;i++){
+    const d=new Date(); d.setDate(d.getDate()+i);
+    const dk=dKey(d);
+    // quick view may span outside the visible month — only same-month cells have data loaded
+    const inMonth=dk.slice(0,7)===curYM;
+    h+='<div class="d'+(i===0?' today':'')+'" style="min-height:60px"><div class="dn">'+DS[d.getDay()]+' '+d.getDate()+'</div>'
+      +(inMonth?cellHtml(me,dk,vac):(vac[me+'|'+dk]?'<span style="display:inline-block;background:#bbf7d0;color:#065f46;border-radius:4px;padding:0 4px;font-weight:800">VAC</span>':'<span style="color:var(--t3);font-size:10px">view month</span>'))+'</div>';
+  }
+  el.innerHTML=h;
+}
+function renderOpenShifts(){
+  const el=document.getElementById('openList'); if(!el) return;
+  const open=(openShifts.list||[]).filter(o=>o.status==='open').sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  if(!open.length){ el.innerHTML='<div style="font-size:12px;color:var(--t3)">No open shifts right now.</div>'; return; }
+  const applied=new Set((requests.list||[]).filter(r=>r.user===me&&r.type==='claim'&&r.status==='pending').map(r=>r.openId));
+  el.innerHTML=open.map(o=>`
+    <div class="rowline">
+      <span class="mono" style="font-size:12px">${esc(o.date)}</span>
+      ${chip(o.shiftId)}
+      ${o.note?'<span style="color:var(--t2)">'+esc(o.note)+'</span>':''}
+      <span style="margin-left:auto">${applied.has(o.id)
+        ?'<span class="status-pending">⏳ applied</span>'
+        :'<button class="btn btn-primary" style="font-size:12px;padding:4px 12px" onclick="applyOpen(\''+esc(o.id)+'\')">Apply</button>'}</span>
+    </div>`).join('');
+}
+window.applyOpen=async function(openId){
+  if(!me) return;
+  const o=(openShifts.list||[]).find(x=>x.id===openId); if(!o||o.status!=='open') return;
+  const req={id:'r'+Date.now()+Math.floor(Math.random()*1e4),user:me,date:o.date,type:'claim',shiftId:o.shiftId,openId,note:'',status:'pending',ts:Date.now()};
+  await setDoc(requestsRef,{list:[...(requests.list||[]),req]},{merge:true});
+};
+
+function renderMyRequests(){
+  const el=document.getElementById('myReqList'); if(!el||!me) return;
+  const mine=(requests.list||[]).filter(r=>r.user===me).sort((a,b)=>b.ts-a.ts);
+  const typeLbl={shift:'Shift request',dayoff:'Day off',nocall:'No call',claim:'Open-shift claim',other:'Other'};
+  el.innerHTML=mine.length?mine.map(r=>`
+    <div class="rowline">
+      <span class="mono" style="font-size:12px">${esc(r.date||'—')}</span>
+      <span style="font-weight:700">${typeLbl[r.type]||esc(r.type)}${r.shiftId?': '+esc(shiftLabel(r.shiftId)):''}</span>
+      ${r.note?'<span style="color:var(--t2)">“'+esc(r.note)+'”</span>':''}
+      <span style="margin-left:auto" class="status-${r.status}">${r.status==='pending'?'⏳ pending':r.status==='approved'?'✅ approved':'❌ denied'}</span>
+    </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No requests yet.</div>';
+}
+function renderMySwaps(){
+  const el=document.getElementById('mySwapList'); if(!el||!me) return;
+  const mine=(swaps.list||[]).filter(s=>s.from===me||s.to===me).sort((a,b)=>b.ts-a.ts);
+  el.innerHTML=mine.length?mine.map(s=>`
+    <div class="rowline">
+      <span class="mono" style="font-size:12px">${esc(s.date)}</span>
+      <span style="font-weight:700">${s.part==='call'?'Call':'Day shift'}</span>
+      <span style="color:var(--t2)">${esc(displayName(s.from))} ⇄ ${esc(displayName(s.to))}</span>
+      ${s.note?'<span style="color:var(--t2)">“'+esc(s.note)+'”</span>':''}
+      <span style="margin-left:auto" class="status-${s.status}">${s.status==='pending'?'⏳ pending':s.status==='approved'?'✅ approved':'❌ denied'}</span>
+    </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No swap requests yet.</div>';
+}
+function fillSwapWith(){
+  const sel=document.getElementById('swapWith'); if(!sel) return;
+  const cur=sel.value;
+  sel.innerHTML=names.filter(u=>u!==me).map(u=>`<option value="${esc(u)}">${esc(displayName(u))}</option>`).join('');
+  if(cur) sel.value=cur;
+}
+function fillReqShift(){
+  const sel=document.getElementById('reqShift'); if(!sel) return;
+  const cur=sel.value;
+  sel.innerHTML=shiftList().map(([id,s])=>`<option value="${esc(id)}">${esc(s.label)}</option>`).join('');
+  if(cur) sel.value=cur;
+}
+window.onReqType=function(){
+  document.getElementById('reqShift').style.display=document.getElementById('reqType').value==='shift'?'':'none';
+};
+
+// ── Actions ──
+window.submitRequest=async function(){
+  const msg=document.getElementById('reqMsg'); msg.textContent='';
+  const date=document.getElementById('reqDate').value;
+  const type=document.getElementById('reqType').value;
+  const shiftId=type==='shift'?document.getElementById('reqShift').value:null;
+  const note=document.getElementById('reqNote').value.trim();
+  if(!me) return;
+  if(!date&&type!=='other'){ msg.textContent='Pick a date first.'; msg.style.color='var(--red)'; return; }
+  if(type==='other'&&!note){ msg.textContent='Describe what you\'re requesting in the note.'; msg.style.color='var(--red)'; return; }
+  const req={id:'r'+Date.now()+Math.floor(Math.random()*1e4),user:me,date:date||null,type,shiftId,note,status:'pending',ts:Date.now()};
+  const list=[...(requests.list||[]),req];
+  await setDoc(requestsRef,{list},{merge:true});
+  document.getElementById('reqNote').value='';
+  msg.textContent='Request submitted — admin will review it.'; msg.style.color='var(--green)';
+};
+window.submitSwap=async function(){
+  const msg=document.getElementById('swapMsg'); msg.textContent='';
+  const date=document.getElementById('swapDate').value;
+  const part=document.getElementById('swapPart').value;
+  const to=document.getElementById('swapWith').value;
+  const note=document.getElementById('swapNote').value.trim();
+  if(!me) return;
+  if(!date||!to){ msg.textContent='Pick a date and a user to swap with.'; msg.style.color='var(--red)'; return; }
+  const s={id:'s'+Date.now()+Math.floor(Math.random()*1e4),from:me,to,date,part,note,status:'pending',ts:Date.now()};
+  const list=[...(swaps.list||[]),s];
+  await setDoc(swapsRef,{list},{merge:true});
+  document.getElementById('swapNote').value='';
+  msg.textContent='Swap requested — admin will confirm with both of you.'; msg.style.color='var(--green)';
+};
+
+// ── Sign-in (same roster + passcodes as the Vacation Auction) ──
+function refreshSignSel(){
+  const sel=document.getElementById('signSel');
+  sel.innerHTML='<option value="">— select your name —</option>'+names.map(u=>`<option value="${esc(u)}">${esc(displayName(u))}</option>`).join('');
+}
+window.doSignIn=async function(){
+  const err=document.getElementById('signErr'); err.textContent='';
+  const u=document.getElementById('signSel').value;
+  if(!u){ err.textContent='Select your name.'; return; }
+  if(vAdmin.passcodesEnabled===true && passcodesData[u]){
+    const pw=document.getElementById('signPass').value;
+    if(!pw){ document.getElementById('signPass').style.display='block'; err.textContent='Enter your passcode.'; return; }
+    if(await sha256(pw)!==passcodesData[u]){ err.textContent='Wrong passcode.'; return; }
+  }
+  me=u; try{ localStorage.setItem('schedUser',u); }catch(_){}
+  document.getElementById('signGate').style.display='none';
+  document.getElementById('whoami').textContent=displayName(u);
+  renderAll();
+};
+window.switchUser=function(){
+  me=null; try{ localStorage.removeItem('schedUser'); }catch(_){}
+  document.getElementById('signGate').style.display='flex';
+  refreshSignSel();
+};
+document.getElementById('signSel').addEventListener('change',function(){
+  const u=this.value;
+  document.getElementById('signPass').style.display=(vAdmin.passcodesEnabled===true&&passcodesData[u])?'block':'none';
+});
+
+// ── Boot ──
+onAuthStateChanged(auth,u=>{ if(!u) signInAnonymously(auth).catch(e=>console.warn('anon auth',e)); });
+signInAnonymously(auth).catch(()=>{});
+setMonth(ymKey(new Date()));
+onSnapshot(userListRef,snap=>{
+  const d=snap.exists()?snap.data():{};
+  if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort();
+  refreshSignSel(); renderAll();
+  // restore remembered user once the roster is known
+  if(!me){ let saved=null; try{ saved=localStorage.getItem('schedUser'); }catch(_){}
+    if(saved&&names.includes(saved)){ me=saved; document.getElementById('signGate').style.display='none'; document.getElementById('whoami').textContent=displayName(saved); renderAll(); } }
+});
+onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; refreshSignSel(); renderAll(); });
+onSnapshot(passcodesRef,snap=>{ passcodesData=snap.exists()?snap.data():{}; });
+onSnapshot(vAdminRef,snap=>{ vAdmin=snap.exists()?snap.data():{}; });
+onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
+onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); });
+onSnapshot(catalogRef,snap=>{ catalog=snap.exists()?snap.data():{shifts:{}}; if(!catalog.shifts)catalog.shifts={}; renderAll(); });
+onSnapshot(eligRef,snap=>{ elig=snap.exists()?snap.data():{}; });
+onSnapshot(requestsRef,snap=>{ requests=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(requests.list))requests.list=[]; renderMyRequests(); });
+onSnapshot(swapsRef,snap=>{ swaps=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(swaps.list))swaps.list=[]; renderMySwaps(); });
+onSnapshot(openRef,snap=>{ openShifts=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(openShifts.list))openShifts.list=[]; renderOpenShifts(); });
+</script>
+</body>
+</html>

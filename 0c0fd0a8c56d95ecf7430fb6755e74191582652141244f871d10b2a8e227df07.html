@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scheduler Admin</title>
+<meta name="robots" content="noindex,nofollow">
+<script>
+  var PAGE = 'admin';
+  var BUILD = 1;    // bump this AND versions.json[PAGE] on each deploy of this file
+  (function(){
+    function chk(){
+      fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
+        if(v && typeof v[PAGE]==='number' && v[PAGE]>BUILD) location.reload(true);
+      }).catch(function(){});
+    }
+    setInterval(chk, 5*60*1000); chk();
+  })();
+</script>
+<style>
+:root{
+  --bg:#f4f7fa; --s1:#ffffff; --s2:#f8fafc; --s3:#eef2f7;
+  --b1:#e3e9f0; --b2:#cbd5e1;
+  --t1:#1e293b; --t2:#5b6b7c; --t3:#94a3b8;
+  --blue:#2563eb; --green:#059669; --red:#dc2626; --yellow:#b45309; --purple:#7c3aed;
+  --mono:'SF Mono',Consolas,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;display:flex;min-height:100vh}
+nav{width:200px;background:var(--s1);border-right:1px solid var(--b1);padding:16px 0;flex-shrink:0}
+nav .brand{font-size:12px;font-weight:800;letter-spacing:.1em;color:var(--t2);padding:0 18px 12px}
+nav a{display:block;padding:9px 18px;font-size:13px;font-weight:600;color:var(--t2);cursor:pointer;text-decoration:none;border-left:3px solid transparent}
+nav a:hover{background:var(--s2)}
+nav a.on{color:var(--blue);border-left-color:var(--blue);background:var(--s2)}
+.nav-section{font-size:10px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;padding:14px 18px 5px}
+.content{flex:1;padding:20px 26px;min-width:0}
+.panel{display:none}
+.panel.on{display:block}
+.page-title{font-size:20px;font-weight:800}
+.page-sub{font-size:12px;color:var(--t2);margin-top:2px}
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.card-title{font-size:12px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.btn{border:1px solid var(--b2);background:var(--s1);color:var(--t1);border-radius:8px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer}
+.btn:hover{background:var(--s3)}
+.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn-primary:hover{background:#1d4ed8}
+.btn-success{background:var(--green);border-color:var(--green);color:#fff}
+.btn-danger{background:#fee2e2;border-color:#fca5a5;color:var(--red)}
+.btn-ghost{background:transparent}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.sel,.inp{border:1px solid var(--b2);border-radius:8px;padding:7px 10px;font-size:13px;background:var(--s1);color:var(--t1)}
+table.grid{border-collapse:collapse;font-size:11px}
+table.grid th,table.grid td{border:1px solid var(--b1);padding:2px 3px;text-align:center;white-space:nowrap}
+table.grid th{background:var(--s2);font-size:10px;color:var(--t2)}
+table.grid td.cell{cursor:pointer;min-width:44px}
+table.grid td.cell:hover{outline:2px solid var(--blue)}
+table.grid .wkend{background:var(--s3)}
+.rowline{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px dashed var(--b1);font-size:13px;flex-wrap:wrap}
+.status-pending{color:var(--yellow)} .status-approved{color:var(--green)} .status-denied{color:var(--red)}
+.mono{font-family:var(--mono)}
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:150;padding:16px}
+.modal.on{display:flex}
+.modal .mcard{background:var(--s1);border-radius:14px;max-width:420px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.chipp{display:inline-block;border-radius:4px;padding:0 5px;font-weight:700;color:#1e293b}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">SCHEDULER ADMIN</div>
+  <a onclick="nav('grid',this)" class="on">📅 Schedule Grid</a>
+  <a onclick="nav('requests',this)">📥 Requests <span id="reqBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
+  <a onclick="nav('swaps',this)">🔁 Swaps <span id="swapBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
+  <a onclick="nav('open',this)">📢 Open Shifts</a>
+  <div class="nav-section">Setup</div>
+  <a onclick="nav('elig',this)">🎯 Shift Eligibility</a>
+  <a onclick="nav('catalog',this)">🧰 Shift Catalog</a>
+  <a onclick="nav('stats',this)">📊 Stats</a>
+  <div class="nav-section">Other Systems</div>
+  <a href="https://anesthesia-kp.github.io/vacation/a5696c46cc3d0bc9f10572215094955b2cf379303be3f210dc7098e14250223e.html" target="_blank" rel="noopener">🏖️ Vacation Auction Admin →</a>
+</nav>
+
+<div class="content">
+  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+    <div class="page-title" style="margin:0">Daily Scheduling</div>
+    <div class="page-sub" style="margin:0">call · shifts · days off · vacation</div>
+    <span id="adminWhoami" style="margin-left:auto;font-size:11px;color:var(--t3)"></span>
+    <button class="btn btn-ghost" style="padding:5px 10px;font-size:12px" onclick="adminSignOut()">Sign out</button>
+  </div>
+
+  <!-- SCHEDULE GRID -->
+  <div class="panel on" id="panel-grid">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn" onclick="moveMonth(-1)">⟨</button>
+      <div id="monthLabel" style="font-size:16px;font-weight:800;min-width:170px;text-align:center"></div>
+      <button class="btn" onclick="moveMonth(1)">⟩</button>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-primary" onclick="autoPopulate()">⚡ Auto-Populate Month</button>
+      <button class="btn btn-danger" onclick="clearMonth()">Clear Month</button>
+    </div>
+    <div class="card" style="padding:10px 12px">
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Click any cell to assign a day shift, call, or day off. <b>VAC</b> comes from the auction automatically and cannot be edited here. Users see every change immediately.</div>
+      <div style="overflow-x:auto"><table class="grid" id="schedGrid"></table></div>
+    </div>
+  </div>
+
+  <!-- REQUESTS -->
+  <div class="panel" id="panel-requests">
+    <div class="page-title" style="font-size:16px;margin-bottom:10px">User Requests</div>
+    <div class="card"><div class="card-title">Pending</div><div id="reqPending"></div></div>
+    <div class="card"><div class="card-title">Decided</div><div id="reqDecided"></div></div>
+  </div>
+
+  <!-- SWAPS -->
+  <div class="panel" id="panel-swaps">
+    <div class="page-title" style="font-size:16px;margin-bottom:10px">Swap Requests</div>
+    <div class="card"><div class="card-title">Pending</div><div id="swapPending"></div></div>
+    <div class="card"><div class="card-title">Decided</div><div id="swapDecided"></div></div>
+  </div>
+
+  <!-- OPEN SHIFTS -->
+  <div class="panel" id="panel-open">
+    <div class="page-title" style="font-size:16px;margin-bottom:10px">Open Shifts</div>
+    <div class="card">
+      <div class="card-title">Post an open shift</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="date" class="inp" id="openDate">
+        <select class="sel" id="openShift"></select>
+        <input type="text" class="inp" id="openNote" placeholder="Note (optional)" style="min-width:180px">
+        <button class="btn btn-primary" onclick="postOpen()">Post</button>
+      </div>
+    </div>
+    <div class="card"><div class="card-title">Posted</div><div id="openAdminList"></div></div>
+  </div>
+
+  <!-- ELIGIBILITY -->
+  <div class="panel" id="panel-elig">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Shift Eligibility</div>
+    <div class="page-sub" style="margin-bottom:12px">Which shifts each user may be assigned. Auto-populate and cell assignment both respect this. Unchecked = not allowed.</div>
+    <div class="card" style="padding:10px 12px">
+      <div style="margin-bottom:8px"><button class="btn" onclick="eligAll(true)">Allow all</button> <button class="btn" onclick="eligAll(false)">Disallow all</button></div>
+      <div style="overflow-x:auto"><table class="grid" id="eligGrid"></table></div>
+    </div>
+  </div>
+
+  <!-- CATALOG -->
+  <div class="panel" id="panel-catalog">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Shift Catalog</div>
+    <div class="page-sub" style="margin-bottom:12px">Every shift type in the system. Day shifts fill the day slot; call shifts fill the call slot — a user can hold one of each per day. Call shifts are balanced evenly by auto-populate.</div>
+    <div class="card">
+      <div class="card-title">Add a shift</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="text" class="inp" id="catLabel" placeholder="Label e.g. D10 or Call 16" style="width:170px">
+        <select class="sel" id="catKind"><option value="day">Day shift</option><option value="call">Call shift</option></select>
+        <input type="color" class="inp" id="catColor" value="#fef9c3" style="padding:2px;width:52px;height:36px">
+        <button class="btn btn-primary" onclick="addShift()">Add</button>
+      </div>
+    </div>
+    <div class="card"><div class="card-title">Shifts</div><div id="catList"></div></div>
+  </div>
+
+  <!-- STATS -->
+  <div class="panel" id="panel-stats">
+    <div class="page-title" style="font-size:16px;margin-bottom:10px">Stats — <span id="statsMonth"></span></div>
+    <div class="card" style="padding:10px 12px">
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Assignments per user for the visible month (change month on the Schedule Grid tab). Call columns highlighted — watch these for even distribution.</div>
+      <div style="overflow-x:auto"><table class="grid" id="statsGrid"></table></div>
+    </div>
+  </div>
+</div>
+
+<!-- Cell assignment modal -->
+<div class="modal" id="cellModal">
+  <div class="mcard">
+    <div style="font-weight:800;margin-bottom:2px" id="cmTitle"></div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:12px" id="cmSub"></div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <label style="font-size:12px;font-weight:700">Day shift<br><select class="sel" id="cmDay" style="width:100%;margin-top:4px"></select></label>
+      <label style="font-size:12px;font-weight:700">Call<br><select class="sel" id="cmCall" style="width:100%;margin-top:4px"></select></label>
+      <label style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px"><input type="checkbox" id="cmOff"> Day off</label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button class="btn" onclick="closeCellModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="saveCell(true)">Clear</button>
+      <button class="btn btn-primary" onclick="saveCell(false)">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sign-in gate (same admin list as the Vacation Auction) -->
+<div id="authGate" style="position:fixed;inset:0;z-index:99998;background:#0b1826;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div id="authGateChecking" style="color:#8fa9bf;font-size:13px;letter-spacing:.03em">Checking sign-in…</div>
+  <div id="authGateCard" style="display:none;background:#122438;border:1px solid #24405c;border-radius:14px;max-width:400px;width:100%;padding:30px 28px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+    <div style="font-size:34px;margin-bottom:8px">🔐</div>
+    <div style="font-size:18px;font-weight:800;color:#e8f1f8;margin-bottom:6px">Scheduler Admin</div>
+    <div style="font-size:13px;color:#8fa9bf;margin-bottom:18px">Sign in with an authorized Google account to continue.</div>
+    <button id="authGateBtn" onclick="adminGoogleSignIn()" style="display:inline-flex;align-items:center;gap:10px;background:#ffffff;color:#1f2937;border:none;border-radius:8px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer">
+      <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Sign in with Google
+    </button>
+    <div id="authGateWho" style="margin-top:14px;font-size:12px;color:#fbbf24"></div>
+    <div id="authGateErr" style="margin-top:8px;font-size:12px;color:#f87171"></div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, setDoc, updateDoc, deleteField, getDoc, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+const app = initializeApp({
+  apiKey:"AIzaSyDcOesDATWAKWt1i7innHNu5aK_xdpGxTk",
+  authDomain:"vacation-25e8e.firebaseapp.com",
+  projectId:"vacation-25e8e",
+  storageBucket:"vacation-25e8e.firebasestorage.app",
+  messagingSenderId:"390938040016",
+  appId:"1:390938040016:web:2dece784efd16db34a70d5"
+}, 'sched-admin');
+const db=getFirestore(app), auth=getAuth(app);
+const onSnapshot=(r,cb)=>{ try{ return _onSnapshot(r,cb,err=>console.warn('listener',err&&err.code)); }catch(e){ console.warn(e); return ()=>{}; } };
+
+// dailysched — this system's own data (fully separate from the auction)
+const catalogRef  = doc(db,"dailysched","shiftCatalog");
+const eligRef     = doc(db,"dailysched","eligibility");
+const requestsRef = doc(db,"dailysched","requests");
+const swapsRef    = doc(db,"dailysched","swaps");
+const openRef     = doc(db,"dailysched","openShifts");
+const totalsRef   = doc(db,"dailysched","callTotals"); // {user:{shiftId:n}} cumulative — keeps call fair across months
+const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);
+// vacations — READ-ONLY: roster, admin list, approved vacation weeks
+const userListRef   = doc(db,"vacations","userList");
+const usernamesRef  = doc(db,"vacations","usernames");
+const adminAccessRef= doc(db,"vacations","adminAccess");
+const vPhasesRef    = doc(db,"vacations","phases");
+const vApprovalsRef = doc(db,"vacations","approvals");
+
+const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+let names=[], usernamesData={}, vPhases={}, vApprovals={};
+let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, totals={}, monthData={days:{}};
+let curYM=null, unsubMonth=null, cellSel=null;
+
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const ymKey=d=>d.getFullYear()+'-'+pad(d.getMonth()+1);
+const dKey=d=>ymKey(d)+'-'+pad(d.getDate());
+function displayName(u){ return usernamesData[u]||u; }
+function shiftList(kind){ return Object.entries(catalog.shifts||{}).filter(([,s])=>!kind||s.kind===kind).sort((a,b)=>(a[1].order??99)-(b[1].order??99)); }
+function chipHtml(id){ const s=catalog.shifts?.[id]||{}; return '<span class="chipp" style="background:'+esc(s.color||'#fef9c3')+'">'+esc(s.label||id)+'</span>'; }
+function allowed(u,id){ return elig?.[u]?.[id]===true; }
+
+// ── Default catalog seeded on first run (admin edits freely afterwards) ──
+const DEFAULT_SHIFTS={
+  OBD:{label:'OBD',kind:'day',color:'#fde68a',order:1},
+  D10:{label:'D10',kind:'day',color:'#fef9c3',order:2},
+  AP_CRNA:{label:'AP (CRNA)',kind:'day',color:'#bfdbfe',order:3},
+  AP_MD:{label:'AP (MD)',kind:'day',color:'#93c5fd',order:4},
+  CALL16:{label:'Call 16',kind:'call',color:'#ddd6fe',order:10},
+  CALL24:{label:'Call 24',kind:'call',color:'#c4b5fd',order:11},
+  OBPM:{label:'OB PM',kind:'call',color:'#fbcfe8',order:12},
+};
+
+// ── Vacation overlay (identical logic to the user site) ──
+function vacationDays(){
+  const map={};
+  const addWeek=(u,wk)=>{ const [y,m,d]=wk.split('-').map(Number); const base=new Date(y,m-1,d);
+    for(let i=0;i<7;i++){ const dd=new Date(base); dd.setDate(base.getDate()+i); map[u+'|'+dKey(dd)]=true; } };
+  const cps=vPhases?.completedPhases||{};
+  for(const ph in cps){ const ap=cps[ph]?.approvals||{}; for(const wk in ap) for(const u of (ap[wk]||[])) addWeek(u,wk); }
+  for(const wk in (vApprovals||{})) for(const u of (vApprovals[wk]||[])) addWeek(u,wk);
+  return map;
+}
+
+// ── Navigation ──
+window.nav=function(id,el){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
+  document.getElementById('panel-'+id).classList.add('on');
+  document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
+  if(el) el.classList.add('on');
+};
+
+// ── Month ──
+function setMonth(ym){
+  curYM=ym;
+  if(unsubMonth) unsubMonth();
+  monthData={days:{}};
+  unsubMonth=onSnapshot(monthRef(ym),snap=>{ monthData=snap.exists()?snap.data():{days:{}}; if(!monthData.days)monthData.days={}; renderAll(); });
+  renderAll();
+}
+window.moveMonth=function(dir){ const [y,m]=curYM.split('-').map(Number); setMonth(ymKey(new Date(y,m-1+dir,1))); };
+window.gotoToday=function(){ setMonth(ymKey(new Date())); };
+function cellOf(u,dd){ return monthData.days?.[dd]?.[u]||{}; }
+
+// ── Schedule grid ──
+function renderGrid(){
+  const g=document.getElementById('schedGrid'); if(!g||!curYM) return;
+  const [y,m]=curYM.split('-').map(Number);
+  document.getElementById('monthLabel').textContent=MS[m-1]+' '+y;
+  const nDays=new Date(y,m,0).getDate();
+  const vac=vacationDays();
+  let head='<tr><th style="text-align:left">User</th>';
+  for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); head+='<th class="'+((wd===0||wd===6)?'wkend':'')+'">'+d+'<br>'+DS[wd]+'</th>'; }
+  head+='</tr>';
+  let rows='';
+  for(const u of names){
+    rows+='<tr><td style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>';
+    for(let d=1;d<=nDays;d++){
+      const dd=pad(d), dk=curYM+'-'+dd, wd=new Date(y,m-1,d).getDay();
+      const c=cellOf(u,dd); const bits=[];
+      if(vac[u+'|'+dk]) bits.push('<span class="chipp" style="background:#bbf7d0;color:#065f46">VAC</span>');
+      if(c.off) bits.push('<span class="chipp" style="background:#e2e8f0;color:#475569">OFF</span>');
+      if(c.day) bits.push(chipHtml(c.day));
+      if(c.call) bits.push(chipHtml(c.call));
+      rows+='<td class="cell '+((wd===0||wd===6)?'wkend':'')+'" onclick="openCell(\''+esc(u)+'\',\''+dd+'\')">'+(bits.join('<br>')||'')+'</td>';
+    }
+    rows+='</tr>';
+  }
+  g.innerHTML=head+rows;
+}
+window.openCell=function(u,dd){
+  cellSel={u,dd};
+  const c=cellOf(u,dd);
+  document.getElementById('cmTitle').textContent=displayName(u)+' — '+MS[Number(curYM.slice(5))-1]+' '+Number(dd);
+  document.getElementById('cmSub').textContent='Only shifts this user is eligible for are listed.';
+  const dsel=document.getElementById('cmDay'), csel=document.getElementById('cmCall');
+  dsel.innerHTML='<option value="">— none —</option>'+shiftList('day').filter(([id])=>allowed(u,id)||c.day===id).map(([id,s])=>`<option value="${esc(id)}">${esc(s.label)}</option>`).join('');
+  csel.innerHTML='<option value="">— none —</option>'+shiftList('call').filter(([id])=>allowed(u,id)||c.call===id).map(([id,s])=>`<option value="${esc(id)}">${esc(s.label)}</option>`).join('');
+  dsel.value=c.day||''; csel.value=c.call||''; document.getElementById('cmOff').checked=!!c.off;
+  document.getElementById('cellModal').classList.add('on');
+};
+window.closeCellModal=function(){ document.getElementById('cellModal').classList.remove('on'); cellSel=null; };
+window.saveCell=async function(clear){
+  if(!cellSel) return;
+  const {u,dd}=cellSel;
+  const path=`days.${dd}.${u}`;
+  if(clear){ await setDoc(monthRef(curYM),{days:{[dd]:{[u]:deleteField()}}},{merge:true}); }
+  else{
+    const day=document.getElementById('cmDay').value||null;
+    const call=document.getElementById('cmCall').value||null;
+    const off=document.getElementById('cmOff').checked;
+    await setDoc(monthRef(curYM),{days:{[dd]:{[u]:{day,call,off}}}},{merge:true});
+  }
+  closeCellModal();
+};
+
+// ── Auto-populate ──
+// Fills EVERY day of the visible month: each day shift and each call shift in
+// the catalog gets one eligible user. Skips users on vacation, on a day off,
+// or already holding that slot type that day. Fairness: pick the eligible user
+// with the LOWEST total count for that shift (cumulative callTotals + this
+// month so far) — this is what keeps call16/call24/OB PM evenly spread.
+window.autoPopulate=async function(){
+  const [y,m]=curYM.split('-').map(Number);
+  const nDays=new Date(y,m,0).getDate();
+  if(!confirm('Auto-populate '+MS[m-1]+' '+y+'?\n\nFills every empty slot for every shift in the catalog using eligibility + even call distribution. Existing assignments are kept. Users see changes immediately.')) return;
+  const vac=vacationDays();
+  const days=JSON.parse(JSON.stringify(monthData.days||{}));
+  const counts={}; // user|shift → count (cumulative + this month)
+  const cnt=(u,s)=>counts[u+'|'+s]??((totals?.[u]?.[s]||0)+0);
+  for(const u of names) for(const [id] of shiftList()) counts[u+'|'+id]=(totals?.[u]?.[id]||0);
+  for(const dd in days) for(const u in days[dd]){ const c=days[dd][u]; if(c.day) counts[u+'|'+c.day]=(counts[u+'|'+c.day]||0)+1; if(c.call) counts[u+'|'+c.call]=(counts[u+'|'+c.call]||0)+1; }
+  const newTotals=JSON.parse(JSON.stringify(totals||{}));
+  let filled=0, unfillable=[];
+  for(let d=1;d<=nDays;d++){
+    const dd=pad(d), dk=curYM+'-'+dd;
+    days[dd]=days[dd]||{};
+    for(const [id,s] of shiftList()){
+      const slot=s.kind==='call'?'call':'day';
+      // already covered?
+      if(Object.values(days[dd]).some(c=>c[slot]===id)) continue;
+      const cands=names.filter(u=>allowed(u,id)
+        &&!vac[u+'|'+dk]
+        &&!(days[dd][u]?.off)
+        &&!(days[dd][u]?.[slot]));
+      if(!cands.length){ unfillable.push(dk+' '+s.label); continue; }
+      cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
+      const pick=cands[0];
+      days[dd][pick]=Object.assign({day:null,call:null,off:false},days[dd][pick],{[slot]:id});
+      counts[pick+'|'+id]=cnt(pick,id)+1;
+      newTotals[pick]=newTotals[pick]||{}; newTotals[pick][id]=(newTotals[pick][id]||0)+1;
+      filled++;
+    }
+  }
+  await setDoc(monthRef(curYM),{days},{merge:true});
+  await setDoc(totalsRef,newTotals);
+  alert('Auto-populate complete — '+filled+' assignments made.'+(unfillable.length?'\n\n⚠️ Could not fill (no eligible user):\n'+unfillable.slice(0,15).join('\n')+(unfillable.length>15?'\n…and '+(unfillable.length-15)+' more':''):''));
+};
+window.clearMonth=async function(){
+  const [y,m]=curYM.split('-').map(Number);
+  if(!confirm('Clear ALL assignments for '+MS[m-1]+' '+y+'? Vacation weeks stay (they come from the auction). This cannot be undone.')) return;
+  await setDoc(monthRef(curYM),{days:{}});
+};
+
+// ── Requests ──
+function renderRequests(){
+  const pend=(requests.list||[]).filter(r=>r.status==='pending').sort((a,b)=>a.ts-b.ts);
+  const done=(requests.list||[]).filter(r=>r.status!=='pending').sort((a,b)=>b.ts-a.ts).slice(0,40);
+  const badge=document.getElementById('reqBadge'); if(badge) badge.textContent=pend.length?('('+pend.length+')'):'';
+  const typeLbl={shift:'Shift request',dayoff:'Day off',nocall:'No call',claim:'Open-shift claim',other:'Other'};
+  const row=(r,buttons)=>`
+    <div class="rowline">
+      <span style="font-weight:800">${esc(displayName(r.user))}</span>
+      <span class="mono" style="font-size:12px">${esc(r.date||'—')}</span>
+      <span style="font-weight:700">${typeLbl[r.type]||esc(r.type)}${r.shiftId?': ':''}${r.shiftId?chipHtml(r.shiftId):''}</span>
+      ${r.note?'<span style="color:var(--t2)">“'+esc(r.note)+'”</span>':''}
+      <span style="margin-left:auto">${buttons}</span>
+    </div>`;
+  document.getElementById('reqPending').innerHTML=pend.length?pend.map(r=>row(r,
+    `<button class="btn btn-success" style="font-size:12px" onclick="decideReq('${esc(r.id)}','approved')">✓ Approve</button>
+     <button class="btn btn-danger" style="font-size:12px" onclick="decideReq('${esc(r.id)}','denied')">✗ Deny</button>`)).join('')
+    :'<div style="font-size:12px;color:var(--t3)">Nothing pending.</div>';
+  document.getElementById('reqDecided').innerHTML=done.length?done.map(r=>row(r,
+    `<span class="status-${r.status}">${r.status==='approved'?'✅ approved':'❌ denied'}</span>`)).join('')
+    :'<div style="font-size:12px;color:var(--t3)">No decisions yet.</div>';
+}
+// Approving a request APPLIES it where it maps to a concrete assignment:
+//  shift/claim → assigns that shift on that date; dayoff → marks OFF;
+//  nocall → clears any call that day; other → decision only (admin acts manually).
+window.decideReq=async function(id,status){
+  const list=(requests.list||[]).map(r=>r.id===id?{...r,status,decidedTs:Date.now()}:r);
+  const r=(requests.list||[]).find(x=>x.id===id);
+  await setDoc(requestsRef,{list},{merge:true});
+  if(status==='approved'&&r&&r.date){
+    const mk=r.date.slice(0,7), dd=r.date.slice(8);
+    const cur=(mk===curYM)?cellOf(r.user,dd):((await getDoc(monthRef(mk))).data()?.days?.[dd]?.[r.user]||{});
+    let patch=null;
+    if(r.type==='shift'||r.type==='claim'){ const kind=catalog.shifts?.[r.shiftId]?.kind==='call'?'call':'day'; patch={...{day:null,call:null,off:false},...cur,[kind]:r.shiftId}; }
+    if(r.type==='dayoff') patch={...{day:null,call:null},...cur,off:true};
+    if(r.type==='nocall') patch={...{day:null,off:false},...cur,call:null};
+    if(patch) await setDoc(monthRef(mk),{days:{[dd]:{[r.user]:patch}}},{merge:true});
+    if(r.type==='claim'&&r.openId){
+      const ol=(openShifts.list||[]).map(o=>o.id===r.openId?{...o,status:'claimed',claimedBy:r.user}:o);
+      await setDoc(openRef,{list:ol},{merge:true});
+    }
+  }
+};
+
+// ── Swaps ──
+function renderSwaps(){
+  const pend=(swaps.list||[]).filter(s=>s.status==='pending').sort((a,b)=>a.ts-b.ts);
+  const done=(swaps.list||[]).filter(s=>s.status!=='pending').sort((a,b)=>b.ts-a.ts).slice(0,40);
+  const badge=document.getElementById('swapBadge'); if(badge) badge.textContent=pend.length?('('+pend.length+')'):'';
+  const row=(s,buttons)=>`
+    <div class="rowline">
+      <span class="mono" style="font-size:12px">${esc(s.date)}</span>
+      <span style="font-weight:700">${s.part==='call'?'Call':'Day shift'}</span>
+      <span>${esc(displayName(s.from))} ⇄ ${esc(displayName(s.to))}</span>
+      ${s.note?'<span style="color:var(--t2)">“'+esc(s.note)+'”</span>':''}
+      <span style="margin-left:auto">${buttons}</span>
+    </div>`;
+  document.getElementById('swapPending').innerHTML=pend.length?pend.map(s=>row(s,
+    `<button class="btn btn-success" style="font-size:12px" onclick="decideSwap('${esc(s.id)}','approved')">✓ Approve &amp; swap</button>
+     <button class="btn btn-danger" style="font-size:12px" onclick="decideSwap('${esc(s.id)}','denied')">✗ Deny</button>`)).join('')
+    :'<div style="font-size:12px;color:var(--t3)">Nothing pending.</div>';
+  document.getElementById('swapDecided').innerHTML=done.length?done.map(s=>row(s,
+    `<span class="status-${s.status}">${s.status==='approved'?'✅ approved':'❌ denied'}</span>`)).join('')
+    :'<div style="font-size:12px;color:var(--t3)">No decisions yet.</div>';
+}
+// Approving a swap exchanges the two users' day-or-call slot on that date.
+window.decideSwap=async function(id,status){
+  const s=(swaps.list||[]).find(x=>x.id===id);
+  const list=(swaps.list||[]).map(x=>x.id===id?{...x,status,decidedTs:Date.now()}:x);
+  await setDoc(swapsRef,{list},{merge:true});
+  if(status==='approved'&&s){
+    const mk=s.date.slice(0,7), dd=s.date.slice(8);
+    const snap=await getDoc(monthRef(mk)); const dayMap=snap.data()?.days?.[dd]||{};
+    const a=dayMap[s.from]||{day:null,call:null,off:false}, b=dayMap[s.to]||{day:null,call:null,off:false};
+    const k=s.part==='call'?'call':'day';
+    const av=a[k]??null, bv=b[k]??null;
+    await setDoc(monthRef(mk),{days:{[dd]:{
+      [s.from]:{...{day:null,call:null,off:false},...a,[k]:bv},
+      [s.to]:  {...{day:null,call:null,off:false},...b,[k]:av},
+    }}},{merge:true});
+  }
+};
+
+// ── Open shifts ──
+function fillOpenShiftSel(){
+  const sel=document.getElementById('openShift'); if(!sel) return;
+  const cur=sel.value;
+  sel.innerHTML=shiftList().map(([id,s])=>`<option value="${esc(id)}">${esc(s.label)}</option>`).join('');
+  if(cur) sel.value=cur;
+}
+window.postOpen=async function(){
+  const date=document.getElementById('openDate').value;
+  const shiftId=document.getElementById('openShift').value;
+  const note=document.getElementById('openNote').value.trim();
+  if(!date||!shiftId){ alert('Pick a date and shift.'); return; }
+  const o={id:'o'+Date.now()+Math.floor(Math.random()*1e4),date,shiftId,note,status:'open',ts:Date.now()};
+  await setDoc(openRef,{list:[...(openShifts.list||[]),o]},{merge:true});
+  document.getElementById('openNote').value='';
+};
+function renderOpenAdmin(){
+  const el=document.getElementById('openAdminList'); if(!el) return;
+  const list=[...(openShifts.list||[])].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  el.innerHTML=list.length?list.map(o=>`
+    <div class="rowline">
+      <span class="mono" style="font-size:12px">${esc(o.date)}</span>
+      ${chipHtml(o.shiftId)}
+      ${o.note?'<span style="color:var(--t2)">'+esc(o.note)+'</span>':''}
+      <span style="margin-left:auto">${o.status==='open'
+        ?'<span class="status-pending">open</span> <button class="btn btn-ghost" style="font-size:11px" onclick="removeOpen(\''+esc(o.id)+'\')">Remove</button>'
+        :'<span class="status-approved">claimed by '+esc(displayName(o.claimedBy||'?'))+'</span>'}</span>
+    </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">Nothing posted.</div>';
+}
+window.removeOpen=async function(id){
+  await setDoc(openRef,{list:(openShifts.list||[]).filter(o=>o.id!==id)},{merge:true});
+};
+
+// ── Eligibility ──
+function renderElig(){
+  const g=document.getElementById('eligGrid'); if(!g) return;
+  const shifts=shiftList();
+  let head='<tr><th style="text-align:left">User</th>'+shifts.map(([id,s])=>'<th>'+esc(s.label)+'</th>').join('')+'</tr>';
+  let rows='';
+  for(const u of names){
+    rows+='<tr><td style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
+      +shifts.map(([id])=>'<td><input type="checkbox" '+(allowed(u,id)?'checked':'')+' onchange="setElig(\''+esc(u)+'\',\''+esc(id)+'\',this.checked)"></td>').join('')+'</tr>';
+  }
+  g.innerHTML=head+rows;
+}
+window.setElig=async function(u,id,val){
+  await setDoc(eligRef,{[u]:{[id]:val}},{merge:true});
+};
+window.eligAll=async function(val){
+  if(!confirm((val?'Allow':'Disallow')+' EVERY shift for EVERY user?')) return;
+  const patch={};
+  for(const u of names){ patch[u]={}; for(const [id] of shiftList()) patch[u][id]=val; }
+  await setDoc(eligRef,patch,{merge:true});
+};
+
+// ── Catalog ──
+function renderCatalog(){
+  const el=document.getElementById('catList'); if(!el) return;
+  const list=shiftList();
+  el.innerHTML=list.length?list.map(([id,s])=>`
+    <div class="rowline">
+      <span class="chipp" style="background:${esc(s.color||'#fef9c3')}">${esc(s.label)}</span>
+      <span style="font-size:11px;color:var(--t2)">${s.kind==='call'?'call shift (balanced evenly)':'day shift'}</span>
+      <input type="color" value="${esc(s.color||'#fef9c3')}" style="width:40px;height:26px;border:1px solid var(--b2);border-radius:6px;padding:1px" onchange="setShiftColor('${esc(id)}',this.value)">
+      <span style="margin-left:auto"><button class="btn btn-ghost" style="font-size:11px;color:var(--red)" onclick="delShift('${esc(id)}')">Delete</button></span>
+    </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No shifts yet — add one above.</div>';
+}
+window.addShift=async function(){
+  const label=document.getElementById('catLabel').value.trim();
+  const kind=document.getElementById('catKind').value;
+  const color=document.getElementById('catColor').value;
+  if(!label){ alert('Enter a label.'); return; }
+  const id=label.toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('S'+Date.now());
+  if(catalog.shifts?.[id]){ alert('A shift with this label already exists.'); return; }
+  const order=Math.max(0,...Object.values(catalog.shifts||{}).map(s=>s.order??0))+1;
+  await setDoc(catalogRef,{shifts:{[id]:{label,kind,color,order}}},{merge:true});
+  document.getElementById('catLabel').value='';
+};
+window.setShiftColor=async function(id,color){ await setDoc(catalogRef,{shifts:{[id]:{color}}},{merge:true}); };
+window.delShift=async function(id){
+  if(!confirm('Delete shift "'+(catalog.shifts?.[id]?.label||id)+'"? Existing assignments keep the code but it can no longer be assigned.')) return;
+  await setDoc(catalogRef,{shifts:{[id]:deleteField()}},{merge:true});
+};
+
+// ── Stats ──
+function renderStats(){
+  const g=document.getElementById('statsGrid'); if(!g||!curYM) return;
+  const [y,m]=curYM.split('-').map(Number);
+  document.getElementById('statsMonth').textContent=MS[m-1]+' '+y;
+  const shifts=shiftList();
+  let head='<tr><th style="text-align:left">User</th>'+shifts.map(([id,s])=>'<th'+(s.kind==='call'?' style="background:#ede9fe"':'')+'>'+esc(s.label)+'</th>').join('')+'<th>OFF</th><th>VAC days</th></tr>';
+  const vac=vacationDays();
+  const nDays=new Date(y,m,0).getDate();
+  let rows='';
+  for(const u of names){
+    const c={}; let off=0, vd=0;
+    for(let d=1;d<=nDays;d++){
+      const dd=pad(d), cell=cellOf(u,dd);
+      if(cell.day) c[cell.day]=(c[cell.day]||0)+1;
+      if(cell.call) c[cell.call]=(c[cell.call]||0)+1;
+      if(cell.off) off++;
+      if(vac[u+'|'+curYM+'-'+dd]) vd++;
+    }
+    rows+='<tr><td style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
+      +shifts.map(([id,s])=>'<td'+(s.kind==='call'?' style="background:#f5f3ff;font-weight:800"':'')+'>'+(c[id]||'')+'</td>').join('')
+      +'<td>'+(off||'')+'</td><td style="color:var(--green);font-weight:700">'+(vd||'')+'</td></tr>';
+  }
+  g.innerHTML=head+rows;
+}
+
+function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderStats(); fillOpenShiftSel(); }
+
+// ── Admin auth gate — SAME admin list (vacations/adminAccess) as the auction ──
+const DEFAULT_ADMIN_EMAILS=['dr.vacation.goddess@gmail.com','aaronjfrankel@gmail.com'];
+let _currentAdminEmail=null;
+async function checkAdminAccess(u){
+  if(!u || u.isAnonymous || typeof u.email!=='string' || u.emailVerified===false) return false;
+  const em=u.email.toLowerCase();
+  try{
+    const snap=await getDoc(adminAccessRef);
+    if(!snap.exists()||!Array.isArray(snap.data().emails)||!snap.data().emails.length) return DEFAULT_ADMIN_EMAILS.includes(em);
+    return snap.data().emails.map(x=>String(x).toLowerCase()).includes(em);
+  }catch(_){ return false; }
+}
+let _authResolve; const authReady=new Promise(r=>{_authResolve=r;});
+onAuthStateChanged(auth, async u=>{
+  const ok=await checkAdminAccess(u);
+  const gate=document.getElementById('authGate');
+  const who=document.getElementById('authGateWho');
+  if(ok){
+    _currentAdminEmail=u.email.toLowerCase();
+    if(gate) gate.style.display='none';
+    const badge=document.getElementById('adminWhoami'); if(badge) badge.textContent=u.email;
+    _authResolve(u);
+  } else {
+    _currentAdminEmail=null;
+    if(gate) gate.style.display='flex';
+    const chk=document.getElementById('authGateChecking'); if(chk) chk.style.display='none';
+    const card=document.getElementById('authGateCard'); if(card) card.style.display='block';
+    if(who) who.textContent=(u&&u.email)?('Signed in as '+u.email+' — this account is not authorized.'):'';
+  }
+});
+window.adminGoogleSignIn=async function(){
+  const err=document.getElementById('authGateErr'); if(err) err.textContent='';
+  try{
+    await signOut(auth).catch(()=>{});
+    const provider=new GoogleAuthProvider();
+    if(provider.setCustomParameters) provider.setCustomParameters({prompt:'select_account'});
+    await signInWithPopup(auth, provider);
+  }catch(e){ if(err) err.textContent='Sign-in failed: '+((e&&e.message)||e); }
+};
+window.adminSignOut=function(){ signOut(auth).catch(()=>{}); };
+
+// ── Boot (listeners wait for auth, matching the auction admin) ──
+setMonth(ymKey(new Date()));
+authReady.then(()=>{
+  onSnapshot(userListRef,snap=>{ const d=snap.exists()?snap.data():{}; if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort(); renderAll(); });
+  onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; renderAll(); });
+  onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
+  onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); });
+  onSnapshot(catalogRef,async snap=>{
+    if(!snap.exists()||!snap.data().shifts||!Object.keys(snap.data().shifts).length){
+      await setDoc(catalogRef,{shifts:DEFAULT_SHIFTS},{merge:true}); return; // seed once; listener refires
+    }
+    catalog=snap.data(); renderAll();
+  });
+  onSnapshot(eligRef,snap=>{ elig=snap.exists()?snap.data():{}; renderAll(); });
+  onSnapshot(requestsRef,snap=>{ requests=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(requests.list))requests.list=[]; renderRequests(); });
+  onSnapshot(swapsRef,snap=>{ swaps=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(swaps.list))swaps.list=[]; renderSwaps(); });
+  onSnapshot(openRef,snap=>{ openShifts=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(openShifts.list))openShifts.list=[]; renderOpenAdmin(); });
+  onSnapshot(totalsRef,snap=>{ totals=snap.exists()?snap.data():{}; });
+});
+</script>
+</body>
+</html>
