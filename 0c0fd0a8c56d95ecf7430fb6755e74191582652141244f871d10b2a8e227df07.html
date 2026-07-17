@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <script>
   var PAGE = 'admin';
-  var BUILD = 4;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 5;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -269,6 +269,12 @@ const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 let names=[], usernamesData={}, emailsData={}, vPhases={}, vApprovals={};
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, totals={}, monthData={days:{}};
 let curYM=null, unsubMonth=null, cellSel=null;
+
+// Debug helper — the variables above live inside this module script, which
+// keeps them private from the DevTools Console by default. This exposes a
+// live read-only window into them for troubleshooting: run debugCatalog()
+// in the Console to see exactly what this tab currently has loaded.
+window.debugCatalog=()=>catalog;
 
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad=n=>String(n).padStart(2,'0');
