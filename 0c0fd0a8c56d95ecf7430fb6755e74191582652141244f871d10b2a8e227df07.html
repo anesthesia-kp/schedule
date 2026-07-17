@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <script>
   var PAGE = 'admin';
-  var BUILD = 5;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 6;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -483,13 +483,12 @@ window.closeCellModal=function(){ document.getElementById('cellModal').classList
 window.saveCell=async function(clear){
   if(!cellSel) return;
   const {u,dd}=cellSel;
-  const path=`days.${dd}.${u}`;
-  if(clear){ await setDoc(monthRef(curYM),{days:{[dd]:{[u]:deleteField()}}},{merge:true}); }
+  if(clear){ await setDoc(monthRef(curYM),{['days.'+dd+'.'+u]:deleteField()},{merge:true}); }
   else{
     const day=document.getElementById('cmDay').value||null;
     const call=document.getElementById('cmCall').value||null;
     const off=document.getElementById('cmOff').checked;
-    await setDoc(monthRef(curYM),{days:{[dd]:{[u]:{day,call,off}}}},{merge:true});
+    await setDoc(monthRef(curYM),{['days.'+dd+'.'+u]:{day,call,off}},{merge:true});
   }
   closeCellModal();
 };
@@ -578,7 +577,7 @@ window.decideReq=async function(id,status){
     if(r.type==='shift'||r.type==='claim'){ const kind=catalog.shifts?.[r.shiftId]?.kind==='call'?'call':'day'; patch={...{day:null,call:null,off:false},...cur,[kind]:r.shiftId}; }
     if(r.type==='dayoff') patch={...{day:null,call:null},...cur,off:true};
     if(r.type==='nocall') patch={...{day:null,off:false},...cur,call:null};
-    if(patch) await setDoc(monthRef(mk),{days:{[dd]:{[r.user]:patch}}},{merge:true});
+    if(patch) await setDoc(monthRef(mk),{['days.'+dd+'.'+r.user]:patch},{merge:true});
     if(r.type==='claim'&&r.openId){
       const ol=(openShifts.list||[]).map(o=>o.id===r.openId?{...o,status:'claimed',claimedBy:r.user}:o);
       await setDoc(openRef,{list:ol},{merge:true});
@@ -618,10 +617,10 @@ window.decideSwap=async function(id,status){
     const a=dayMap[s.from]||{day:null,call:null,off:false}, b=dayMap[s.to]||{day:null,call:null,off:false};
     const k=s.part==='call'?'call':'day';
     const av=a[k]??null, bv=b[k]??null;
-    await setDoc(monthRef(mk),{days:{[dd]:{
-      [s.from]:{...{day:null,call:null,off:false},...a,[k]:bv},
-      [s.to]:  {...{day:null,call:null,off:false},...b,[k]:av},
-    }}},{merge:true});
+    await setDoc(monthRef(mk),{
+      ['days.'+dd+'.'+s.from]:{...{day:null,call:null,off:false},...a,[k]:bv},
+      ['days.'+dd+'.'+s.to]:  {...{day:null,call:null,off:false},...b,[k]:av},
+    },{merge:true});
   }
 };
 
@@ -724,7 +723,7 @@ function renderElig(){
   g.innerHTML=head+rows;
 }
 window.setElig=async function(u,id,val){
-  await setDoc(eligRef,{[u]:{[id]:val}},{merge:true});
+  await setDoc(eligRef,{[u+'.'+id]:val},{merge:true});
 };
 window.eligAll=async function(val){
   if(!confirm((val?'Allow':'Disallow')+' EVERY shift for EVERY user?')) return;
@@ -762,13 +761,13 @@ window.addShift=async function(){
   const id=label.toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('S'+Date.now());
   if(catalog.shifts?.[id]){ alert('A shift with this label already exists.'); return; }
   const order=Math.max(0,...Object.values(catalog.shifts||{}).map(s=>s.order??0))+1;
-  await setDoc(catalogRef,{shifts:{[id]:{label,kind,color,order}}},{merge:true});
+  await setDoc(catalogRef,{['shifts.'+id]:{label,kind,color,order}},{merge:true});
   document.getElementById('catLabel').value='';
 };
-window.setShiftColor=async function(id,color){ await setDoc(catalogRef,{shifts:{[id]:{color}}},{merge:true}); };
+window.setShiftColor=async function(id,color){ await setDoc(catalogRef,{['shifts.'+id+'.color']:color},{merge:true}); };
 window.delShift=async function(id){
   if(!confirm('Delete shift "'+(catalog.shifts?.[id]?.label||id)+'"? Existing assignments keep the code but it can no longer be assigned.')) return;
-  await setDoc(catalogRef,{shifts:{[id]:deleteField()}},{merge:true});
+  await setDoc(catalogRef,{['shifts.'+id]:deleteField()},{merge:true});
 };
 
 // ── Stats ──
@@ -858,19 +857,25 @@ authReady.then(()=>{
     // marked by _v2Seeded on the catalog doc — then never runs again, so
     // deleting one of these shifts later won't bring it back.
     if(!catalog._v2Seeded){
-      const patch={}; for(const [id,s] of Object.entries(ADDITIONAL_SHIFTS_V2)) if(!catalog.shifts?.[id]) patch[id]=s;
-      await setDoc(catalogRef,{shifts:patch,_v2Seeded:true},{merge:true});
+      // IMPORTANT: Firestore's {merge:true} does NOT deep-merge a nested object
+      // value — writing {shifts:{A:...}} REPLACES the entire "shifts" map with
+      // just {A:...}, deleting every other shift. Each key must be its own
+      // dotted top-level field ("shifts.A") so only that one key is touched.
+      const dotted={}; for(const [id,s] of Object.entries(ADDITIONAL_SHIFTS_V2)) if(!catalog.shifts?.[id]) dotted['shifts.'+id]=s;
+      dotted._v2Seeded=true;
+      await setDoc(catalogRef,dotted,{merge:true});
       return; // listener refires with the merged catalog
     }
     // Second cleanup pass — corrects 3 transcription errors from the v2 import
     // (drop BS+, rename RBL B → RBL 8, rename Pediatry → Podiatry). Runs once,
     // and only touches these 3 shifts — safe even if v2 already went live.
     if(!catalog._v3Fixed){
-      const patch={};
-      if(catalog.shifts?.BS_PLUS) patch.BS_PLUS=deleteField();
-      if(catalog.shifts?.RBL_B&&!catalog.shifts?.RBL_8){ patch.RBL_8={...catalog.shifts.RBL_B,label:'RBL 8'}; patch.RBL_B=deleteField(); }
-      if(catalog.shifts?.PEDIATRY&&!catalog.shifts?.PODIATRY){ patch.PODIATRY={...catalog.shifts.PEDIATRY,label:'Podiatry'}; patch.PEDIATRY=deleteField(); }
-      await setDoc(catalogRef,{shifts:patch,_v3Fixed:true},{merge:true});
+      const dotted={};
+      if(catalog.shifts?.BS_PLUS) dotted['shifts.BS_PLUS']=deleteField();
+      if(catalog.shifts?.RBL_B&&!catalog.shifts?.RBL_8){ dotted['shifts.RBL_8']={...catalog.shifts.RBL_B,label:'RBL 8'}; dotted['shifts.RBL_B']=deleteField(); }
+      if(catalog.shifts?.PEDIATRY&&!catalog.shifts?.PODIATRY){ dotted['shifts.PODIATRY']={...catalog.shifts.PEDIATRY,label:'Podiatry'}; dotted['shifts.PEDIATRY']=deleteField(); }
+      dotted._v3Fixed=true;
+      await setDoc(catalogRef,dotted,{merge:true});
       return;
     }
     // Color-code by clinical family (matches how QGenda groups shift colors)
@@ -878,9 +883,23 @@ authReady.then(()=>{
     // shift id we don't know about (i.e. anything admin added by hand),
     // and never re-runs, so a manual recolor afterward always sticks.
     if(!catalog._v4Colors){
-      const patch={};
-      for(const [id,color] of Object.entries(COLOR_BY_ID)) if(catalog.shifts?.[id]&&catalog.shifts[id].color!==color) patch[id]={color};
-      await setDoc(catalogRef,{shifts:patch,_v4Colors:true},{merge:true});
+      const dotted={};
+      for(const [id,color] of Object.entries(COLOR_BY_ID)) if(catalog.shifts?.[id]&&catalog.shifts[id].color!==color) dotted['shifts.'+id+'.color']=color;
+      dotted._v4Colors=true;
+      await setDoc(catalogRef,dotted,{merge:true});
+      return;
+    }
+    // Repair pass — restores any canonical shift that's missing (this fixes
+    // catalogs that lost shifts to the merge bug above, before it was fixed).
+    // Uses the same safe dotted-field writes, so it can never wipe anything;
+    // it only ADDS a shift back if that exact id isn't already present, so
+    // any custom shift the admin added by hand, or any shift deleted on
+    // purpose, is left completely alone.
+    if(!catalog._v5Repair){
+      const dotted={};
+      for(const [id,s] of Object.entries({...DEFAULT_SHIFTS,...ADDITIONAL_SHIFTS_V2})) if(!catalog.shifts?.[id]) dotted['shifts.'+id]=s;
+      dotted._v5Repair=true;
+      await setDoc(catalogRef,dotted,{merge:true});
       return;
     }
     renderAll();
