@@ -7,7 +7,7 @@
 <script>
   // ── Auto-refresh: reload when a newer build is deployed ──
   var PAGE = 'index';
-  var BUILD = 4;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 5;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -190,7 +190,7 @@ table.grid .wkend{background:var(--s3)}
   <div class="panel" id="panel-swaps">
     <div class="card">
       <div class="card-title">Swap Requests</div>
-      <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Propose trading one of your assignments with another user. Admin confirms with both of you before approving.</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Propose trading one of your assignments with another user. They have to accept first, then admin gives final approval before it changes the schedule.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="date" class="inp" id="swapDate">
         <select class="sel" id="swapPart">
@@ -225,7 +225,7 @@ table.grid .wkend{background:var(--s3)}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, updateDoc, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, updateDoc, arrayUnion, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ── Firebase — same project as the Vacation Auction, but ALL scheduling data
@@ -249,6 +249,7 @@ const requestsRef = doc(db,"dailysched","requests");
 const swapsRef    = doc(db,"dailysched","swaps");
 const openRef     = doc(db,"dailysched","openShifts"); // admin-posted unfilled shifts users can apply for
 const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);
+const auditRef    = doc(db,"dailysched","auditLog"); // shared with admin's Audit Log page — write-only from here
 
 // vacations — READ-ONLY: shared roster + approved vacation weeks
 const userListRef  = doc(db,"vacations","userList");
@@ -279,6 +280,20 @@ const dKey=d=>ymKey(d)+'-'+pad(d.getDate());
 function displayName(u){ return usernamesData[u]||u; }
 function shiftList(kind){ return Object.entries(catalog.shifts||{}).filter(([,s])=>!kind||s.kind===kind).sort((a,b)=>(a[1].order??99)-(b[1].order??99)); }
 function shiftLabel(id){ return catalog.shifts?.[id]?.label||id; }
+// Logs to the SAME audit doc the admin site reads on its Audit Log page, so
+// a user accepting/declining a swap shows up there too — same shape as the
+// admin's own auditLog() (id/ts/admin/action/detail), just with the current
+// user's initials in the "admin" field instead of an admin email. Trimming
+// the log when it gets large is the admin side's job (it already does that
+// on every one of its own writes); this fire-and-forget helper only needs
+// to append. Never awaited by callers — logging must never block the action.
+function logUserAction(action,detail){
+  const entry={id:Math.random().toString(36).slice(2),ts:Date.now(),admin:displayName(me),action,detail};
+  (async()=>{
+    try{ await updateDoc(auditRef,{log:arrayUnion(entry)}); }
+    catch(e){ await setDoc(auditRef,{log:[entry]},{merge:true}).catch(()=>{}); }
+  })();
+}
 async function sha256(t){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
 
 // ── Approved vacation weeks from the auction → {user|date: true} ──
@@ -440,16 +455,30 @@ function renderMyRequests(){
 }
 function renderMySwaps(){
   const badge=document.getElementById('swapNavBadge');
-  if(badge&&me){ const n=(swaps.list||[]).filter(s=>(s.from===me||s.to===me)&&s.status==='pending').length; badge.textContent=n||''; badge.style.display=n?'inline-block':'none'; }
+  // Badge only counts swaps genuinely needing MY action right now — someone
+  // else proposed it and it's sitting on me to accept/decline. A swap I
+  // proposed myself, or one already forwarded to admin, isn't "my to-do".
+  if(badge&&me){ const n=(swaps.list||[]).filter(s=>s.to===me&&s.status==='pending_target').length; badge.textContent=n||''; badge.style.display=n?'inline-block':'none'; }
   const el=document.getElementById('mySwapList'); if(!el||!me) return;
   const mine=(swaps.list||[]).filter(s=>s.from===me||s.to===me).sort((a,b)=>b.ts-a.ts);
+  const statusHtml=s=>{
+    if(s.status==='pending_target'){
+      if(s.to===me) return `<button class="btn btn-success" style="font-size:12px" onclick="acceptSwap('${esc(s.id)}')">✓ Accept</button>
+        <button class="btn btn-danger" style="font-size:12px" onclick="declineSwap('${esc(s.id)}')">✗ Decline</button>`;
+      return `<span class="status-pending">⏳ waiting on ${esc(displayName(s.to))}</span>`;
+    }
+    if(s.status==='pending_admin') return '<span class="status-pending">⏳ waiting on admin</span>';
+    if(s.status==='declined_by_target') return `<span class="status-denied">❌ ${esc(displayName(s.to))} declined</span>`;
+    if(s.status==='approved') return '<span class="status-approved">✅ approved</span>';
+    return '<span class="status-denied">❌ denied by admin</span>';
+  };
   el.innerHTML=mine.length?mine.map(s=>`
     <div class="rowline">
       <span class="mono" style="font-size:12px">${esc(s.date)}</span>
       <span style="font-weight:700">${s.part==='call'?'Call':'Day shift'}</span>
       <span style="color:var(--t2)">${esc(displayName(s.from))} ⇄ ${esc(displayName(s.to))}</span>
       ${s.note?'<span style="color:var(--t2)">“'+esc(s.note)+'”</span>':''}
-      <span style="margin-left:auto" class="status-${s.status}">${s.status==='pending'?'⏳ pending':s.status==='approved'?'✅ approved':'❌ denied'}</span>
+      <span style="margin-left:auto">${statusHtml(s)}</span>
     </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No swap requests yet.</div>';
 }
 function fillSwapWith(){
@@ -492,11 +521,32 @@ window.submitSwap=async function(){
   const note=document.getElementById('swapNote').value.trim();
   if(!me) return;
   if(!date||!to){ msg.textContent='Pick a date and a user to swap with.'; msg.style.color='var(--red)'; return; }
-  const s={id:'s'+Date.now()+Math.floor(Math.random()*1e4),from:me,to,date,part,note,status:'pending',ts:Date.now()};
+  // Starts as pending_target — the OTHER user has to accept before this
+  // ever reaches admin. See renderMySwaps()/acceptSwap()/declineSwap().
+  const s={id:'s'+Date.now()+Math.floor(Math.random()*1e4),from:me,to,date,part,note,status:'pending_target',ts:Date.now()};
   const list=[...(swaps.list||[]),s];
   await setDoc(swapsRef,{list},{merge:true});
+  logUserAction('swap.request',displayName(me)+' proposed a swap with '+displayName(to)+' on '+date+' ('+(part==='call'?'call':'day shift')+')');
   document.getElementById('swapNote').value='';
-  msg.textContent='Swap requested — admin will confirm with both of you.'; msg.style.color='var(--green)';
+  msg.textContent='Swap requested — '+displayName(to)+' needs to accept it first.'; msg.style.color='var(--green)';
+};
+// The target user accepting/declining a swap someone else proposed with
+// them. Guards on status==='pending_target' && s.to===me so this can only
+// ever act on a swap that is (a) still awaiting a decision and (b) actually
+// theirs to decide — stale UI or a race with another tab can't double-fire.
+window.acceptSwap=async function(id){
+  const s=(swaps.list||[]).find(x=>x.id===id);
+  if(!s||s.status!=='pending_target'||s.to!==me) return;
+  const list=(swaps.list||[]).map(x=>x.id===id?{...x,status:'pending_admin',targetDecidedTs:Date.now()}:x);
+  await setDoc(swapsRef,{list},{merge:true});
+  logUserAction('swap.accept',displayName(me)+' accepted a swap with '+displayName(s.from)+' on '+s.date+' — now awaiting admin approval');
+};
+window.declineSwap=async function(id){
+  const s=(swaps.list||[]).find(x=>x.id===id);
+  if(!s||s.status!=='pending_target'||s.to!==me) return;
+  const list=(swaps.list||[]).map(x=>x.id===id?{...x,status:'declined_by_target',targetDecidedTs:Date.now()}:x);
+  await setDoc(swapsRef,{list},{merge:true});
+  logUserAction('swap.decline',displayName(me)+' declined a swap with '+displayName(s.from)+' on '+s.date);
 };
 
 // ── Sign-in (same roster + passcodes as the Vacation Auction) ──

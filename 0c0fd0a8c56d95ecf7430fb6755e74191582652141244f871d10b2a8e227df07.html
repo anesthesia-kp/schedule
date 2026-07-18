@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <script>
   var PAGE = 'admin';
-  var BUILD = 16;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 18;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -81,8 +81,8 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 
 <nav>
   <div class="brand">SCHEDULER ADMIN</div>
-  <a onclick="nav('dash',this)">📊 Dashboard</a>
-  <a onclick="nav('grid',this)" class="on">📅 Schedule Grid</a>
+  <a onclick="nav('dash',this)" class="on">📊 Dashboard</a>
+  <a onclick="nav('grid',this)">📅 Schedule Grid</a>
   <a onclick="nav('requests',this)">📥 Requests <span id="reqBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
   <a onclick="nav('swaps',this)">🔁 Swaps <span id="swapBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
   <a onclick="nav('open',this)">📢 Open Shifts</a>
@@ -108,7 +108,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
   </div>
 
   <!-- DASHBOARD -->
-  <div class="panel" id="panel-dash">
+  <div class="panel on" id="panel-dash">
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Dashboard</div>
     <div class="page-sub" style="margin-bottom:12px">Everything at a glance — click any card to jump to its full page.</div>
     <div class="dash-cols">
@@ -149,7 +149,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
   </div>
 
   <!-- SCHEDULE GRID -->
-  <div class="panel on" id="panel-grid">
+  <div class="panel" id="panel-grid">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn btn-ghost" style="font-size:12px" onclick="moveYear(-1)" title="Previous year">« Year</button>
       <button class="btn" onclick="moveMonth(-1)">⟨</button>
@@ -181,7 +181,8 @@ table.grid th.stick1{background:var(--s2);z-index:3}
   <!-- SWAPS -->
   <div class="panel" id="panel-swaps">
     <div class="page-title" style="font-size:16px;margin-bottom:10px">Swap Requests</div>
-    <div class="card"><div class="card-title">Pending</div><div id="swapPending"></div></div>
+    <div class="card"><div class="card-title">Awaiting your approval</div><div id="swapPending"></div></div>
+    <div class="card"><div class="card-title">Awaiting the other user</div><div id="swapWaiting"></div></div>
     <div class="card"><div class="card-title">Decided</div><div id="swapDecided"></div></div>
   </div>
 
@@ -951,9 +952,14 @@ window.decideReq=async function(id,status){
 };
 
 // ── Swaps ──
+// Lifecycle: pending_target (waiting on the other user) → either
+// declined_by_target (ends there, no admin step) or pending_admin (the
+// other user accepted, now waiting on admin) → approved (admin approves —
+// this is the only point the actual schedule swap executes) or denied.
 function renderSwaps(){
-  const pend=(swaps.list||[]).filter(s=>s.status==='pending').sort((a,b)=>a.ts-b.ts);
-  const done=(swaps.list||[]).filter(s=>s.status!=='pending').sort((a,b)=>b.ts-a.ts).slice(0,40);
+  const waiting=(swaps.list||[]).filter(s=>s.status==='pending_target').sort((a,b)=>a.ts-b.ts);
+  const pend=(swaps.list||[]).filter(s=>s.status==='pending_admin').sort((a,b)=>a.ts-b.ts);
+  const done=(swaps.list||[]).filter(s=>s.status==='approved'||s.status==='denied'||s.status==='declined_by_target').sort((a,b)=>b.ts-a.ts).slice(0,40);
   const badge=document.getElementById('swapBadge'); if(badge) badge.textContent=pend.length?('('+pend.length+')'):'';
   const row=(s,buttons)=>`
     <div class="rowline">
@@ -966,17 +972,26 @@ function renderSwaps(){
   document.getElementById('swapPending').innerHTML=pend.length?pend.map(s=>row(s,
     `<button class="btn btn-success" style="font-size:12px" onclick="decideSwap('${esc(s.id)}','approved')">✓ Approve &amp; swap</button>
      <button class="btn btn-danger" style="font-size:12px" onclick="decideSwap('${esc(s.id)}','denied')">✗ Deny</button>`)).join('')
-    :'<div style="font-size:12px;color:var(--t3)">Nothing pending.</div>';
+    :'<div style="font-size:12px;color:var(--t3)">Nothing waiting on you right now.</div>';
+  document.getElementById('swapWaiting').innerHTML=waiting.length?waiting.map(s=>row(s,
+    `<span class="status-pending">⏳ waiting on ${esc(displayName(s.to))}</span>`)).join('')
+    :'<div style="font-size:12px;color:var(--t3)">Nothing waiting on another user.</div>';
   document.getElementById('swapDecided').innerHTML=done.length?done.map(s=>row(s,
-    `<span class="status-${s.status}">${s.status==='approved'?'✅ approved':'❌ denied'}</span>`)).join('')
+    s.status==='declined_by_target'
+      ?`<span class="status-denied">❌ ${esc(displayName(s.to))} declined</span>`
+      :`<span class="status-${s.status}">${s.status==='approved'?'✅ approved':'❌ denied'}</span>`)).join('')
     :'<div style="font-size:12px;color:var(--t3)">No decisions yet.</div>';
 }
 // Approving a swap exchanges the two users' day-or-call slot on that date.
+// Only ever acts on a swap the OTHER user has already accepted
+// (status==='pending_admin') — admin is always the last step, never the
+// first, now that the target user has to sign off before it reaches here.
 window.decideSwap=async function(id,status){
   const s=(swaps.list||[]).find(x=>x.id===id);
+  if(!s||s.status!=='pending_admin') return;
   const list=(swaps.list||[]).map(x=>x.id===id?{...x,status,decidedTs:Date.now()}:x);
   await setDoc(swapsRef,{list},{merge:true});
-  if(status==='approved'&&s){
+  if(status==='approved'){
     const mk=s.date.slice(0,7), dd=s.date.slice(8);
     const snap=await getDoc(monthRef(mk)); const dayMap=snap.data()?.days?.[dd]||{};
     const a=dayMap[s.from]||{day:null,call:null,off:false}, b=dayMap[s.to]||{day:null,call:null,off:false};
@@ -987,7 +1002,7 @@ window.decideSwap=async function(id,status){
       ['days.'+dd+'.'+s.to]:  {...{day:null,call:null,off:false},...b,[k]:av},
     });
   }
-  if(s) auditLog('swap.decide',(status==='approved'?'Approved':'Denied')+' swap between '+displayName(s.from)+' and '+displayName(s.to)+' on '+s.date);
+  auditLog('swap.decide',(status==='approved'?'Approved':'Denied')+' swap between '+displayName(s.from)+' and '+displayName(s.to)+' on '+s.date);
 };
 
 // ── Open shifts ──
@@ -1369,7 +1384,10 @@ function renderDash(){
   document.getElementById('dashReqSub').textContent=pendingReq.length?'Newest first — review on the Requests page.':'Nothing waiting.';
   document.getElementById('dashReqList').innerHTML=pendingReq.slice(0,4).map(r=>'<div class="rowline">'+esc(displayName(r.user))+' — '+esc(r.type)+(r.date?' ('+esc(r.date)+')':'')+'</div>').join('');
 
-  const pendingSwap=(swaps.list||[]).filter(s=>s.status==='pending').sort((a,b)=>b.ts-a.ts);
+  // Only counts swaps waiting on ADMIN (the other user has already
+  // accepted) — matches swapBadge, and mirrors Pending Requests only
+  // counting actionable items, not everything in flight.
+  const pendingSwap=(swaps.list||[]).filter(s=>s.status==='pending_admin').sort((a,b)=>b.ts-a.ts);
   document.getElementById('dashSwapCount').textContent=pendingSwap.length;
   document.getElementById('dashSwapSub').textContent=pendingSwap.length?'Review on the Swaps page.':'Nothing waiting.';
   document.getElementById('dashSwapList').innerHTML=pendingSwap.slice(0,4).map(s=>'<div class="rowline">'+esc(displayName(s.from))+' ⇄ '+esc(displayName(s.to))+' — '+esc(s.date)+'</div>').join('');
