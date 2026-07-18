@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <script>
   var PAGE = 'admin';
-  var BUILD = 7;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 8;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -77,6 +77,7 @@ table.grid .wkend{background:var(--s3)}
   <div class="nav-section">Setup</div>
   <a onclick="nav('elig',this)">🎯 Shift Eligibility</a>
   <a onclick="nav('catalog',this)">🧰 Shift Catalog</a>
+  <a onclick="nav('families',this)">🎨 Shift Families</a>
   <a onclick="nav('stats',this)">📊 Stats</a>
   <div class="nav-section">Other Systems</div>
   <a href="https://anesthesia-kp.github.io/vacation/a5696c46cc3d0bc9f10572215094955b2cf379303be3f210dc7098e14250223e.html" target="_blank" rel="noopener">🏖️ Vacation Auction Admin →</a>
@@ -99,6 +100,7 @@ table.grid .wkend{background:var(--s3)}
       <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
       <span style="flex:1"></span>
       <button class="btn btn-primary" onclick="autoPopulate()">⚡ Auto-Populate Month</button>
+      <button class="btn btn-primary" onclick="autoPopulateYear()">⚡ Auto-Populate Year</button>
       <button class="btn btn-danger" onclick="clearMonth()">Clear Month</button>
     </div>
     <div class="card" style="padding:10px 12px">
@@ -152,6 +154,7 @@ table.grid .wkend{background:var(--s3)}
     </div>
     <div class="card">
       <div class="card-title">All Users (<span id="uCount">0</span>)</div>
+      <div class="page-sub" style="margin-bottom:10px">FTE here is this site's own value — separate from the Vacation Auction's FTE. New users start blank here (no default) until set; when a user is first added, if the auction already has an FTE for them it's copied over once as a starting point, then the two stay independent.</div>
       <div style="overflow-x:auto"><table class="grid" id="usersGrid" style="width:100%"></table></div>
     </div>
   </div>
@@ -175,17 +178,42 @@ table.grid .wkend{background:var(--s3)}
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="text" class="inp" id="catLabel" placeholder="Label e.g. D10 or Call 16" style="width:170px">
         <select class="sel" id="catKind"><option value="day">Day shift</option><option value="call">Call shift</option></select>
-        <select class="sel" id="catFamily" onchange="applyFamilyColor()">
-          <option value="">Color family…</option>
-          <option value="ob">OB / Obstetric</option><option value="ap">AP coverage</option><option value="call">Call</option>
-          <option value="icu">ICU</option><option value="pedi">Pediatric</option><option value="pcv">P / PCV</option>
-          <option value="admin">Admin / other</option><option value="dshift">D-shift</option>
-        </select>
-        <input type="color" class="inp" id="catColor" value="#fef9c3" style="padding:2px;width:52px;height:36px">
+        <select class="sel" id="catRole"><option value="">Role — optional</option><option value="MD">MD</option><option value="CRNA">CRNA</option></select>
+        <select class="sel" id="catFamily" onchange="onCatFamilyChange()"></select>
+        <div id="catColorPicker" style="display:flex;align-items:center;gap:4px"></div>
+        <input type="hidden" id="catColor" value="">
         <button class="btn btn-primary" onclick="addShift()">Add</button>
       </div>
+      <div id="catColorNote" style="font-size:11px;color:var(--t3);margin-top:6px"></div>
     </div>
-    <div class="card"><div class="card-title">Shifts</div><div id="catList"></div></div>
+    <div class="card">
+      <div class="card-title">Shifts</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:11px;color:var(--t2);font-weight:700">Role:</span>
+        <button class="btn btn-ghost" id="catRoleFilter_" style="font-size:11px" onclick="setCatalogRoleFilter('')">All</button>
+        <button class="btn btn-ghost" id="catRoleFilter_MD" style="font-size:11px" onclick="setCatalogRoleFilter('MD')">MD</button>
+        <button class="btn btn-ghost" id="catRoleFilter_CRNA" style="font-size:11px" onclick="setCatalogRoleFilter('CRNA')">CRNA</button>
+      </div>
+      <div id="catList"></div>
+    </div>
+  </div>
+
+  <!-- SHIFT FAMILIES -->
+  <div class="panel" id="panel-families">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Shift Families</div>
+    <div class="page-sub" style="margin-bottom:12px">Group shifts by clinical type so they share one consistent color everywhere in the app. Drag a shift into a different family to move it — this is also the legend.</div>
+    <div class="card">
+      <div class="card-title">Add a family</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="text" class="inp" id="famLabel" placeholder="Family name e.g. Cardiac" style="width:200px">
+        <div id="famNewColorPicker" style="display:flex;align-items:center;gap:4px"></div>
+        <button class="btn btn-primary" onclick="addFamily()">Add family</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Families &amp; shifts</div>
+      <div id="famBoard" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start"></div>
+    </div>
   </div>
 
   <!-- STATS -->
@@ -256,6 +284,7 @@ const swapsRef    = doc(db,"dailysched","swaps");
 const openRef     = doc(db,"dailysched","openShifts");
 const totalsRef   = doc(db,"dailysched","callTotals"); // {user:{shiftId:n}} cumulative — keeps call fair across months
 const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);
+const schedFteRef = doc(db,"dailysched","fteMap"); // THIS SITE's own FTE per user — independent of the auction's FTE. Seeded once from the auction's value as a starting point (see maybeSeedFte); edited here afterward, never auto-synced again.
 // vacations — READ-ONLY: roster, admin list, approved vacation weeks
 const userListRef   = doc(db,"vacations","userList");
 const usernamesRef  = doc(db,"vacations","usernames");
@@ -263,12 +292,20 @@ const emailsRef      = doc(db,"vacations","emails"); // shared with the Vacation
 const adminAccessRef= doc(db,"vacations","adminAccess");
 const vPhasesRef    = doc(db,"vacations","phases");
 const vApprovalsRef = doc(db,"vacations","approvals");
+const vFteRef        = doc(db,"vacations","fteMap"); // read-only — used ONLY to seed this site's own FTE map, once, per user
 
 const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 let names=[], usernamesData={}, emailsData={}, vPhases={}, vApprovals={};
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, totals={}, monthData={days:{}};
 let curYM=null, unsubMonth=null, cellSel=null;
+let schedFte={}, schedFteLoaded=false, namesLoaded=false;
+// Same fallback the Vacation Auction admin uses, so "pull the current FTE from
+// vacay" reflects what that site actually shows an admin (its raw fteMap doc,
+// falling back to this hardcoded table, falling back to 1.0) — not just the
+// raw doc, which may be missing entries that still show a real value there.
+const VACAY_FTE_FALLBACK={MA:.4,BC:.5,EC:.8,SC:.6,SFI:.8,NG:.8,MK:.8,SYK:.8,SL:.9,JLO:.7,KN:.8,AQ:.6,DR:.8,DNS:.9};
+function getSchedFTE(u){ return schedFte[u]; } // undefined = not set — no default on this site, ever
 
 // Debug helper — the variables above live inside this module script, which
 // keeps them private from the DevTools Console by default. This exposes a
@@ -297,13 +334,47 @@ async function mergeFields(ref, dotted){
   }
 }
 
+// One-time-per-user FTE seed: for every current user who has no FTE set on
+// THIS site yet, copy the auction's current effective FTE as a starting
+// point. Runs whenever both the roster and this site's FTE map have loaded
+// (whichever finishes loading second actually does the work); safe to call
+// repeatedly since it only ever fills in gaps, never overwrites a value
+// that's already here (including one an admin already blanked out on
+// purpose — that's why it's per-user-missing, not a single global flag).
+let _fteSeedRunning=false;
+async function maybeSeedFte(){
+  if(_fteSeedRunning || !schedFteLoaded || !namesLoaded || !names.length) return;
+  const missing=names.filter(u=>schedFte[u]===undefined);
+  if(!missing.length) return;
+  _fteSeedRunning=true;
+  try{
+    let vFte={};
+    try{ const vs=await getDoc(vFteRef); vFte=vs.exists()?vs.data():{}; }catch(_){}
+    const patch={};
+    for(const u of missing){
+      const starting = vFte[u]!==undefined ? vFte[u] : VACAY_FTE_FALLBACK[u];
+      if(starting!==undefined) patch[u]=starting;
+    }
+    if(Object.keys(patch).length){
+      schedFte={...schedFte,...patch}; // optimistic, so a slow snapshot refire doesn't re-trigger this
+      await mergeFields(schedFteRef,patch);
+    }
+  } finally { _fteSeedRunning=false; }
+}
+
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad=n=>String(n).padStart(2,'0');
 const ymKey=d=>d.getFullYear()+'-'+pad(d.getMonth()+1);
 const dKey=d=>ymKey(d)+'-'+pad(d.getDate());
 function displayName(u){ return usernamesData[u]||u; }
 function shiftList(kind){ return Object.entries(catalog.shifts||{}).filter(([,s])=>!kind||s.kind===kind).sort((a,b)=>(a[1].order??99)-(b[1].order??99)); }
-function chipHtml(id){ const s=catalog.shifts?.[id]||{}; return '<span class="chipp" style="background:'+esc(s.color||'#fef9c3')+'">'+esc(s.label||id)+'</span>'; }
+// A shift's color is always resolved LIVE from its family (if it has one) —
+// never a copy baked in at assign-time. That's what guarantees every shift in
+// a family shares the exact same color with zero variation, and means
+// recoloring a family (setFamilyColor) instantly recolors every member shift
+// everywhere in the app without having to rewrite each shift document.
+function shiftColor(s){ return (s?.family && catalog.families?.[s.family]?.color) || s?.color || '#fef9c3'; }
+function chipHtml(id){ const s=catalog.shifts?.[id]||{}; return '<span class="chipp" style="background:'+esc(shiftColor(s))+'">'+esc(s.label||id)+'</span>'; }
 function allowed(u,id){ return elig?.[u]?.[id]===true; }
 
 // ── Color families ── shifts are grouped like QGenda groups them — every
@@ -431,6 +502,23 @@ const ADDITIONAL_SHIFTS_V2={
 // already exist in a live catalog) and available to the Add Shift family
 // picker as a reference of "this is what family X looks like".
 const COLOR_BY_ID={}; for(const [id,s] of Object.entries({...DEFAULT_SHIFTS,...ADDITIONAL_SHIFTS_V2})) COLOR_BY_ID[id]=s.color;
+// Flat id → family-preset-key map, derived (not hand-transcribed) by matching
+// each shift's seed color back to the FAMILY_PRESETS family it came from.
+// Feeds the _v7Families migration below, which backfills catalog.families
+// (the new admin-editable single-color-per-family model) and each shift's
+// "family" field from this.
+const FAMILY_BY_ID={};
+for(const [id,color] of Object.entries(COLOR_BY_ID)){
+  for(const [fkey,fp] of Object.entries(FAMILY_PRESETS)){
+    if(fp.colors.includes(color)){ FAMILY_BY_ID[id]=fkey; break; }
+  }
+}
+
+// ── Fixed color palette ── the ONLY colors selectable anywhere in this app
+// (family colors, and a standalone shift's color when it has no family).
+// Deliberately a small, curated, visually-distinct set — no RGB/hex slider —
+// so two different families/shifts can never end up as near-identical hues.
+const PALETTE=['#fde68a','#fca5a5','#fdba74','#fcd34d','#d9f99d','#86efac','#5eead4','#67e8f9','#93c5fd','#a5b4fc','#c4b5fd','#f0abfc','#f9a8d4','#fecaca','#e2e8f0','#cbd5e1'];
 
 // ── Vacation overlay (identical logic to the user site) ──
 function vacationDays(){
@@ -555,6 +643,49 @@ window.autoPopulate=async function(){
   await setDoc(monthRef(curYM),{days},{merge:true});
   await setDoc(totalsRef,newTotals);
   alert('Auto-populate complete — '+filled+' assignments made.'+(unfillable.length?'\n\n⚠️ Could not fill (no eligible user):\n'+unfillable.slice(0,15).join('\n')+(unfillable.length>15?'\n…and '+(unfillable.length-15)+' more':''):''));
+};
+// Same fill as autoPopulate() above, run for all 12 months of the viewed
+// year in calendar order, chaining fairness counts in memory month-to-month
+// (each month's fill sees every earlier month's picks in this same run, not
+// just what was saved to callTotals before the run started). Existing
+// months' data is fetched with a one-time getDoc rather than relying on
+// setMonth()'s live listener, so this doesn't disturb whatever month is
+// currently on screen.
+window.autoPopulateYear=async function(){
+  const year=curYM?Number(curYM.split('-')[0]):new Date().getFullYear();
+  if(!confirm('Auto-populate ALL 12 months of '+year+' (January–December)?\n\nRuns the same fill as Auto-Populate Month, one month at a time in order, keeping existing assignments and balancing call fairness across the whole year. This can take a few seconds and writes to all 12 months.')) return;
+  const vac=vacationDays();
+  let liveTotals=JSON.parse(JSON.stringify(totals||{}));
+  let grandFilled=0; const grandUnfillable=[];
+  for(let m=1;m<=12;m++){
+    const ym=year+'-'+pad(m);
+    const nDays=new Date(year,m,0).getDate();
+    let days={};
+    try{ const snap=await getDoc(monthRef(ym)); if(snap.exists()&&snap.data().days) days=JSON.parse(JSON.stringify(snap.data().days)); }catch(_){}
+    const counts={};
+    const cnt=(u,s)=>counts[u+'|'+s]??((liveTotals?.[u]?.[s]||0));
+    for(const u of names) for(const [id] of shiftList()) counts[u+'|'+id]=(liveTotals?.[u]?.[id]||0);
+    for(const dd in days) for(const u in days[dd]){ const c=days[dd][u]; if(c.day) counts[u+'|'+c.day]=(counts[u+'|'+c.day]||0)+1; if(c.call) counts[u+'|'+c.call]=(counts[u+'|'+c.call]||0)+1; }
+    for(let d=1;d<=nDays;d++){
+      const dd=pad(d), dk=ym+'-'+dd;
+      days[dd]=days[dd]||{};
+      for(const [id,s] of shiftList()){
+        const slot=s.kind==='call'?'call':'day';
+        if(Object.values(days[dd]).some(c=>c[slot]===id)) continue;
+        const cands=names.filter(u=>allowed(u,id)&&!vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!(days[dd][u]?.[slot]));
+        if(!cands.length){ grandUnfillable.push(dk+' '+s.label); continue; }
+        cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
+        const pick=cands[0];
+        days[dd][pick]=Object.assign({day:null,call:null,off:false},days[dd][pick],{[slot]:id});
+        counts[pick+'|'+id]=cnt(pick,id)+1;
+        liveTotals[pick]=liveTotals[pick]||{}; liveTotals[pick][id]=(liveTotals[pick][id]||0)+1;
+        grandFilled++;
+      }
+    }
+    await setDoc(monthRef(ym),{days},{merge:true});
+  }
+  await setDoc(totalsRef,liveTotals);
+  alert('Auto-populate year complete for '+year+' — '+grandFilled+' assignments made across all 12 months.'+(grandUnfillable.length?'\n\n⚠️ Could not fill (no eligible user) — '+grandUnfillable.length+' slot(s):\n'+grandUnfillable.slice(0,15).join('\n')+(grandUnfillable.length>15?'\n…and '+(grandUnfillable.length-15)+' more':''):''));
 };
 window.clearMonth=async function(){
   const [y,m]=curYM.split('-').map(Number);
@@ -687,13 +818,15 @@ window.removeOpen=async function(id){
 function renderUsersGrid(){
   const g=document.getElementById('usersGrid'); if(!g) return;
   const count=document.getElementById('uCount'); if(count) count.textContent=names.length;
-  let head='<tr><th style="text-align:left">Initials</th><th style="text-align:left">Full name</th><th style="text-align:left">E-mail</th><th></th></tr>';
+  let head='<tr><th style="text-align:left">Initials</th><th style="text-align:left">Full name</th><th style="text-align:left">E-mail</th><th style="text-align:left">FTE (schedule)</th><th></th></tr>';
   let rows='';
   for(const u of names){
+    const fte=getSchedFTE(u);
     rows+=`<tr>
       <td style="text-align:left"><strong class="mono">${esc(u)}</strong></td>
       <td style="text-align:left"><input type="text" class="inp" id="ufn_${esc(u)}" style="width:180px" value="${esc(usernamesData[u]||'')}" placeholder="not set"></td>
       <td style="text-align:left"><input type="email" class="inp" id="uem_${esc(u)}" style="width:200px" value="${esc(emailsData[u]||'')}" placeholder="not set"></td>
+      <td style="text-align:left"><input type="number" class="inp" id="ufte_${esc(u)}" style="width:80px" step="0.1" min="0" max="1" value="${fte!==undefined?esc(fte):''}" placeholder="not set"></td>
       <td style="white-space:nowrap">
         <button class="btn btn-success" style="font-size:11px;padding:4px 10px" onclick="saveSchedUser('${esc(u)}')">Save</button>
         <button class="btn btn-danger" style="font-size:11px;padding:4px 10px" onclick="removeSchedUser('${esc(u)}')">🗑 Remove</button>
@@ -714,14 +847,32 @@ window.addSchedUser=async function(){
   await setDoc(userListRef,{users:updated});
   if(fullName) await setDoc(usernamesRef,{[initials]:fullName},{merge:true});
   if(email) await setDoc(emailsRef,{[initials]:email},{merge:true});
+  // New user starts with no FTE on this site — but if the auction already has
+  // one for these initials (re-added user, or added there first), copy it
+  // over once as a starting point, same as the batch seed does for everyone else.
+  try{
+    const vs=await getDoc(vFteRef);
+    const vFte=vs.exists()?vs.data():{};
+    const starting=vFte[initials]!==undefined?vFte[initials]:VACAY_FTE_FALLBACK[initials];
+    if(starting!==undefined) await mergeFields(schedFteRef,{[initials]:starting});
+  }catch(_){}
   document.getElementById('uInitials').value=''; document.getElementById('uFullName').value=''; document.getElementById('uEmail').value='';
   msg.style.color='var(--green)'; msg.textContent='Added '+initials+' — remember to set their FTE on the Vacation Auction admin before the auction opens.';
 };
 window.saveSchedUser=async function(u){
   const fn=document.getElementById('ufn_'+u).value.trim();
   const em=document.getElementById('uem_'+u).value.trim();
+  const fteEl=document.getElementById('ufte_'+u);
+  const fteRaw=fteEl?fteEl.value.trim():'';
   if(fn) await setDoc(usernamesRef,{[u]:fn},{merge:true}); else await updateDoc(usernamesRef,{[u]:deleteField()}).catch(()=>{});
   if(em) await setDoc(emailsRef,{[u]:em},{merge:true}); else await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
+  if(fteRaw!==''){
+    const v=parseFloat(fteRaw);
+    if(isNaN(v)||v<0||v>1){ alert('FTE must be a number between 0 and 1.'); return; }
+    await mergeFields(schedFteRef,{[u]:Math.round(v*10)/10});
+  } else {
+    await mergeFields(schedFteRef,{[u]:deleteField()});
+  }
 };
 window.removeSchedUser=async function(u){
   if(!confirm('Remove '+u+' from the shared roster?\n\nThis removes them from BOTH the Daily Schedule and the Vacation Auction — they will no longer be selectable anywhere. Any shifts or vacation weeks already assigned to them stay in the history but they will disappear from user lists. This cannot be undone from here.')) return;
@@ -729,6 +880,7 @@ window.removeSchedUser=async function(u){
   await updateDoc(usernamesRef,{[u]:deleteField()}).catch(()=>{});
   await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
   await updateDoc(eligRef,{[u]:deleteField()}).catch(()=>{});
+  await updateDoc(schedFteRef,{[u]:deleteField()}).catch(()=>{});
 };
 
 // ── Eligibility ──
@@ -754,42 +906,143 @@ window.eligAll=async function(val){
 };
 
 // ── Catalog ──
+let catalogRoleFilter='';
+window.setCatalogRoleFilter=function(r){ catalogRoleFilter=r; renderCatalog(); };
+function familyOptionsHtml(selected){
+  const fams=Object.entries(catalog.families||{}).sort((a,b)=>a[1].label.localeCompare(b[1].label));
+  return '<option value=""'+(!selected?' selected':'')+'>No family</option>'+fams.map(([k,f])=>`<option value="${esc(k)}"${k===selected?' selected':''}>${esc(f.label)}</option>`).join('');
+}
 function renderCatalog(){
   const el=document.getElementById('catList'); if(!el) return;
-  const list=shiftList();
+  ['','MD','CRNA'].forEach(r=>{ const b=document.getElementById('catRoleFilter_'+r); if(b) b.className='btn '+(catalogRoleFilter===r?'btn-primary':'btn-ghost'); });
+  const list=shiftList().filter(([,s])=>!catalogRoleFilter||s.role===catalogRoleFilter);
   el.innerHTML=list.length?list.map(([id,s])=>`
     <div class="rowline">
-      <span class="chipp" style="background:${esc(s.color||'#fef9c3')}">${esc(s.label)}</span>
+      <span class="chipp" style="background:${esc(shiftColor(s))}">${esc(s.label)}</span>
       <span style="font-size:11px;color:var(--t2)">${s.kind==='call'?'call shift (balanced evenly)':'day shift'}</span>
-      <input type="color" value="${esc(s.color||'#fef9c3')}" style="width:40px;height:26px;border:1px solid var(--b2);border-radius:6px;padding:1px" onchange="setShiftColor('${esc(id)}',this.value)">
+      <select class="sel" style="font-size:11px" title="Family" onchange="setShiftFamily('${esc(id)}',this.value)">${familyOptionsHtml(s.family||'')}</select>
+      <select class="sel" style="font-size:11px" title="Role" onchange="setShiftRole('${esc(id)}',this.value)">
+        <option value=""${!s.role?' selected':''}>Role —</option>
+        <option value="MD"${s.role==='MD'?' selected':''}>MD</option>
+        <option value="CRNA"${s.role==='CRNA'?' selected':''}>CRNA</option>
+      </select>
       <span style="margin-left:auto"><button class="btn btn-ghost" style="font-size:11px;color:var(--red)" onclick="delShift('${esc(id)}')">Delete</button></span>
     </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No shifts yet — add one above.</div>';
+  renderCatFamilyOptions();
 }
-// Picking a color family sets a starting shade from that family (alternating
-// shade based on how many shifts already use it, so same-family shifts don't
-// all land on the exact same hex) — admin can still fine-tune with the raw
-// color picker right next to it before clicking Add.
-window.applyFamilyColor=function(){
-  const f=document.getElementById('catFamily').value; if(!f) return;
-  const usedInFamily=Object.values(catalog.shifts||{}).filter(s=>FAMILY_PRESETS[f].colors.includes(s.color)).length;
-  document.getElementById('catColor').value=fam(f,usedInFamily);
+function renderCatFamilyOptions(){
+  const sel=document.getElementById('catFamily'); if(!sel) return;
+  const cur=sel.value;
+  sel.innerHTML=familyOptionsHtml('');
+  if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
+  onCatFamilyChange();
+}
+// Generic palette row: each swatch calls window[onPickFn](hexColor). Used for
+// single-argument pickers (Add Shift's standalone color, Add Family's color).
+function paletteHtml(current,onPickFn,disabled){
+  return PALETTE.map(c=>`<span ${disabled?'':`onclick="${onPickFn}('${c}')"`} title="${c}" style="display:inline-block;width:20px;height:20px;border-radius:5px;background:${c};cursor:${disabled?'default':'pointer'};opacity:${disabled?'.4':'1'};border:2px solid ${c===current?'#1e293b':'transparent'}"></span>`).join('');
+}
+// Family-recolor row: each swatch calls setFamilyColor(fkey,hexColor) directly
+// and takes effect immediately — no separate confirm, since it's a one-click
+// visual change and every affected shift's color is resolved live anyway.
+function familyPaletteHtml(fkey,current){
+  return PALETTE.map(c=>`<span onclick="setFamilyColor('${esc(fkey)}','${c}')" title="${c}" style="display:inline-block;width:18px;height:18px;border-radius:5px;background:${c};cursor:pointer;border:2px solid ${c===current?'#1e293b':'transparent'}"></span>`).join('');
+}
+// The Add Shift color control: if a family is picked, color is locked to that
+// family's color (palette shown disabled, for visibility only) — this is what
+// guarantees no variation within a family from the moment a shift is created.
+// Only an unassigned shift gets a free choice from the fixed palette.
+window.onCatFamilyChange=function(){
+  const f=document.getElementById('catFamily')?.value||'';
+  const note=document.getElementById('catColorNote');
+  const picker=document.getElementById('catColorPicker');
+  const colorEl=document.getElementById('catColor');
+  if(!colorEl) return;
+  if(f){
+    const c=catalog.families?.[f]?.color||PALETTE[0];
+    colorEl.value=c;
+    if(picker) picker.innerHTML=paletteHtml(c,'',true);
+    if(note) note.textContent="Color comes from the family — change the family's color on the Shift Families page.";
+  } else {
+    if(!colorEl.value) colorEl.value=PALETTE[0];
+    if(picker) picker.innerHTML=paletteHtml(colorEl.value,'pickCatColor',false);
+    if(note) note.textContent='No family selected — pick a standalone color.';
+  }
 };
+window.pickCatColor=function(c){ document.getElementById('catColor').value=c; onCatFamilyChange(); };
 window.addShift=async function(){
   const label=document.getElementById('catLabel').value.trim();
   const kind=document.getElementById('catKind').value;
-  const color=document.getElementById('catColor').value;
+  const role=document.getElementById('catRole').value;
+  const family=document.getElementById('catFamily').value;
+  const color=family?(catalog.families?.[family]?.color||PALETTE[0]):(document.getElementById('catColor').value||PALETTE[0]);
   if(!label){ alert('Enter a label.'); return; }
   const id=label.toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('S'+Date.now());
   if(catalog.shifts?.[id]){ alert('A shift with this label already exists.'); return; }
   const order=Math.max(0,...Object.values(catalog.shifts||{}).map(s=>s.order??0))+1;
-  await mergeFields(catalogRef,{['shifts.'+id]:{label,kind,color,order}});
-  document.getElementById('catLabel').value='';
+  await mergeFields(catalogRef,{['shifts.'+id]:{label,kind,color,family,role,order}});
+  document.getElementById('catLabel').value=''; document.getElementById('catRole').value=''; document.getElementById('catFamily').value=''; onCatFamilyChange();
 };
-window.setShiftColor=async function(id,color){ await mergeFields(catalogRef,{['shifts.'+id+'.color']:color}); };
+window.setShiftFamily=async function(id,fkey){
+  const patch={['shifts.'+id+'.family']:fkey};
+  if(fkey) patch['shifts.'+id+'.color']=catalog.families?.[fkey]?.color||PALETTE[0];
+  await mergeFields(catalogRef,patch);
+};
+window.setShiftRole=async function(id,role){ await mergeFields(catalogRef,{['shifts.'+id+'.role']:role}); };
 window.delShift=async function(id){
   if(!confirm('Delete shift "'+(catalog.shifts?.[id]?.label||id)+'"? Existing assignments keep the code but it can no longer be assigned.')) return;
   await mergeFields(catalogRef,{['shifts.'+id]:deleteField()});
 };
+
+// ── Shift Families — legend + drag-and-drop grouping ──
+let pendingFamColor=PALETTE[0];
+function renderFamilyNewColorPicker(){
+  const el=document.getElementById('famNewColorPicker'); if(!el) return;
+  el.innerHTML=paletteHtml(pendingFamColor,'pickNewFamColor',false);
+}
+window.pickNewFamColor=function(c){ pendingFamColor=c; renderFamilyNewColorPicker(); };
+window.addFamily=async function(){
+  const label=document.getElementById('famLabel').value.trim();
+  if(!label){ alert('Enter a family name.'); return; }
+  const fkey=label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('fam'+Date.now());
+  if(catalog.families?.[fkey]){ alert('A family with this name already exists.'); return; }
+  await mergeFields(catalogRef,{['families.'+fkey]:{label,color:pendingFamColor}});
+  document.getElementById('famLabel').value=''; pendingFamColor=PALETTE[0]; renderFamilyNewColorPicker();
+};
+window.setFamilyColor=async function(fkey,color){ await mergeFields(catalogRef,{['families.'+fkey+'.color']:color}); };
+window.delFamily=async function(fkey){
+  const n=Object.values(catalog.shifts||{}).filter(s=>s.family===fkey).length;
+  if(n>0){ alert('Move all shifts out of this family before deleting it ('+n+' still assigned).'); return; }
+  if(!confirm('Delete this family?')) return;
+  await mergeFields(catalogRef,{['families.'+fkey]:deleteField()});
+};
+window.famDragStart=function(ev,id){ ev.dataTransfer.setData('text/plain',id); ev.dataTransfer.effectAllowed='move'; };
+window.famAllowDrop=function(ev){ ev.preventDefault(); };
+window.famDrop=function(ev,fkey){
+  ev.preventDefault();
+  const id=ev.dataTransfer.getData('text/plain');
+  if(id) setShiftFamily(id,fkey);
+};
+function renderFamilies(){
+  const board=document.getElementById('famBoard'); if(!board) return;
+  renderFamilyNewColorPicker();
+  const fams=Object.entries(catalog.families||{}).sort((a,b)=>a[1].label.localeCompare(b[1].label));
+  const cols=[['',{label:'Unassigned',color:'#f1f5f9'}],...fams];
+  board.innerHTML=cols.map(([fkey,f])=>{
+    const members=shiftList().filter(([,s])=>(s.family||'')===fkey);
+    const chips=members.map(([id,s])=>`<div draggable="true" ondragstart="famDragStart(event,'${esc(id)}')" class="chipp" style="cursor:grab;display:block;margin-bottom:4px;background:${esc(shiftColor(s))}">${esc(s.label)}</div>`).join('')||'<div style="font-size:11px;color:var(--t3)">Drop shifts here</div>';
+    return `<div ondragover="famAllowDrop(event)" ondrop="famDrop(event,'${esc(fkey)}')" style="border:2px dashed var(--b2);border-radius:10px;padding:10px;min-width:190px;flex:1;background:var(--s2)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="width:16px;height:16px;border-radius:4px;background:${esc(f.color)};display:inline-block;border:1px solid #0002;flex-shrink:0"></span>
+        <strong style="font-size:12px">${esc(f.label)}</strong>
+        <span style="font-size:10px;color:var(--t3);margin-left:auto">${members.length}</span>
+        ${fkey?`<button class="btn btn-ghost" style="font-size:10px;color:var(--red);padding:2px 6px" onclick="delFamily('${esc(fkey)}')">✕</button>`:''}
+      </div>
+      ${fkey?`<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:8px">${familyPaletteHtml(fkey,f.color)}</div>`:''}
+      <div>${chips}</div>
+    </div>`;
+  }).join('');
+}
 
 // ── Stats ──
 function renderStats(){
@@ -817,7 +1070,7 @@ function renderStats(){
   g.innerHTML=head+rows;
 }
 
-function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderStats(); renderUsersGrid(); fillOpenShiftSel(); }
+function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); fillOpenShiftSel(); }
 
 // ── Admin auth gate — SAME admin list (vacations/adminAccess) as the auction ──
 const DEFAULT_ADMIN_EMAILS=['dr.vacation.goddess@gmail.com','aaronjfrankel@gmail.com'];
@@ -863,7 +1116,8 @@ window.adminSignOut=function(){ signOut(auth).catch(()=>{}); };
 // ── Boot (listeners wait for auth, matching the auction admin) ──
 setMonth(ymKey(new Date()));
 authReady.then(()=>{
-  onSnapshot(userListRef,snap=>{ const d=snap.exists()?snap.data():{}; if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort(); renderAll(); });
+  onSnapshot(userListRef,snap=>{ const d=snap.exists()?snap.data():{}; if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort(); namesLoaded=true; renderAll(); maybeSeedFte(); });
+  onSnapshot(schedFteRef,snap=>{ schedFte=snap.exists()?snap.data():{}; schedFteLoaded=true; renderAll(); maybeSeedFte(); });
   onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(emailsRef,snap=>{ emailsData=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
@@ -925,6 +1179,34 @@ authReady.then(()=>{
       const dotted={};
       for(const [id,s] of Object.entries({...DEFAULT_SHIFTS,...ADDITIONAL_SHIFTS_V2})) if(!catalog.shifts?.[id]) dotted['shifts.'+id]=s;
       dotted._v6Repair=true;
+      await mergeFields(catalogRef,dotted);
+      return;
+    }
+    // Introduces the Shift Families system: catalog.families (one canonical
+    // color per family, admin-editable, no more 2-shade variation within a
+    // group) and two new per-shift fields — "family" (backfilled from
+    // FAMILY_BY_ID, derived from each shift's existing color) and "role"
+    // ("MD"/"CRNA"/"" — guessed from the shift id/label, admin can correct in
+    // the Shift Catalog). Runs once; a shift already carrying either field
+    // (e.g. added by hand after this shipped) is left untouched.
+    if(!catalog._v7Families){
+      const dotted={};
+      if(!catalog.families){
+        const families={};
+        for(const [fkey,fp] of Object.entries(FAMILY_PRESETS)) families[fkey]={label:fp.label,color:fp.colors[0]};
+        dotted.families=families;
+      }
+      for(const [id,s] of Object.entries(catalog.shifts||{})){
+        if(s.family===undefined) dotted['shifts.'+id+'.family']=FAMILY_BY_ID[id]||'';
+        if(s.role===undefined){
+          const tokens=id.split('_');
+          let role='';
+          if(tokens.includes('MD')) role='MD';
+          else if(tokens.includes('CRNA')||/CRNA/i.test(s.label||'')) role='CRNA';
+          dotted['shifts.'+id+'.role']=role;
+        }
+      }
+      dotted._v7Families=true;
       await mergeFields(catalogRef,dotted);
       return;
     }
