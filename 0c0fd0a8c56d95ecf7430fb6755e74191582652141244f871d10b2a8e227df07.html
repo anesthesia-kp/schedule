@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <script>
   var PAGE = 'admin';
-  var BUILD = 9;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 11;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -62,6 +62,14 @@ table.grid .wkend{background:var(--s3)}
 .modal.on{display:flex}
 .modal .mcard{background:var(--s1);border-radius:14px;max-width:420px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
 .chipp{display:inline-block;border-radius:4px;padding:0 5px;font-weight:700;color:#1e293b}
+.hm-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px;font-size:11px;color:var(--t3);text-align:center;font-weight:700}
+.hm-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.hm-cell{aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.2}
+.hm-cell.wkend{box-shadow:inset 0 0 0 2px var(--b2)}
+.hm-blank{background:transparent}
+.hm-daynum{font-size:10px;opacity:.85}
+.hm-pct{font-size:13px;font-weight:800}
+.hm-legend-bar{height:14px;border-radius:7px;background:linear-gradient(to right,#cde2fb,#b7d3f6,#9ec5f4,#86b6ef,#6da7ec,#5598e7,#3987e5,#2a78d6,#256abf,#1c5cab,#184f95,#104281,#0d366b)}
 </style>
 </head>
 <body>
@@ -79,6 +87,9 @@ table.grid .wkend{background:var(--s3)}
   <a onclick="nav('catalog',this)">🧰 Shift Catalog</a>
   <a onclick="nav('families',this)">🎨 Shift Families</a>
   <a onclick="nav('stats',this)">📊 Stats</a>
+  <a onclick="nav('heatmap',this)">🔥 Coverage Heatmap</a>
+  <div class="nav-section">Admin</div>
+  <a onclick="nav('audit',this)">🧾 Audit Log</a>
   <div class="nav-section">Other Systems</div>
   <a href="https://anesthesia-kp.github.io/vacation/a5696c46cc3d0bc9f10572215094955b2cf379303be3f210dc7098e14250223e.html" target="_blank" rel="noopener">🏖️ Vacation Auction Admin →</a>
 </nav>
@@ -185,7 +196,7 @@ table.grid .wkend{background:var(--s3)}
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="text" class="inp" id="catLabel" placeholder="Label e.g. D10 or Call 16" style="width:170px">
         <select class="sel" id="catKind"><option value="day">Day shift</option><option value="call">Call shift</option></select>
-        <select class="sel" id="catRole"><option value="">Role — optional</option><option value="MD">MD</option><option value="CRNA">CRNA</option></select>
+        <select class="sel" id="catRole"><option value="">Role — optional</option><option value="MD">MD</option><option value="CRNA">CRNA</option><option value="Both">Both (MD &amp; CRNA)</option></select>
         <select class="sel" id="catFamily" onchange="onCatFamilyChange()"></select>
         <div id="catColorPicker" style="display:flex;align-items:center;gap:4px"></div>
         <input type="hidden" id="catColor" value="">
@@ -200,6 +211,7 @@ table.grid .wkend{background:var(--s3)}
         <button class="btn btn-ghost" id="catRoleFilter_" style="font-size:11px" onclick="setCatalogRoleFilter('')">All</button>
         <button class="btn btn-ghost" id="catRoleFilter_MD" style="font-size:11px" onclick="setCatalogRoleFilter('MD')">MD</button>
         <button class="btn btn-ghost" id="catRoleFilter_CRNA" style="font-size:11px" onclick="setCatalogRoleFilter('CRNA')">CRNA</button>
+        <button class="btn btn-ghost" id="catRoleFilter_Both" style="font-size:11px" onclick="setCatalogRoleFilter('Both')">Both</button>
       </div>
       <div id="catList"></div>
     </div>
@@ -229,6 +241,40 @@ table.grid .wkend{background:var(--s3)}
     <div class="card" style="padding:10px 12px">
       <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Assignments per user for the visible month (change month on the Schedule Grid tab). Call columns highlighted — watch these for even distribution.</div>
       <div style="overflow-x:auto"><table class="grid" id="statsGrid"></table></div>
+    </div>
+  </div>
+
+  <!-- COVERAGE HEATMAP -->
+  <div class="panel" id="panel-heatmap">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Coverage Heatmap</div>
+    <div class="page-sub" style="margin-bottom:12px">How fully each day's shifts are staffed — filled slots ÷ total catalog slots for that day (day + call combined). Darker = better covered. Change month on the Schedule Grid tab, or use the arrows below.</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn" onclick="moveMonth(-1)">⟨</button>
+      <div id="heatmapMonthLabel" style="font-size:16px;font-weight:800;min-width:170px;text-align:center"></div>
+      <button class="btn" onclick="moveMonth(1)">⟩</button>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
+    </div>
+    <div class="card">
+      <div id="heatmapGrid"></div>
+      <div style="margin-top:16px;max-width:420px">
+        <div class="hm-legend-bar"></div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:4px"><span>0% filled</span><span>50%</span><span>100% filled</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Day-by-day detail</div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Same numbers as the heatmap above, in table form.</div>
+      <div style="overflow-x:auto"><table class="grid" style="width:100%"><thead><tr><th style="text-align:left">Date</th><th>Day</th><th>Filled</th><th>Total slots</th><th>Coverage</th></tr></thead><tbody id="heatmapTableBody"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- AUDIT LOG -->
+  <div class="panel" id="panel-audit">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Audit Log</div>
+    <div class="page-sub" style="margin-bottom:12px">Who changed what, when — newest first. Covers assignment edits, catalog/family changes, eligibility bulk actions, roster changes, and auto-populate/clear runs. Not every single click, but everything that changes real data.</div>
+    <div class="card" style="padding:10px 12px">
+      <div style="margin-bottom:8px"><input type="text" class="inp" id="auditFilter" placeholder="Filter by name, action, or admin e-mail…" style="width:300px" oninput="renderAudit()"></div>
+      <div id="auditList" style="max-height:75vh;overflow:auto"></div>
     </div>
   </div>
 </div>
@@ -270,7 +316,7 @@ table.grid .wkend{background:var(--s3)}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, updateDoc, deleteField, getDoc, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, updateDoc, deleteField, getDoc, arrayUnion, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const app = initializeApp({
@@ -293,6 +339,7 @@ const openRef     = doc(db,"dailysched","openShifts");
 const totalsRef   = doc(db,"dailysched","callTotals"); // {user:{shiftId:n}} cumulative — keeps call fair across months
 const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);
 const schedFteRef = doc(db,"dailysched","fteMap"); // THIS SITE's own FTE per user — independent of the auction's FTE. Seeded once from the auction's value as a starting point (see maybeSeedFte); edited here afterward, never auto-synced again.
+const auditRef    = doc(db,"dailysched","auditLog"); // {log:[{id,ts,admin,action,detail}]} — who changed what, when
 // vacations — READ-ONLY: roster, admin list, approved vacation weeks
 const userListRef   = doc(db,"vacations","userList");
 const usernamesRef  = doc(db,"vacations","usernames");
@@ -305,6 +352,7 @@ const vFteRef        = doc(db,"vacations","fteMap"); // read-only — used ONLY 
 const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 let names=[], usernamesData={}, emailsData={}, vPhases={}, vApprovals={};
+let auditLogData={log:[]};
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, totals={}, monthData={days:{}};
 let curYM=null, unsubMonth=null, cellSel=null;
 let schedFte={}, schedFteLoaded=false, namesLoaded=false;
@@ -369,6 +417,53 @@ async function maybeSeedFte(){
     }
   } finally { _fteSeedRunning=false; }
 }
+
+// Admin action audit log — who changed what, when. Fire-and-forget (not
+// awaited by callers) so logging never slows down the actual action. Appends
+// via arrayUnion (each entry has a random id so identical-looking entries
+// never collide/dedupe); falls back to setDoc if the log doc doesn't exist
+// yet. Once the log gets large it switches to a plain rewrite that trims to
+// the most recent 300 entries, so this can't grow forever.
+function auditLog(action,detail){
+  const entry={id:Math.random().toString(36).slice(2),ts:Date.now(),admin:_currentAdminEmail||'unknown',action,detail};
+  (async()=>{
+    try{
+      if((auditLogData.log||[]).length>=400){
+        const trimmed=[...(auditLogData.log||[])].sort((a,b)=>a.ts-b.ts).slice(-300);
+        await setDoc(auditRef,{log:[...trimmed,entry]});
+      } else {
+        await updateDoc(auditRef,{log:arrayUnion(entry)});
+      }
+    }catch(e){
+      // updateDoc fails whenever the log doc doesn't exist yet (its very
+      // first entry) — same "doesn't exist" case mergeFields() handles
+      // elsewhere in this file, so fall back the same unconditional way:
+      // create it. Never re-throw — logging must never break the action
+      // that triggered it.
+      await setDoc(auditRef,{log:[entry]},{merge:true}).catch(()=>{});
+    }
+  })();
+}
+function fmtTs(ts){ try{ return new Date(ts).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }catch(_){ return ''; } }
+function renderAudit(){
+  const el=document.getElementById('auditList'); if(!el) return;
+  const q=(document.getElementById('auditFilter')?.value||'').trim().toLowerCase();
+  let list=[...(auditLogData.log||[])].sort((a,b)=>b.ts-a.ts);
+  if(q) list=list.filter(e=>(e.detail||'').toLowerCase().includes(q)||(e.admin||'').toLowerCase().includes(q)||(e.action||'').toLowerCase().includes(q));
+  el.innerHTML=list.length?list.slice(0,300).map(e=>`
+    <div class="rowline">
+      <span class="mono" style="font-size:11px;color:var(--t3);min-width:120px">${esc(fmtTs(e.ts))}</span>
+      <span style="font-size:12px">${esc(e.detail||e.action)}</span>
+      <span style="margin-left:auto;font-size:11px;color:var(--t3)">${esc(e.admin||'')}</span>
+    </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No admin actions logged yet.</div>';
+}
+// Also reachable as window.renderAudit: the Audit Log panel's filter box
+// calls it from an inline oninput="renderAudit()" attribute, which executes
+// outside this module's scope and can only see window-attached functions —
+// same reason every other inline-handler target in this file is a
+// window.foo=... assignment. The bare "renderAudit" binding above still
+// serves every in-module call (renderAll(), the auditRef listener).
+window.renderAudit=renderAudit;
 
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad=n=>String(n).padStart(2,'0');
@@ -624,14 +719,19 @@ function cmConflicts(){
 window.saveCell=async function(clear){
   if(!cellSel) return;
   const {u,dd}=cellSel;
-  if(clear){ await mergeFields(monthRef(curYM),{['days.'+dd+'.'+u]:deleteField()}); }
-  else{
+  const dateLabel=curYM+'-'+dd;
+  if(clear){
+    await mergeFields(monthRef(curYM),{['days.'+dd+'.'+u]:deleteField()});
+    auditLog('cell.clear','Cleared '+displayName(u)+'’s assignment on '+dateLabel);
+  } else{
     const conflicts=cmConflicts();
     if(conflicts.length && !confirm(conflicts.join('\n')+'\n\nSave anyway?')) return;
     const day=document.getElementById('cmDay').value||null;
     const call=document.getElementById('cmCall').value||null;
     const off=document.getElementById('cmOff').checked;
     await mergeFields(monthRef(curYM),{['days.'+dd+'.'+u]:{day,call,off}});
+    const parts=[]; if(day) parts.push('day='+(catalog.shifts?.[day]?.label||day)); if(call) parts.push('call='+(catalog.shifts?.[call]?.label||call)); if(off) parts.push('day off');
+    auditLog('cell.save','Set '+displayName(u)+' on '+dateLabel+': '+(parts.join(', ')||'cleared'));
   }
   closeCellModal();
 };
@@ -676,6 +776,7 @@ window.autoPopulate=async function(){
   }
   await setDoc(monthRef(curYM),{days},{merge:true});
   await setDoc(totalsRef,newTotals);
+  auditLog('autopopulate.month','Auto-populated '+MS[m-1]+' '+y+' — '+filled+' assignments'+(unfillable.length?', '+unfillable.length+' unfillable':''));
   alert('Auto-populate complete — '+filled+' assignments made.'+(unfillable.length?'\n\n⚠️ Could not fill (no eligible user):\n'+unfillable.slice(0,15).join('\n')+(unfillable.length>15?'\n…and '+(unfillable.length-15)+' more':''):''));
 };
 // Same fill as autoPopulate() above, run for all 12 months of the viewed
@@ -719,12 +820,14 @@ window.autoPopulateYear=async function(){
     await setDoc(monthRef(ym),{days},{merge:true});
   }
   await setDoc(totalsRef,liveTotals);
+  auditLog('autopopulate.year','Auto-populated all of '+year+' — '+grandFilled+' assignments'+(grandUnfillable.length?', '+grandUnfillable.length+' unfillable':''));
   alert('Auto-populate year complete for '+year+' — '+grandFilled+' assignments made across all 12 months.'+(grandUnfillable.length?'\n\n⚠️ Could not fill (no eligible user) — '+grandUnfillable.length+' slot(s):\n'+grandUnfillable.slice(0,15).join('\n')+(grandUnfillable.length>15?'\n…and '+(grandUnfillable.length-15)+' more':''):''));
 };
 window.clearMonth=async function(){
   const [y,m]=curYM.split('-').map(Number);
   if(!confirm('Clear ALL assignments for '+MS[m-1]+' '+y+'? Vacation weeks stay (they come from the auction). This cannot be undone.')) return;
   await setDoc(monthRef(curYM),{days:{}});
+  auditLog('month.clear','Cleared ALL assignments for '+MS[m-1]+' '+y);
 };
 
 // ── Requests ──
@@ -769,6 +872,7 @@ window.decideReq=async function(id,status){
       await setDoc(openRef,{list:ol},{merge:true});
     }
   }
+  if(r) auditLog('request.decide',(status==='approved'?'Approved':'Denied')+' '+r.type+' request from '+displayName(r.user)+(r.date?' ('+r.date+')':''));
 };
 
 // ── Swaps ──
@@ -808,6 +912,7 @@ window.decideSwap=async function(id,status){
       ['days.'+dd+'.'+s.to]:  {...{day:null,call:null,off:false},...b,[k]:av},
     });
   }
+  if(s) auditLog('swap.decide',(status==='approved'?'Approved':'Denied')+' swap between '+displayName(s.from)+' and '+displayName(s.to)+' on '+s.date);
 };
 
 // ── Open shifts ──
@@ -892,6 +997,7 @@ window.addSchedUser=async function(){
   }catch(_){}
   document.getElementById('uInitials').value=''; document.getElementById('uFullName').value=''; document.getElementById('uEmail').value='';
   msg.style.color='var(--green)'; msg.textContent='Added '+initials+' — remember to set their FTE on the Vacation Auction admin before the auction opens.';
+  auditLog('user.add','Added user '+initials+(fullName?' ('+fullName+')':''));
 };
 window.saveSchedUser=async function(u){
   const fn=document.getElementById('ufn_'+u).value.trim();
@@ -915,6 +1021,7 @@ window.removeSchedUser=async function(u){
   await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
   await updateDoc(eligRef,{[u]:deleteField()}).catch(()=>{});
   await updateDoc(schedFteRef,{[u]:deleteField()}).catch(()=>{});
+  auditLog('user.remove','Removed user '+u+' from the shared roster');
 };
 
 // ── Eligibility ──
@@ -936,12 +1043,14 @@ function renderElig(){
 }
 window.setElig=async function(u,id,val){
   await mergeFields(eligRef,{[u+'.'+id]:val});
+  auditLog('elig.set',(val?'Allowed':'Disallowed')+' '+(catalog.shifts?.[id]?.label||id)+' for '+displayName(u));
 };
 window.eligAll=async function(val){
   if(!confirm((val?'Allow':'Disallow')+' EVERY shift for EVERY user?')) return;
   const patch={};
   for(const u of names){ patch[u]={}; for(const [id] of shiftList()) patch[u][id]=val; }
   await setDoc(eligRef,patch,{merge:true});
+  auditLog('elig.bulk',(val?'Allowed':'Disallowed')+' every shift for every user');
 };
 // One click to allow/disallow every shift in a family — for one user's row,
 // or (eligFamily) for every user at once. Uses mergeFields with one dotted
@@ -953,6 +1062,8 @@ window.eligFamilyForUser=async function(u,val){
   if(!ids.length) return;
   const patch={}; for(const id of ids) patch[u+'.'+id]=val;
   await mergeFields(eligRef,patch);
+  const famLabel=fkey?(catalog.families?.[fkey]?.label||fkey):'no-family';
+  auditLog('elig.bulk',(val?'Allowed':'Disallowed')+' every '+famLabel+' shift ('+ids.length+') for '+displayName(u));
 };
 window.eligFamily=async function(val){
   const fkey=document.getElementById('eligFamilySel').value;
@@ -963,6 +1074,7 @@ window.eligFamily=async function(val){
   const patch={};
   for(const u of names) for(const id of ids) patch[u+'.'+id]=val;
   await mergeFields(eligRef,patch);
+  auditLog('elig.bulk',(val?'Allowed':'Disallowed')+' every '+famLabel+' shift for EVERY user');
 };
 
 // ── Catalog ──
@@ -974,8 +1086,8 @@ function familyOptionsHtml(selected){
 }
 function renderCatalog(){
   const el=document.getElementById('catList'); if(!el) return;
-  ['','MD','CRNA'].forEach(r=>{ const b=document.getElementById('catRoleFilter_'+r); if(b) b.className='btn '+(catalogRoleFilter===r?'btn-primary':'btn-ghost'); });
-  const list=shiftList().filter(([,s])=>!catalogRoleFilter||s.role===catalogRoleFilter);
+  ['','MD','CRNA','Both'].forEach(r=>{ const b=document.getElementById('catRoleFilter_'+r); if(b) b.className='btn '+(catalogRoleFilter===r?'btn-primary':'btn-ghost'); });
+  const list=shiftList().filter(([,s])=>!catalogRoleFilter||s.role===catalogRoleFilter||(catalogRoleFilter!=='Both'&&s.role==='Both'));
   el.innerHTML=list.length?list.map(([id,s])=>`
     <div class="rowline">
       <span class="chipp" style="background:${esc(shiftColor(s))}">${esc(s.label)}</span>
@@ -985,6 +1097,7 @@ function renderCatalog(){
         <option value=""${!s.role?' selected':''}>Role —</option>
         <option value="MD"${s.role==='MD'?' selected':''}>MD</option>
         <option value="CRNA"${s.role==='CRNA'?' selected':''}>CRNA</option>
+        <option value="Both"${s.role==='Both'?' selected':''}>Both</option>
       </select>
       <span style="margin-left:auto"><button class="btn btn-ghost" style="font-size:11px;color:var(--red)" onclick="delShift('${esc(id)}')">Delete</button></span>
     </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No shifts yet — add one above.</div>';
@@ -1041,17 +1154,25 @@ window.addShift=async function(){
   if(catalog.shifts?.[id]){ alert('A shift with this label already exists.'); return; }
   const order=Math.max(0,...Object.values(catalog.shifts||{}).map(s=>s.order??0))+1;
   await mergeFields(catalogRef,{['shifts.'+id]:{label,kind,color,family,role,order}});
+  auditLog('shift.add','Added shift "'+label+'" ('+id+')');
   document.getElementById('catLabel').value=''; document.getElementById('catRole').value=''; document.getElementById('catFamily').value=''; onCatFamilyChange();
 };
 window.setShiftFamily=async function(id,fkey){
   const patch={['shifts.'+id+'.family']:fkey};
   if(fkey) patch['shifts.'+id+'.color']=catalog.families?.[fkey]?.color||PALETTE[0];
   await mergeFields(catalogRef,patch);
+  const famLabel=fkey?(catalog.families?.[fkey]?.label||fkey):'no family';
+  auditLog('shift.family','Moved '+(catalog.shifts?.[id]?.label||id)+' to '+famLabel);
 };
-window.setShiftRole=async function(id,role){ await mergeFields(catalogRef,{['shifts.'+id+'.role']:role}); };
+window.setShiftRole=async function(id,role){
+  await mergeFields(catalogRef,{['shifts.'+id+'.role']:role});
+  auditLog('shift.role','Set '+(catalog.shifts?.[id]?.label||id)+"'s role to "+(role||'unset'));
+};
 window.delShift=async function(id){
   if(!confirm('Delete shift "'+(catalog.shifts?.[id]?.label||id)+'"? Existing assignments keep the code but it can no longer be assigned.')) return;
+  const label=catalog.shifts?.[id]?.label||id;
   await mergeFields(catalogRef,{['shifts.'+id]:deleteField()});
+  auditLog('shift.delete','Deleted shift "'+label+'" ('+id+')');
 };
 
 // ── Shift Families — legend + drag-and-drop grouping ──
@@ -1067,14 +1188,20 @@ window.addFamily=async function(){
   const fkey=label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('fam'+Date.now());
   if(catalog.families?.[fkey]){ alert('A family with this name already exists.'); return; }
   await mergeFields(catalogRef,{['families.'+fkey]:{label,color:pendingFamColor}});
+  auditLog('family.add','Added family "'+label+'"');
   document.getElementById('famLabel').value=''; pendingFamColor=PALETTE[0]; renderFamilyNewColorPicker();
 };
-window.setFamilyColor=async function(fkey,color){ await mergeFields(catalogRef,{['families.'+fkey+'.color']:color}); };
+window.setFamilyColor=async function(fkey,color){
+  await mergeFields(catalogRef,{['families.'+fkey+'.color']:color});
+  auditLog('family.recolor','Recolored family "'+(catalog.families?.[fkey]?.label||fkey)+'"');
+};
 window.delFamily=async function(fkey){
   const n=Object.values(catalog.shifts||{}).filter(s=>s.family===fkey).length;
   if(n>0){ alert('Move all shifts out of this family before deleting it ('+n+' still assigned).'); return; }
   if(!confirm('Delete this family?')) return;
+  const label=catalog.families?.[fkey]?.label||fkey;
   await mergeFields(catalogRef,{['families.'+fkey]:deleteField()});
+  auditLog('family.delete','Deleted family "'+label+'"');
 };
 window.famDragStart=function(ev,id){ ev.dataTransfer.setData('text/plain',id); ev.dataTransfer.effectAllowed='move'; };
 window.famAllowDrop=function(ev){ ev.preventDefault(); };
@@ -1130,7 +1257,63 @@ function renderStats(){
   g.innerHTML=head+rows;
 }
 
-function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); fillOpenShiftSel(); }
+// ── Coverage heatmap ──
+// Sequential (magnitude) ramp, one hue light→dark, per the dataviz skill —
+// this is the SAME 13-step reference blue ramp used for the legend gradient
+// below, interpolated continuously so every fraction 0..1 gets a smooth color.
+const HEATMAP_RAMP=[
+  '#cde2fb','#b7d3f6','#9ec5f4','#86b6ef','#6da7ec','#5598e7','#3987e5',
+  '#2a78d6','#256abf','#1c5cab','#184f95','#104281','#0d366b'
+];
+function hexToRgb(h){ h=h.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
+function rgbToHex(rgb){ return '#'+rgb.map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join(''); }
+function coverageColor(frac){
+  const f=Math.max(0,Math.min(1,frac||0));
+  const n=HEATMAP_RAMP.length-1, pos=f*n, i=Math.min(n-1,Math.floor(pos)), t=pos-i;
+  const a=hexToRgb(HEATMAP_RAMP[i]), b=hexToRgb(HEATMAP_RAMP[i+1]);
+  return rgbToHex(a.map((v,idx)=>v+(b[idx]-v)*t));
+}
+// Text always wears black/white (never the fill color) — picked by luminance
+// so the day number + percent stay legible across the whole light→dark ramp.
+function textColorFor(hex){ const [r,g,b]=hexToRgb(hex); const lum=(0.299*r+0.587*g+0.114*b)/255; return lum>0.55?'#16213a':'#ffffff'; }
+// "Total slots" for a day = one slot per catalog shift (day-kind AND call-kind
+// each need exactly one person) — this mirrors autoPopulate()'s own definition
+// of "already covered" above, so the heatmap always agrees with what
+// Auto-Populate would still need to fill.
+function dayCoverage(dd){
+  const list=shiftList(); const total=list.length;
+  if(!total) return {filled:0,total:0,frac:0};
+  const cell=monthData.days?.[dd]||{};
+  const filledIds=new Set();
+  for(const u in cell){ const c=cell[u]; if(c.day) filledIds.add(c.day); if(c.call) filledIds.add(c.call); }
+  let filled=0; for(const [id] of list) if(filledIds.has(id)) filled++;
+  return {filled,total,frac:total?filled/total:0};
+}
+function renderHeatmap(){
+  const g=document.getElementById('heatmapGrid'); if(!g||!curYM) return;
+  const [y,m]=curYM.split('-').map(Number);
+  document.getElementById('heatmapMonthLabel').textContent=MS[m-1]+' '+y;
+  const nDays=new Date(y,m,0).getDate();
+  const firstWd=new Date(y,m-1,1).getDay();
+  let html='<div class="hm-dow">'+DS.map(d=>'<span>'+d+'</span>').join('')+'</div><div class="hm-grid">';
+  for(let i=0;i<firstWd;i++) html+='<div class="hm-cell hm-blank"></div>';
+  const rows=[];
+  for(let d=1;d<=nDays;d++){
+    const dd=pad(d), wd=new Date(y,m-1,d).getDay();
+    const {filled,total,frac}=dayCoverage(dd);
+    const pct=total?Math.round(frac*100):0;
+    const bg=coverageColor(frac), fg=textColorFor(bg);
+    html+='<div class="hm-cell'+((wd===0||wd===6)?' wkend':'')+'" style="background:'+bg+';color:'+fg+'" title="'+MS[m-1]+' '+d+', '+y+' — '+filled+'/'+total+' slots filled ('+pct+'%)">'
+      +'<div class="hm-daynum">'+d+'</div><div class="hm-pct">'+pct+'%</div></div>';
+    rows.push({d,wd,filled,total,pct});
+  }
+  html+='</div>';
+  g.innerHTML=html;
+  const tb=document.getElementById('heatmapTableBody');
+  if(tb) tb.innerHTML=rows.map(r=>'<tr><td style="text-align:left">'+MS[m-1]+' '+r.d+'</td><td>'+DS[r.wd]+'</td><td>'+r.filled+'</td><td>'+r.total+'</td><td>'+r.pct+'%</td></tr>').join('');
+}
+
+function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); fillOpenShiftSel(); renderAudit(); renderHeatmap(); }
 
 // ── Admin auth gate — SAME admin list (vacations/adminAccess) as the auction ──
 const DEFAULT_ADMIN_EMAILS=['dr.vacation.goddess@gmail.com','aaronjfrankel@gmail.com'];
@@ -1178,6 +1361,7 @@ setMonth(ymKey(new Date()));
 authReady.then(()=>{
   onSnapshot(userListRef,snap=>{ const d=snap.exists()?snap.data():{}; if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort(); namesLoaded=true; renderAll(); maybeSeedFte(); });
   onSnapshot(schedFteRef,snap=>{ schedFte=snap.exists()?snap.data():{}; schedFteLoaded=true; renderAll(); maybeSeedFte(); });
+  onSnapshot(auditRef,snap=>{ auditLogData=snap.exists()?snap.data():{log:[]}; if(!Array.isArray(auditLogData.log)) auditLogData.log=[]; renderAudit(); });
   onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(emailsRef,snap=>{ emailsData=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
