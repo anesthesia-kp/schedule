@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <script>
   var PAGE = 'admin';
-  var BUILD = 8;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 9;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -164,7 +164,14 @@ table.grid .wkend{background:var(--s3)}
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Shift Eligibility</div>
     <div class="page-sub" style="margin-bottom:12px">Which shifts each user may be assigned. Auto-populate and cell assignment both respect this. Unchecked = not allowed.</div>
     <div class="card" style="padding:10px 12px">
-      <div style="margin-bottom:8px"><button class="btn" onclick="eligAll(true)">Allow all</button> <button class="btn" onclick="eligAll(false)">Disallow all</button></div>
+      <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn" onclick="eligAll(true)">Allow all</button> <button class="btn" onclick="eligAll(false)">Disallow all</button>
+        <span style="width:1px;height:20px;background:var(--b2)"></span>
+        <span style="font-size:11px;color:var(--t2);font-weight:700">By family, for every user:</span>
+        <select class="sel" id="eligFamilySel" style="font-size:12px"></select>
+        <button class="btn btn-success" style="font-size:12px" onclick="eligFamily(true)">Allow</button>
+        <button class="btn btn-danger" style="font-size:12px" onclick="eligFamily(false)">Disallow</button>
+      </div>
       <div style="overflow-x:auto"><table class="grid" id="eligGrid"></table></div>
     </div>
   </div>
@@ -232,10 +239,11 @@ table.grid .wkend{background:var(--s3)}
     <div style="font-weight:800;margin-bottom:2px" id="cmTitle"></div>
     <div style="font-size:12px;color:var(--t2);margin-bottom:12px" id="cmSub"></div>
     <div style="display:flex;flex-direction:column;gap:10px">
-      <label style="font-size:12px;font-weight:700">Day shift<br><select class="sel" id="cmDay" style="width:100%;margin-top:4px"></select></label>
-      <label style="font-size:12px;font-weight:700">Call<br><select class="sel" id="cmCall" style="width:100%;margin-top:4px"></select></label>
-      <label style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px"><input type="checkbox" id="cmOff"> Day off</label>
+      <label style="font-size:12px;font-weight:700">Day shift<br><select class="sel" id="cmDay" style="width:100%;margin-top:4px" onchange="updateCmWarning()"></select></label>
+      <label style="font-size:12px;font-weight:700">Call<br><select class="sel" id="cmCall" style="width:100%;margin-top:4px" onchange="updateCmWarning()"></select></label>
+      <label style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px"><input type="checkbox" id="cmOff" onchange="updateCmWarning()"> Day off</label>
     </div>
+    <div id="cmWarn" style="display:none;background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:8px;padding:8px 10px;font-size:12px;margin-top:10px"></div>
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn" onclick="closeCellModal()">Cancel</button>
       <button class="btn btn-danger" onclick="saveCell(true)">Clear</button>
@@ -587,13 +595,39 @@ window.openCell=function(u,dd){
   csel.innerHTML='<option value="">— none —</option>'+shiftList('call').filter(([id])=>allowed(u,id)||c.call===id).map(([id,s])=>`<option value="${esc(id)}">${esc(s.label)}</option>`).join('');
   dsel.value=c.day||''; csel.value=c.call||''; document.getElementById('cmOff').checked=!!c.off;
   document.getElementById('cellModal').classList.add('on');
+  updateCmWarning();
 };
 window.closeCellModal=function(){ document.getElementById('cellModal').classList.remove('on'); cellSel=null; };
+// Live conflict check shown inside the modal, re-run on every field change —
+// this is the "flag it before Save" warning: on approved vacation, or a
+// contradictory Day off + shift combo. It doesn't block anything by itself;
+// saveCell() below re-checks the same conditions and makes Save confirm once
+// if a conflict is still showing, so an admin can never save over one by accident.
+window.updateCmWarning=function(){
+  const box=document.getElementById('cmWarn'); if(!box||!cellSel) return;
+  const msgs=cmConflicts();
+  if(msgs.length){ box.style.display='block'; box.innerHTML='⚠️ '+msgs.join('<br>⚠️ '); }
+  else { box.style.display='none'; box.innerHTML=''; }
+};
+function cmConflicts(){
+  if(!cellSel) return [];
+  const {u,dd}=cellSel;
+  const dk=curYM+'-'+dd;
+  const day=document.getElementById('cmDay')?.value||'';
+  const call=document.getElementById('cmCall')?.value||'';
+  const off=document.getElementById('cmOff')?.checked;
+  const msgs=[];
+  if((day||call) && vacationDays()[u+'|'+dk]) msgs.push(displayName(u)+' is on approved vacation this day — this will schedule a shift on top of it.');
+  if(off && (day||call)) msgs.push('"Day off" is checked along with a shift — both will be saved, which is probably not what you want.');
+  return msgs;
+}
 window.saveCell=async function(clear){
   if(!cellSel) return;
   const {u,dd}=cellSel;
   if(clear){ await mergeFields(monthRef(curYM),{['days.'+dd+'.'+u]:deleteField()}); }
   else{
+    const conflicts=cmConflicts();
+    if(conflicts.length && !confirm(conflicts.join('\n')+'\n\nSave anyway?')) return;
     const day=document.getElementById('cmDay').value||null;
     const call=document.getElementById('cmCall').value||null;
     const off=document.getElementById('cmOff').checked;
@@ -886,11 +920,16 @@ window.removeSchedUser=async function(u){
 // ── Eligibility ──
 function renderElig(){
   const g=document.getElementById('eligGrid'); if(!g) return;
+  const famSel=document.getElementById('eligFamilySel');
+  if(famSel){ const cur=famSel.value; famSel.innerHTML=familyOptionsHtml(''); if([...famSel.options].some(o=>o.value===cur)) famSel.value=cur; }
   const shifts=shiftList();
-  let head='<tr><th style="text-align:left">User</th>'+shifts.map(([id,s])=>'<th>'+esc(s.label)+'</th>').join('')+'</tr>';
+  let head='<tr><th style="text-align:left">User</th><th>Bulk by family</th>'+shifts.map(([id,s])=>'<th>'+esc(s.label)+'</th>').join('')+'</tr>';
   let rows='';
   for(const u of names){
     rows+='<tr><td style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
+      +'<td style="white-space:nowrap"><select class="sel" style="font-size:10px;padding:2px 4px;width:100px" id="eligFamRow_'+esc(u)+'">'+familyOptionsHtml('')+'</select> '
+      +'<button class="btn btn-ghost" style="font-size:10px;padding:2px 6px;color:var(--green)" title="Allow every shift in this family for '+esc(u)+'" onclick="eligFamilyForUser(\''+esc(u)+'\',true)">✓</button>'
+      +'<button class="btn btn-ghost" style="font-size:10px;padding:2px 6px;color:var(--red)" title="Disallow every shift in this family for '+esc(u)+'" onclick="eligFamilyForUser(\''+esc(u)+'\',false)">✗</button></td>'
       +shifts.map(([id])=>'<td><input type="checkbox" '+(allowed(u,id)?'checked':'')+' onchange="setElig(\''+esc(u)+'\',\''+esc(id)+'\',this.checked)"></td>').join('')+'</tr>';
   }
   g.innerHTML=head+rows;
@@ -903,6 +942,27 @@ window.eligAll=async function(val){
   const patch={};
   for(const u of names){ patch[u]={}; for(const [id] of shiftList()) patch[u][id]=val; }
   await setDoc(eligRef,patch,{merge:true});
+};
+// One click to allow/disallow every shift in a family — for one user's row,
+// or (eligFamily) for every user at once. Uses mergeFields with one dotted
+// "user.shiftId" key per affected shift, so it never disturbs eligibility for
+// any shift outside that family.
+window.eligFamilyForUser=async function(u,val){
+  const fkey=document.getElementById('eligFamRow_'+u).value;
+  const ids=shiftList().filter(([,s])=>(s.family||'')===fkey).map(([id])=>id);
+  if(!ids.length) return;
+  const patch={}; for(const id of ids) patch[u+'.'+id]=val;
+  await mergeFields(eligRef,patch);
+};
+window.eligFamily=async function(val){
+  const fkey=document.getElementById('eligFamilySel').value;
+  const ids=shiftList().filter(([,s])=>(s.family||'')===fkey).map(([id])=>id);
+  if(!ids.length) return;
+  const famLabel=fkey?(catalog.families?.[fkey]?.label||fkey):'shifts with no family';
+  if(!confirm((val?'Allow':'Disallow')+' every '+famLabel+' shift for EVERY user?')) return;
+  const patch={};
+  for(const u of names) for(const id of ids) patch[u+'.'+id]=val;
+  await mergeFields(eligRef,patch);
 };
 
 // ── Catalog ──
