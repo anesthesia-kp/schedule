@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <script>
   var PAGE = 'admin';
-  var BUILD = 11;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 13;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -55,6 +55,8 @@ table.grid th{background:var(--s2);font-size:10px;color:var(--t2)}
 table.grid td.cell{cursor:pointer;min-width:44px}
 table.grid td.cell:hover{outline:2px solid var(--blue)}
 table.grid .wkend{background:var(--s3)}
+table.grid .stick1{position:sticky;left:0;z-index:2;background:var(--s1);border-right:2px solid var(--b2)}
+table.grid th.stick1{background:var(--s2);z-index:3}
 .rowline{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px dashed var(--b1);font-size:13px;flex-wrap:wrap}
 .status-pending{color:var(--yellow)} .status-approved{color:var(--green)} .status-denied{color:var(--red)}
 .mono{font-family:var(--mono)}
@@ -62,14 +64,7 @@ table.grid .wkend{background:var(--s3)}
 .modal.on{display:flex}
 .modal .mcard{background:var(--s1);border-radius:14px;max-width:420px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
 .chipp{display:inline-block;border-radius:4px;padding:0 5px;font-weight:700;color:#1e293b}
-.hm-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px;font-size:11px;color:var(--t3);text-align:center;font-weight:700}
-.hm-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
-.hm-cell{aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.2}
-.hm-cell.wkend{box-shadow:inset 0 0 0 2px var(--b2)}
-.hm-blank{background:transparent}
-.hm-daynum{font-size:10px;opacity:.85}
-.hm-pct{font-size:13px;font-weight:800}
-.hm-legend-bar{height:14px;border-radius:7px;background:linear-gradient(to right,#cde2fb,#b7d3f6,#9ec5f4,#86b6ef,#6da7ec,#5598e7,#3987e5,#2a78d6,#256abf,#1c5cab,#184f95,#104281,#0d366b)}
+
 </style>
 </head>
 <body>
@@ -87,7 +82,6 @@ table.grid .wkend{background:var(--s3)}
   <a onclick="nav('catalog',this)">🧰 Shift Catalog</a>
   <a onclick="nav('families',this)">🎨 Shift Families</a>
   <a onclick="nav('stats',this)">📊 Stats</a>
-  <a onclick="nav('heatmap',this)">🔥 Coverage Heatmap</a>
   <div class="nav-section">Admin</div>
   <a onclick="nav('audit',this)">🧾 Audit Log</a>
   <div class="nav-section">Other Systems</div>
@@ -241,30 +235,6 @@ table.grid .wkend{background:var(--s3)}
     <div class="card" style="padding:10px 12px">
       <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Assignments per user for the visible month (change month on the Schedule Grid tab). Call columns highlighted — watch these for even distribution.</div>
       <div style="overflow-x:auto"><table class="grid" id="statsGrid"></table></div>
-    </div>
-  </div>
-
-  <!-- COVERAGE HEATMAP -->
-  <div class="panel" id="panel-heatmap">
-    <div class="page-title" style="font-size:16px;margin-bottom:4px">Coverage Heatmap</div>
-    <div class="page-sub" style="margin-bottom:12px">How fully each day's shifts are staffed — filled slots ÷ total catalog slots for that day (day + call combined). Darker = better covered. Change month on the Schedule Grid tab, or use the arrows below.</div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <button class="btn" onclick="moveMonth(-1)">⟨</button>
-      <div id="heatmapMonthLabel" style="font-size:16px;font-weight:800;min-width:170px;text-align:center"></div>
-      <button class="btn" onclick="moveMonth(1)">⟩</button>
-      <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
-    </div>
-    <div class="card">
-      <div id="heatmapGrid"></div>
-      <div style="margin-top:16px;max-width:420px">
-        <div class="hm-legend-bar"></div>
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:4px"><span>0% filled</span><span>50%</span><span>100% filled</span></div>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Day-by-day detail</div>
-      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Same numbers as the heatmap above, in table form.</div>
-      <div style="overflow-x:auto"><table class="grid" style="width:100%"><thead><tr><th style="text-align:left">Date</th><th>Day</th><th>Filled</th><th>Total slots</th><th>Coverage</th></tr></thead><tbody id="heatmapTableBody"></tbody></table></div>
     </div>
   </div>
 
@@ -1030,10 +1000,10 @@ function renderElig(){
   const famSel=document.getElementById('eligFamilySel');
   if(famSel){ const cur=famSel.value; famSel.innerHTML=familyOptionsHtml(''); if([...famSel.options].some(o=>o.value===cur)) famSel.value=cur; }
   const shifts=shiftList();
-  let head='<tr><th style="text-align:left">User</th><th>Bulk by family</th>'+shifts.map(([id,s])=>'<th>'+esc(s.label)+'</th>').join('')+'</tr>';
+  let head='<tr><th class="stick1" style="text-align:left">User</th><th>Bulk by family</th>'+shifts.map(([id,s])=>'<th>'+esc(s.label)+'</th>').join('')+'</tr>';
   let rows='';
   for(const u of names){
-    rows+='<tr><td style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
+    rows+='<tr><td class="stick1" style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
       +'<td style="white-space:nowrap"><select class="sel" style="font-size:10px;padding:2px 4px;width:100px" id="eligFamRow_'+esc(u)+'">'+familyOptionsHtml('')+'</select> '
       +'<button class="btn btn-ghost" style="font-size:10px;padding:2px 6px;color:var(--green)" title="Allow every shift in this family for '+esc(u)+'" onclick="eligFamilyForUser(\''+esc(u)+'\',true)">✓</button>'
       +'<button class="btn btn-ghost" style="font-size:10px;padding:2px 6px;color:var(--red)" title="Disallow every shift in this family for '+esc(u)+'" onclick="eligFamilyForUser(\''+esc(u)+'\',false)">✗</button></td>'
@@ -1257,63 +1227,7 @@ function renderStats(){
   g.innerHTML=head+rows;
 }
 
-// ── Coverage heatmap ──
-// Sequential (magnitude) ramp, one hue light→dark, per the dataviz skill —
-// this is the SAME 13-step reference blue ramp used for the legend gradient
-// below, interpolated continuously so every fraction 0..1 gets a smooth color.
-const HEATMAP_RAMP=[
-  '#cde2fb','#b7d3f6','#9ec5f4','#86b6ef','#6da7ec','#5598e7','#3987e5',
-  '#2a78d6','#256abf','#1c5cab','#184f95','#104281','#0d366b'
-];
-function hexToRgb(h){ h=h.replace('#',''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
-function rgbToHex(rgb){ return '#'+rgb.map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join(''); }
-function coverageColor(frac){
-  const f=Math.max(0,Math.min(1,frac||0));
-  const n=HEATMAP_RAMP.length-1, pos=f*n, i=Math.min(n-1,Math.floor(pos)), t=pos-i;
-  const a=hexToRgb(HEATMAP_RAMP[i]), b=hexToRgb(HEATMAP_RAMP[i+1]);
-  return rgbToHex(a.map((v,idx)=>v+(b[idx]-v)*t));
-}
-// Text always wears black/white (never the fill color) — picked by luminance
-// so the day number + percent stay legible across the whole light→dark ramp.
-function textColorFor(hex){ const [r,g,b]=hexToRgb(hex); const lum=(0.299*r+0.587*g+0.114*b)/255; return lum>0.55?'#16213a':'#ffffff'; }
-// "Total slots" for a day = one slot per catalog shift (day-kind AND call-kind
-// each need exactly one person) — this mirrors autoPopulate()'s own definition
-// of "already covered" above, so the heatmap always agrees with what
-// Auto-Populate would still need to fill.
-function dayCoverage(dd){
-  const list=shiftList(); const total=list.length;
-  if(!total) return {filled:0,total:0,frac:0};
-  const cell=monthData.days?.[dd]||{};
-  const filledIds=new Set();
-  for(const u in cell){ const c=cell[u]; if(c.day) filledIds.add(c.day); if(c.call) filledIds.add(c.call); }
-  let filled=0; for(const [id] of list) if(filledIds.has(id)) filled++;
-  return {filled,total,frac:total?filled/total:0};
-}
-function renderHeatmap(){
-  const g=document.getElementById('heatmapGrid'); if(!g||!curYM) return;
-  const [y,m]=curYM.split('-').map(Number);
-  document.getElementById('heatmapMonthLabel').textContent=MS[m-1]+' '+y;
-  const nDays=new Date(y,m,0).getDate();
-  const firstWd=new Date(y,m-1,1).getDay();
-  let html='<div class="hm-dow">'+DS.map(d=>'<span>'+d+'</span>').join('')+'</div><div class="hm-grid">';
-  for(let i=0;i<firstWd;i++) html+='<div class="hm-cell hm-blank"></div>';
-  const rows=[];
-  for(let d=1;d<=nDays;d++){
-    const dd=pad(d), wd=new Date(y,m-1,d).getDay();
-    const {filled,total,frac}=dayCoverage(dd);
-    const pct=total?Math.round(frac*100):0;
-    const bg=coverageColor(frac), fg=textColorFor(bg);
-    html+='<div class="hm-cell'+((wd===0||wd===6)?' wkend':'')+'" style="background:'+bg+';color:'+fg+'" title="'+MS[m-1]+' '+d+', '+y+' — '+filled+'/'+total+' slots filled ('+pct+'%)">'
-      +'<div class="hm-daynum">'+d+'</div><div class="hm-pct">'+pct+'%</div></div>';
-    rows.push({d,wd,filled,total,pct});
-  }
-  html+='</div>';
-  g.innerHTML=html;
-  const tb=document.getElementById('heatmapTableBody');
-  if(tb) tb.innerHTML=rows.map(r=>'<tr><td style="text-align:left">'+MS[m-1]+' '+r.d+'</td><td>'+DS[r.wd]+'</td><td>'+r.filled+'</td><td>'+r.total+'</td><td>'+r.pct+'%</td></tr>').join('');
-}
-
-function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); fillOpenShiftSel(); renderAudit(); renderHeatmap(); }
+function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); fillOpenShiftSel(); renderAudit(); }
 
 // ── Admin auth gate — SAME admin list (vacations/adminAccess) as the auction ──
 const DEFAULT_ADMIN_EMAILS=['dr.vacation.goddess@gmail.com','aaronjfrankel@gmail.com'];

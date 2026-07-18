@@ -7,7 +7,7 @@
 <script>
   // ── Auto-refresh: reload when a newer build is deployed ──
   var PAGE = 'index';
-  var BUILD = 1;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 2;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -61,7 +61,22 @@ table.grid .wkend{background:var(--s3)}
 #signGate{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:200;padding:18px}
 #signCard{background:var(--s1);border-radius:14px;max-width:380px;width:100%;padding:28px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--t2);margin:6px 0 12px}
-@media (max-width:700px){ .wrap{padding:12px 8px 60px} table.grid{font-size:9px} }
+.app{display:flex;align-items:flex-start}
+.usernav{width:180px;flex-shrink:0;background:var(--s1);border-right:1px solid var(--b1);padding:14px 0}
+.usernav a{display:block;padding:9px 16px;font-size:13px;font-weight:600;color:var(--t2);cursor:pointer;text-decoration:none;border-left:3px solid transparent}
+.usernav a:hover{background:var(--s2)}
+.usernav a.on{color:var(--blue);border-left-color:var(--blue);background:var(--s2)}
+.usernav .navbadge{display:inline-block;background:var(--red);color:#fff;font-size:10px;font-weight:800;border-radius:9px;padding:0 6px;margin-left:2px}
+.content{flex:1;min-width:0}
+.panel{display:none}
+.panel.on{display:block}
+@media (max-width:700px){
+  .wrap{padding:12px 8px 60px} table.grid{font-size:9px}
+  .app{flex-direction:column}
+  .usernav{width:100%;display:flex;overflow-x:auto;border-right:none;border-bottom:1px solid var(--b1);padding:6px 8px;gap:2px}
+  .usernav a{flex-shrink:0;border-left:none;border-bottom:3px solid transparent;padding:8px 10px;white-space:nowrap}
+  .usernav a.on{border-left:none;border-bottom-color:var(--blue)}
+}
 </style>
 </head>
 <body>
@@ -75,89 +90,112 @@ table.grid .wkend{background:var(--s3)}
   <a class="btn" style="text-decoration:none;font-size:12px" href="https://anesthesia-kp.github.io/vacation/" target="_blank" rel="noopener">🏖️ Vacation Auction →</a>
 </div>
 
-<div class="wrap">
+<div class="app">
+  <nav class="usernav">
+    <a onclick="nav('home',this)" class="on">🏠 Home</a>
+    <a onclick="nav('full',this)">🗓️ Full Schedule</a>
+    <a onclick="nav('open',this)">📢 Open Shifts</a>
+    <a onclick="nav('requests',this)">📥 My Requests <span class="navbadge" id="reqNavBadge" style="display:none"></span></a>
+    <a onclick="nav('swaps',this)">🔁 My Swaps <span class="navbadge" id="swapNavBadge" style="display:none"></span></a>
+  </nav>
+  <div class="content"><div class="wrap">
 
-  <!-- Month navigation -->
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-    <button class="btn" onclick="moveMonth(-1)">⟨</button>
-    <div id="monthLabel" style="font-size:16px;font-weight:800;min-width:170px;text-align:center"></div>
-    <button class="btn" onclick="moveMonth(1)">⟩</button>
-    <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
-    <span style="margin-left:auto;font-size:11px;color:var(--t3)">Schedule updates live as admin assigns.</span>
-  </div>
-
-  <!-- Quick view: my next 7 days -->
-  <div class="card">
-    <div class="card-title">My Quick View — next 7 days</div>
-    <div id="quickView" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px"></div>
-  </div>
-
-  <!-- Open shifts users can apply for -->
-  <div class="card">
-    <div class="card-title">Available Shifts</div>
-    <div style="font-size:12px;color:var(--t2);margin-bottom:8px">Unfilled shifts posted by admin — apply and admin will confirm.</div>
-    <div id="openList"></div>
-  </div>
-
-  <!-- My month -->
-  <div class="card">
-    <div class="card-title">My Schedule — <span id="myName"></span></div>
-    <div class="legend">
-      <span><b class="cell-day">■</b> day shift</span>
-      <span><b class="cell-call">■</b> call</span>
-      <span><b class="cell-off">■</b> day off</span>
-      <span><b class="cell-vac">■</b> vacation (from auction)</span>
+  <!-- HOME: quick view + my personal calendar -->
+  <div class="panel on" id="panel-home">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn" onclick="moveMonth(-1)">⟨</button>
+      <div class="monthLabel" style="font-size:16px;font-weight:800;min-width:170px;text-align:center"></div>
+      <button class="btn" onclick="moveMonth(1)">⟩</button>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
+      <span style="margin-left:auto;font-size:11px;color:var(--t3)">Schedule updates live as admin assigns.</span>
     </div>
-    <div class="cal" id="myCal"></div>
-  </div>
 
-  <!-- Everyone -->
-  <div class="card">
-    <div class="card-title">Everyone</div>
-    <div style="overflow-x:auto">
-      <table class="grid" id="allGrid"></table>
+    <div class="card">
+      <div class="card-title">My Quick View — next 7 days</div>
+      <div id="quickView" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">My Schedule — <span id="myName"></span></div>
+      <div class="legend">
+        <span><b class="cell-day">■</b> day shift</span>
+        <span><b class="cell-call">■</b> call</span>
+        <span><b class="cell-off">■</b> day off</span>
+        <span><b class="cell-vac">■</b> vacation (from auction)</span>
+      </div>
+      <div class="cal" id="myCal"></div>
     </div>
   </div>
 
-  <!-- Requests -->
-  <div class="card">
-    <div class="card-title">My Requests</div>
-    <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Ask for a specific shift, a day off, a no-call day, or anything else. Admin reviews every request.</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <input type="date" class="inp" id="reqDate">
-      <select class="sel" id="reqType" onchange="onReqType()">
-        <option value="shift">Specific shift</option>
-        <option value="dayoff">Day off</option>
-        <option value="nocall">No call that day</option>
-        <option value="other">Other</option>
-      </select>
-      <select class="sel" id="reqShift" style="display:none"></select>
-      <input type="text" class="inp" id="reqNote" placeholder="Note (optional)" style="min-width:200px;flex:1">
-      <button class="btn btn-primary" onclick="submitRequest()">Submit request</button>
+  <!-- FULL SCHEDULE: everyone -->
+  <div class="panel" id="panel-full">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn" onclick="moveMonth(-1)">⟨</button>
+      <div class="monthLabel" style="font-size:16px;font-weight:800;min-width:170px;text-align:center"></div>
+      <button class="btn" onclick="moveMonth(1)">⟩</button>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
     </div>
-    <div id="reqMsg" style="font-size:12px;margin-top:8px"></div>
-    <div id="myReqList" style="margin-top:10px"></div>
+    <div class="card">
+      <div class="card-title">Everyone</div>
+      <div style="overflow-x:auto">
+        <table class="grid" id="allGrid"></table>
+      </div>
+    </div>
   </div>
 
-  <!-- Swaps -->
-  <div class="card">
-    <div class="card-title">Swap Requests</div>
-    <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Propose trading one of your assignments with another user. Admin confirms with both of you before approving.</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <input type="date" class="inp" id="swapDate">
-      <select class="sel" id="swapPart">
-        <option value="day">Day shift</option>
-        <option value="call">Call</option>
-      </select>
-      <span style="font-size:12px;color:var(--t2)">with</span>
-      <select class="sel" id="swapWith"></select>
-      <input type="text" class="inp" id="swapNote" placeholder="Note (optional)" style="min-width:180px;flex:1">
-      <button class="btn btn-primary" onclick="submitSwap()">Request swap</button>
+  <!-- OPEN SHIFTS -->
+  <div class="panel" id="panel-open">
+    <div class="card">
+      <div class="card-title">Available Shifts</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:8px">Unfilled shifts posted by admin — apply and admin will confirm.</div>
+      <div id="openList"></div>
     </div>
-    <div id="swapMsg" style="font-size:12px;margin-top:8px"></div>
-    <div id="mySwapList" style="margin-top:10px"></div>
   </div>
 
+  <!-- MY REQUESTS — its own page -->
+  <div class="panel" id="panel-requests">
+    <div class="card">
+      <div class="card-title">My Requests</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Ask for a specific shift, a day off, a no-call day, or anything else. Admin reviews every request.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="date" class="inp" id="reqDate">
+        <select class="sel" id="reqType" onchange="onReqType()">
+          <option value="shift">Specific shift</option>
+          <option value="dayoff">Day off</option>
+          <option value="nocall">No call that day</option>
+          <option value="other">Other</option>
+        </select>
+        <select class="sel" id="reqShift" style="display:none"></select>
+        <input type="text" class="inp" id="reqNote" placeholder="Note (optional)" style="min-width:200px;flex:1">
+        <button class="btn btn-primary" onclick="submitRequest()">Submit request</button>
+      </div>
+      <div id="reqMsg" style="font-size:12px;margin-top:8px"></div>
+      <div id="myReqList" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- MY SWAPS — its own page -->
+  <div class="panel" id="panel-swaps">
+    <div class="card">
+      <div class="card-title">Swap Requests</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Propose trading one of your assignments with another user. Admin confirms with both of you before approving.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="date" class="inp" id="swapDate">
+        <select class="sel" id="swapPart">
+          <option value="day">Day shift</option>
+          <option value="call">Call</option>
+        </select>
+        <span style="font-size:12px;color:var(--t2)">with</span>
+        <select class="sel" id="swapWith"></select>
+        <input type="text" class="inp" id="swapNote" placeholder="Note (optional)" style="min-width:180px;flex:1">
+        <button class="btn btn-primary" onclick="submitSwap()">Request swap</button>
+      </div>
+      <div id="swapMsg" style="font-size:12px;margin-top:8px"></div>
+      <div id="mySwapList" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  </div></div>
 </div>
 
 <!-- Sign-in gate -->
@@ -213,6 +251,14 @@ const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 let names=[], usernamesData={}, passcodesData={}, vAdmin={}, vPhases={}, vApprovals={};
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, monthData={days:{}};
 let me=null, curYM=null, unsubMonth=null;
+
+// ── Navigation ──
+window.nav=function(id,el){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
+  document.getElementById('panel-'+id).classList.add('on');
+  document.querySelectorAll('.usernav a').forEach(a=>a.classList.remove('on'));
+  if(el) el.classList.add('on');
+};
 
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pad=n=>String(n).padStart(2,'0');
@@ -271,7 +317,7 @@ function cellHtml(u,dk,vac){
 function renderAll(){
   if(!curYM) return;
   const [y,m]=curYM.split('-').map(Number);
-  document.getElementById('monthLabel').textContent=MS[m-1]+' '+y;
+  document.querySelectorAll('.monthLabel').forEach(el=>el.textContent=MS[m-1]+' '+y);
   const vac=vacationDays();
   const nDays=new Date(y,m,0).getDate();
   const todayK=dKey(new Date());
@@ -345,6 +391,8 @@ window.applyOpen=async function(openId){
 };
 
 function renderMyRequests(){
+  const badge=document.getElementById('reqNavBadge');
+  if(badge&&me){ const n=(requests.list||[]).filter(r=>r.user===me&&r.status==='pending').length; badge.textContent=n||''; badge.style.display=n?'inline-block':'none'; }
   const el=document.getElementById('myReqList'); if(!el||!me) return;
   const mine=(requests.list||[]).filter(r=>r.user===me).sort((a,b)=>b.ts-a.ts);
   const typeLbl={shift:'Shift request',dayoff:'Day off',nocall:'No call',claim:'Open-shift claim',other:'Other'};
@@ -357,6 +405,8 @@ function renderMyRequests(){
     </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No requests yet.</div>';
 }
 function renderMySwaps(){
+  const badge=document.getElementById('swapNavBadge');
+  if(badge&&me){ const n=(swaps.list||[]).filter(s=>(s.from===me||s.to===me)&&s.status==='pending').length; badge.textContent=n||''; badge.style.display=n?'inline-block':'none'; }
   const el=document.getElementById('mySwapList'); if(!el||!me) return;
   const mine=(swaps.list||[]).filter(s=>s.from===me||s.to===me).sort((a,b)=>b.ts-a.ts);
   el.innerHTML=mine.length?mine.map(s=>`
