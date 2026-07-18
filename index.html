@@ -7,7 +7,7 @@
 <script>
   // ── Auto-refresh: reload when a newer build is deployed ──
   var PAGE = 'index';
-  var BUILD = 3;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 4;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -70,6 +70,8 @@ table.grid .wkend{background:var(--s3)}
 .content{flex:1;min-width:0}
 .panel{display:none}
 .panel.on{display:block}
+.day-flash{animation:dayFlash 1.6s ease-out}
+@keyframes dayFlash{0%,35%{background:#fef08a!important}100%{background:inherit}}
 @media (max-width:700px){
   .wrap{padding:12px 8px 60px} table.grid{font-size:9px}
   .app{flex-direction:column}
@@ -103,10 +105,15 @@ table.grid .wkend{background:var(--s3)}
   <!-- HOME: quick view + my personal calendar -->
   <div class="panel on" id="panel-home">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn btn-ghost" style="font-size:12px" onclick="moveYear(-1)" title="Previous year">« Year</button>
       <button class="btn" onclick="moveMonth(-1)">⟨</button>
       <div class="monthLabel" style="font-size:16px;font-weight:800;min-width:170px;text-align:center"></div>
       <button class="btn" onclick="moveMonth(1)">⟩</button>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="moveYear(1)" title="Next year">Year »</button>
       <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
+      <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:4px">Jump to
+        <input type="date" class="inp" style="font-size:12px;padding:5px 8px" onchange="jumpToDate(this.value)">
+      </label>
       <span style="margin-left:auto;font-size:11px;color:var(--t3)">Schedule updates live as admin assigns.</span>
     </div>
 
@@ -130,10 +137,15 @@ table.grid .wkend{background:var(--s3)}
   <!-- FULL SCHEDULE: everyone -->
   <div class="panel" id="panel-full">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn btn-ghost" style="font-size:12px" onclick="moveYear(-1)" title="Previous year">« Year</button>
       <button class="btn" onclick="moveMonth(-1)">⟨</button>
       <div class="monthLabel" style="font-size:16px;font-weight:800;min-width:170px;text-align:center"></div>
       <button class="btn" onclick="moveMonth(1)">⟩</button>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="moveYear(1)" title="Next year">Year »</button>
       <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
+      <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:4px">Jump to
+        <input type="date" class="inp" style="font-size:12px;padding:5px 8px" onchange="jumpToDate(this.value)">
+      </label>
     </div>
     <div class="card">
       <div class="card-title">Everyone</div>
@@ -296,7 +308,29 @@ window.moveMonth=function(dir){
   const [y,m]=curYM.split('-').map(Number);
   const d=new Date(y,m-1+dir,1); setMonth(ymKey(d));
 };
+window.moveYear=function(dir){
+  const [y,m]=curYM.split('-').map(Number);
+  setMonth(ymKey(new Date(y+dir,m-1,1)));
+};
 window.gotoToday=function(){ setMonth(ymKey(new Date())); };
+// Jump straight to any date — switches month if needed, then scrolls that
+// day's column/cell into view and flashes it briefly.
+window.jumpToDate=function(val){
+  if(!val) return;
+  const [y,m,d]=val.split('-').map(Number);
+  const targetYM=y+'-'+pad(m);
+  const dd=pad(d);
+  if(targetYM===curYM) highlightDay(dd);
+  else { setMonth(targetYM); setTimeout(()=>highlightDay(dd),120); }
+};
+function highlightDay(dd){
+  const cells=[...document.querySelectorAll('[data-day="'+dd+'"]')].filter(el=>{
+    const p=el.closest('.panel'); return !p || p.classList.contains('on');
+  });
+  if(!cells.length) return;
+  cells[0].scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});
+  cells.forEach(el=>{ el.classList.add('day-flash'); setTimeout(()=>el.classList.remove('day-flash'),1600); });
+}
 
 function cellOf(u,dk){ const dd=monthData.days?.[dk.slice(8)]||{}; return dd[u]||{}; }
 // Colored chip per assignment — colors come from the shift catalog (QGenda-style).
@@ -331,7 +365,7 @@ function renderAll(){
     for(let i=0;i<first;i++) h+='<div></div>';
     for(let d=1;d<=nDays;d++){
       const dk=curYM+'-'+pad(d);
-      h+='<div class="d'+(dk===todayK?' today':'')+'"><div class="dn">'+d+'</div>'+cellHtml(me,dk,vac)+'</div>';
+      h+='<div class="d'+(dk===todayK?' today':'')+'" data-day="'+pad(d)+'"><div class="dn">'+d+'</div>'+cellHtml(me,dk,vac)+'</div>';
     }
     cal.innerHTML=h;
   }
@@ -339,7 +373,7 @@ function renderAll(){
   // Everyone grid
   const g=document.getElementById('allGrid');
   let head='<tr><th style="text-align:left">User</th>';
-  for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); head+='<th class="'+((wd===0||wd===6)?'wkend':'')+'">'+d+'<br>'+DS[wd]+'</th>'; }
+  for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); head+='<th data-day="'+pad(d)+'" class="'+((wd===0||wd===6)?'wkend':'')+'">'+d+'<br>'+DS[wd]+'</th>'; }
   head+='</tr>';
   let rows='';
   for(const u of names){

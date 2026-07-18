@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <script>
   var PAGE = 'admin';
-  var BUILD = 14;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 16;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -72,6 +72,8 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 .dash-sub{font-size:12px;color:var(--t2);margin-bottom:10px}
 .dash-list{font-size:12px;color:var(--t2)}
 .dash-list .rowline{padding:5px 0}
+.day-flash{animation:dayFlash 1.6s ease-out}
+@keyframes dayFlash{0%,35%{background:#fef08a!important}100%{background:inherit}}
 
 </style>
 </head>
@@ -149,10 +151,15 @@ table.grid th.stick1{background:var(--s2);z-index:3}
   <!-- SCHEDULE GRID -->
   <div class="panel on" id="panel-grid">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn btn-ghost" style="font-size:12px" onclick="moveYear(-1)" title="Previous year">« Year</button>
       <button class="btn" onclick="moveMonth(-1)">⟨</button>
       <div id="monthLabel" style="font-size:16px;font-weight:800;min-width:170px;text-align:center"></div>
       <button class="btn" onclick="moveMonth(1)">⟩</button>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="moveYear(1)" title="Next year">Year »</button>
       <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
+      <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:4px">Jump to
+        <input type="date" class="inp" style="font-size:12px;padding:5px 8px" onchange="jumpToDate(this.value)">
+      </label>
       <span style="flex:1"></span>
       <button class="btn btn-primary" onclick="autoPopulate()">⚡ Auto-Populate Month</button>
       <button class="btn btn-primary" onclick="autoPopulateYear()">⚡ Auto-Populate Year</button>
@@ -241,6 +248,9 @@ table.grid th.stick1{background:var(--s2);z-index:3}
         <input type="text" class="inp" id="catLabel" placeholder="Label e.g. D10 or Call 16" style="width:170px">
         <select class="sel" id="catKind"><option value="day">Day shift</option><option value="call">Call shift</option></select>
         <select class="sel" id="catRole"><option value="">Role — optional</option><option value="MD">MD</option><option value="CRNA">CRNA</option><option value="Both">Both (MD &amp; CRNA)</option></select>
+        <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:4px" title="How many people can hold this shift on the same day">People/day
+          <input type="number" class="inp" id="catCapacity" value="1" min="1" max="20" step="1" style="width:56px;padding:7px 6px">
+        </label>
         <select class="sel" id="catFamily" onchange="onCatFamilyChange()"></select>
         <div id="catColorPicker" style="display:flex;align-items:center;gap:4px"></div>
         <input type="hidden" id="catColor" value="">
@@ -671,7 +681,27 @@ function setMonth(ym){
   renderAll();
 }
 window.moveMonth=function(dir){ const [y,m]=curYM.split('-').map(Number); setMonth(ymKey(new Date(y,m-1+dir,1))); };
+window.moveYear=function(dir){ const [y,m]=curYM.split('-').map(Number); setMonth(ymKey(new Date(y+dir,m-1,1))); };
 window.gotoToday=function(){ setMonth(ymKey(new Date())); };
+// Jump straight to any date (typed or picked) — switches month if needed,
+// then scrolls that day's column into view and flashes it so it's easy to
+// spot in a wide month grid instead of hunting for it by eye.
+window.jumpToDate=function(val){
+  if(!val) return;
+  const [y,m,d]=val.split('-').map(Number);
+  const targetYM=y+'-'+pad(m);
+  const dd=pad(d);
+  if(targetYM===curYM) highlightDay(dd);
+  else { setMonth(targetYM); setTimeout(()=>highlightDay(dd),120); }
+};
+function highlightDay(dd){
+  const cells=[...document.querySelectorAll('[data-day="'+dd+'"]')].filter(el=>{
+    const p=el.closest('.panel'); return !p || p.classList.contains('on');
+  });
+  if(!cells.length) return;
+  cells[0].scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});
+  cells.forEach(el=>{ el.classList.add('day-flash'); setTimeout(()=>el.classList.remove('day-flash'),1600); });
+}
 function cellOf(u,dd){ return monthData.days?.[dd]?.[u]||{}; }
 
 // ── Schedule grid ──
@@ -682,7 +712,7 @@ function renderGrid(){
   const nDays=new Date(y,m,0).getDate();
   const vac=vacationDays();
   let head='<tr><th style="text-align:left">User</th>';
-  for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); head+='<th class="'+((wd===0||wd===6)?'wkend':'')+'">'+d+'<br>'+DS[wd]+'</th>'; }
+  for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); head+='<th data-day="'+pad(d)+'" class="'+((wd===0||wd===6)?'wkend':'')+'">'+d+'<br>'+DS[wd]+'</th>'; }
   head+='</tr>';
   let rows='';
   for(const u of names){
@@ -694,11 +724,22 @@ function renderGrid(){
       if(c.off) bits.push('<span class="chipp" style="background:#e2e8f0;color:#475569">OFF</span>');
       if(c.day) bits.push(chipHtml(c.day));
       if(c.call) bits.push(chipHtml(c.call));
-      rows+='<td class="cell '+((wd===0||wd===6)?'wkend':'')+'" onclick="openCell(\''+esc(u)+'\',\''+dd+'\')">'+(bits.join('<br>')||'')+'</td>';
+      rows+='<td data-day="'+dd+'" class="cell '+((wd===0||wd===6)?'wkend':'')+'" onclick="openCell(\''+esc(u)+'\',\''+dd+'\')">'+(bits.join('<br>')||'')+'</td>';
     }
     rows+='</tr>';
   }
   g.innerHTML=head+rows;
+}
+// How many people OTHER than `excludeUser` already hold shift `id` in `slot`
+// on day `dd` — used both for the "(2/3 filled)" dropdown hint and the
+// capacity-conflict warning below.
+function slotOccupancy(dd,slot,id,excludeUser){
+  let n=0;
+  for(const [usr,c] of Object.entries(monthData.days?.[dd]||{})){
+    if(usr===excludeUser) continue;
+    if(c?.[slot]===id) n++;
+  }
+  return n;
 }
 window.openCell=function(u,dd){
   cellSel={u,dd};
@@ -706,8 +747,9 @@ window.openCell=function(u,dd){
   document.getElementById('cmTitle').textContent=displayName(u)+' — '+MS[Number(curYM.slice(5))-1]+' '+Number(dd);
   document.getElementById('cmSub').textContent='Only shifts this user is eligible for are listed.';
   const dsel=document.getElementById('cmDay'), csel=document.getElementById('cmCall');
-  dsel.innerHTML='<option value="">— none —</option>'+shiftList('day').filter(([id])=>allowed(u,id)||c.day===id).map(([id,s])=>`<option value="${esc(id)}">${esc(s.label)}</option>`).join('');
-  csel.innerHTML='<option value="">— none —</option>'+shiftList('call').filter(([id])=>allowed(u,id)||c.call===id).map(([id,s])=>`<option value="${esc(id)}">${esc(s.label)}</option>`).join('');
+  const optLabel=(id,s,slot)=>{ const cap=s.capacity||1; if(cap<=1) return s.label; const have=slotOccupancy(dd,slot,id,u); return s.label+' ('+have+'/'+cap+' filled)'; };
+  dsel.innerHTML='<option value="">— none —</option>'+shiftList('day').filter(([id])=>allowed(u,id)||c.day===id).map(([id,s])=>`<option value="${esc(id)}">${esc(optLabel(id,s,'day'))}</option>`).join('');
+  csel.innerHTML='<option value="">— none —</option>'+shiftList('call').filter(([id])=>allowed(u,id)||c.call===id).map(([id,s])=>`<option value="${esc(id)}">${esc(optLabel(id,s,'call'))}</option>`).join('');
   dsel.value=c.day||''; csel.value=c.call||''; document.getElementById('cmOff').checked=!!c.off;
   document.getElementById('cellModal').classList.add('on');
   updateCmWarning();
@@ -734,6 +776,13 @@ function cmConflicts(){
   const msgs=[];
   if((day||call) && vacationDays()[u+'|'+dk]) msgs.push(displayName(u)+' is on approved vacation this day — this will schedule a shift on top of it.');
   if(off && (day||call)) msgs.push('"Day off" is checked along with a shift — both will be saved, which is probably not what you want.');
+  [[day,'day'],[call,'call']].forEach(([id,slot])=>{
+    if(!id) return;
+    const s=catalog.shifts?.[id]; if(!s) return;
+    const cap=s.capacity||1;
+    const have=slotOccupancy(dd,slot,id,u);
+    if(have>=cap) msgs.push(s.label+' is already staffed by '+have+' — capacity is '+cap+'. This will go over.');
+  });
   return msgs;
 }
 window.saveCell=async function(clear){
@@ -779,19 +828,22 @@ window.autoPopulate=async function(){
     days[dd]=days[dd]||{};
     for(const [id,s] of shiftList()){
       const slot=s.kind==='call'?'call':'day';
-      // already covered?
-      if(Object.values(days[dd]).some(c=>c[slot]===id)) continue;
-      const cands=names.filter(u=>allowed(u,id)
-        &&!vac[u+'|'+dk]
-        &&!(days[dd][u]?.off)
-        &&!(days[dd][u]?.[slot]));
-      if(!cands.length){ unfillable.push(dk+' '+s.label); continue; }
-      cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
-      const pick=cands[0];
-      days[dd][pick]=Object.assign({day:null,call:null,off:false},days[dd][pick],{[slot]:id});
-      counts[pick+'|'+id]=cnt(pick,id)+1;
-      newTotals[pick]=newTotals[pick]||{}; newTotals[pick][id]=(newTotals[pick][id]||0)+1;
-      filled++;
+      const capacity=s.capacity||1;
+      // fill up to capacity — most shifts (capacity 1) stop after the first pick, same as before
+      let have=Object.values(days[dd]).filter(c=>c[slot]===id).length;
+      while(have<capacity){
+        const cands=names.filter(u=>allowed(u,id)
+          &&!vac[u+'|'+dk]
+          &&!(days[dd][u]?.off)
+          &&!(days[dd][u]?.[slot]));
+        if(!cands.length){ unfillable.push(dk+' '+s.label+(capacity>1?' ('+(capacity-have)+' more needed)':'')); break; }
+        cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
+        const pick=cands[0];
+        days[dd][pick]=Object.assign({day:null,call:null,off:false},days[dd][pick],{[slot]:id});
+        counts[pick+'|'+id]=cnt(pick,id)+1;
+        newTotals[pick]=newTotals[pick]||{}; newTotals[pick][id]=(newTotals[pick][id]||0)+1;
+        filled++; have++;
+      }
     }
   }
   await setDoc(monthRef(curYM),{days},{merge:true});
@@ -826,15 +878,18 @@ window.autoPopulateYear=async function(){
       days[dd]=days[dd]||{};
       for(const [id,s] of shiftList()){
         const slot=s.kind==='call'?'call':'day';
-        if(Object.values(days[dd]).some(c=>c[slot]===id)) continue;
-        const cands=names.filter(u=>allowed(u,id)&&!vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!(days[dd][u]?.[slot]));
-        if(!cands.length){ grandUnfillable.push(dk+' '+s.label); continue; }
-        cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
-        const pick=cands[0];
-        days[dd][pick]=Object.assign({day:null,call:null,off:false},days[dd][pick],{[slot]:id});
-        counts[pick+'|'+id]=cnt(pick,id)+1;
-        liveTotals[pick]=liveTotals[pick]||{}; liveTotals[pick][id]=(liveTotals[pick][id]||0)+1;
-        grandFilled++;
+        const capacity=s.capacity||1;
+        let have=Object.values(days[dd]).filter(c=>c[slot]===id).length;
+        while(have<capacity){
+          const cands=names.filter(u=>allowed(u,id)&&!vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!(days[dd][u]?.[slot]));
+          if(!cands.length){ grandUnfillable.push(dk+' '+s.label+(capacity>1?' ('+(capacity-have)+' more needed)':'')); break; }
+          cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
+          const pick=cands[0];
+          days[dd][pick]=Object.assign({day:null,call:null,off:false},days[dd][pick],{[slot]:id});
+          counts[pick+'|'+id]=cnt(pick,id)+1;
+          liveTotals[pick]=liveTotals[pick]||{}; liveTotals[pick][id]=(liveTotals[pick][id]||0)+1;
+          grandFilled++; have++;
+        }
       }
     }
     await setDoc(monthRef(ym),{days},{merge:true});
@@ -1112,6 +1167,9 @@ function renderCatalog(){
     <div class="rowline">
       <span class="chipp" style="background:${esc(shiftColor(s))}">${esc(s.label)}</span>
       <span style="font-size:11px;color:var(--t2)">${s.kind==='call'?'call shift (balanced evenly)':'day shift'}</span>
+      <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:3px" title="How many people can hold this shift on the same day">👥
+        <input type="number" class="inp" style="width:48px;font-size:11px;padding:3px 4px" value="${s.capacity||1}" min="1" max="20" step="1" onchange="setShiftCapacity('${esc(id)}',this.value)">
+      </label>
       <select class="sel" style="font-size:11px" title="Family" onchange="setShiftFamily('${esc(id)}',this.value)">${familyOptionsHtml(s.family||'')}</select>
       <select class="sel" style="font-size:11px" title="Role" onchange="setShiftRole('${esc(id)}',this.value)">
         <option value=""${!s.role?' selected':''}>Role —</option>
@@ -1169,13 +1227,19 @@ window.addShift=async function(){
   const role=document.getElementById('catRole').value;
   const family=document.getElementById('catFamily').value;
   const color=family?(catalog.families?.[family]?.color||PALETTE[0]):(document.getElementById('catColor').value||PALETTE[0]);
+  const capacity=Math.max(1,Math.min(20,parseInt(document.getElementById('catCapacity').value,10)||1));
   if(!label){ alert('Enter a label.'); return; }
   const id=label.toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('S'+Date.now());
   if(catalog.shifts?.[id]){ alert('A shift with this label already exists.'); return; }
   const order=Math.max(0,...Object.values(catalog.shifts||{}).map(s=>s.order??0))+1;
-  await mergeFields(catalogRef,{['shifts.'+id]:{label,kind,color,family,role,order}});
-  auditLog('shift.add','Added shift "'+label+'" ('+id+')');
-  document.getElementById('catLabel').value=''; document.getElementById('catRole').value=''; document.getElementById('catFamily').value=''; onCatFamilyChange();
+  await mergeFields(catalogRef,{['shifts.'+id]:{label,kind,color,family,role,order,capacity}});
+  auditLog('shift.add','Added shift "'+label+'" ('+id+')'+(capacity>1?' — up to '+capacity+' people/day':''));
+  document.getElementById('catLabel').value=''; document.getElementById('catRole').value=''; document.getElementById('catFamily').value=''; document.getElementById('catCapacity').value='1'; onCatFamilyChange();
+};
+window.setShiftCapacity=async function(id,val){
+  const capacity=Math.max(1,Math.min(20,parseInt(val,10)||1));
+  await mergeFields(catalogRef,{['shifts.'+id+'.capacity']:capacity});
+  auditLog('shift.capacity','Set '+(catalog.shifts?.[id]?.label||id)+' to '+capacity+' people/day');
 };
 window.setShiftFamily=async function(id,fkey){
   const patch={['shifts.'+id+'.family']:fkey};
@@ -1286,15 +1350,15 @@ function dashCoverage(){
   const [y,m]=curYM.split('-').map(Number);
   const nDays=new Date(y,m,0).getDate();
   const list=shiftList();
-  const perDayTotal=list.length;
+  const perDayCapacity=list.reduce((sum,[,s])=>sum+(s.capacity||1),0);
   let filled=0, total=0;
   for(let d=1;d<=nDays;d++){
     const dd=pad(d);
     const cell=monthData.days?.[dd]||{};
-    const filledIds=new Set();
-    for(const u in cell){ const c=cell[u]; if(c.day) filledIds.add(c.day); if(c.call) filledIds.add(c.call); }
-    let dayFilled=0; for(const [id] of list) if(filledIds.has(id)) dayFilled++;
-    filled+=dayFilled; total+=perDayTotal;
+    const counts={};
+    for(const u in cell){ const c=cell[u]; if(c.day) counts[c.day]=(counts[c.day]||0)+1; if(c.call) counts[c.call]=(counts[c.call]||0)+1; }
+    let dayFilled=0; for(const [id,s] of list) dayFilled+=Math.min(counts[id]||0,s.capacity||1);
+    filled+=dayFilled; total+=perDayCapacity;
   }
   return {filled,total,pct: total?Math.round(filled/total*100):0};
 }
