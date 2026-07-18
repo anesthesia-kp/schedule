@@ -7,7 +7,7 @@
 <script>
   // ── Auto-refresh: reload when a newer build is deployed ──
   var PAGE = 'index';
-  var BUILD = 2;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 3;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -43,7 +43,7 @@ body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSyst
 .pill{display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:9px;letter-spacing:.03em}
 table.grid{border-collapse:collapse;width:100%;font-size:11px}
 table.grid th,table.grid td{border:1px solid var(--b1);padding:3px 4px;text-align:center;white-space:nowrap}
-table.grid th{background:var(--s2);font-size:10px;color:var(--t2);position:sticky;top:64px}
+table.grid th{background:var(--s2);font-size:10px;color:var(--t2)}
 table.grid td.me{background:#eff6ff}
 table.grid .wkend{background:var(--s3)}
 .cell-day{color:var(--blue);font-weight:700}

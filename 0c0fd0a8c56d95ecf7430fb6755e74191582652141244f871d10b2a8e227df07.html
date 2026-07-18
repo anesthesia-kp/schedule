@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <script>
   var PAGE = 'admin';
-  var BUILD = 13;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 14;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -64,6 +64,14 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 .modal.on{display:flex}
 .modal .mcard{background:var(--s1);border-radius:14px;max-width:420px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
 .chipp{display:inline-block;border-radius:4px;padding:0 5px;font-weight:700;color:#1e293b}
+.dash-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:16px}
+.dash-cols>.card{margin-bottom:0;cursor:pointer}
+.dash-cols>.card:hover{box-shadow:0 4px 14px rgba(15,23,42,.1)}
+.big-card{padding:22px 24px}
+.dash-stat{font-size:2rem;font-weight:800;color:var(--blue);margin:6px 0 4px;line-height:1}
+.dash-sub{font-size:12px;color:var(--t2);margin-bottom:10px}
+.dash-list{font-size:12px;color:var(--t2)}
+.dash-list .rowline{padding:5px 0}
 
 </style>
 </head>
@@ -71,6 +79,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 
 <nav>
   <div class="brand">SCHEDULER ADMIN</div>
+  <a onclick="nav('dash',this)">📊 Dashboard</a>
   <a onclick="nav('grid',this)" class="on">📅 Schedule Grid</a>
   <a onclick="nav('requests',this)">📥 Requests <span id="reqBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
   <a onclick="nav('swaps',this)">🔁 Swaps <span id="swapBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
@@ -94,6 +103,47 @@ table.grid th.stick1{background:var(--s2);z-index:3}
     <div class="page-sub" style="margin:0">call · shifts · days off · vacation</div>
     <span id="adminWhoami" style="margin-left:auto;font-size:11px;color:var(--t3)"></span>
     <button class="btn btn-ghost" style="padding:5px 10px;font-size:12px" onclick="adminSignOut()">Sign out</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="panel" id="panel-dash">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Dashboard</div>
+    <div class="page-sub" style="margin-bottom:12px">Everything at a glance — click any card to jump to its full page.</div>
+    <div class="dash-cols">
+
+      <div class="card big-card" onclick="nav('requests',document.querySelector('nav a[onclick*=requests]'))">
+        <div class="card-title">Pending Requests</div>
+        <div class="dash-stat" id="dashReqCount">0</div>
+        <div class="dash-sub" id="dashReqSub">Nothing waiting.</div>
+        <div class="dash-list" id="dashReqList"></div>
+      </div>
+
+      <div class="card big-card" onclick="nav('swaps',document.querySelector('nav a[onclick*=swaps]'))">
+        <div class="card-title">Pending Swaps</div>
+        <div class="dash-stat" id="dashSwapCount">0</div>
+        <div class="dash-sub" id="dashSwapSub">Nothing waiting.</div>
+        <div class="dash-list" id="dashSwapList"></div>
+      </div>
+
+      <div class="card big-card" onclick="nav('grid',document.querySelector('nav a[onclick*=grid]'))">
+        <div class="card-title">This Month's Coverage</div>
+        <div class="dash-stat" id="dashCoveragePct">—</div>
+        <div class="dash-sub" id="dashCoverageSub">&nbsp;</div>
+      </div>
+
+      <div class="card big-card" onclick="nav('audit',document.querySelector('nav a[onclick*=audit]'))">
+        <div class="card-title">Latest Activity</div>
+        <div class="dash-sub" id="dashAuditSub">&nbsp;</div>
+        <div class="dash-list" id="dashAuditList"></div>
+      </div>
+
+      <div class="card big-card" onclick="nav('users',document.querySelector('nav a[onclick*=users]'))">
+        <div class="card-title">Roster &amp; FTE</div>
+        <div class="dash-stat" id="dashUserCount">0</div>
+        <div class="dash-sub" id="dashUserSub">&nbsp;</div>
+      </div>
+
+    </div>
   </div>
 
   <!-- SCHEDULE GRID -->
@@ -1227,7 +1277,53 @@ function renderStats(){
   g.innerHTML=head+rows;
 }
 
-function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); fillOpenShiftSel(); renderAudit(); }
+// ── Dashboard ──
+// Same "one slot per catalog shift per day, filled or not" definition
+// autoPopulate() itself uses — kept as a single aggregate percentage here
+// (not a calendar), per the plain-number card style this dashboard uses.
+function dashCoverage(){
+  if(!curYM) return {filled:0,total:0,pct:0};
+  const [y,m]=curYM.split('-').map(Number);
+  const nDays=new Date(y,m,0).getDate();
+  const list=shiftList();
+  const perDayTotal=list.length;
+  let filled=0, total=0;
+  for(let d=1;d<=nDays;d++){
+    const dd=pad(d);
+    const cell=monthData.days?.[dd]||{};
+    const filledIds=new Set();
+    for(const u in cell){ const c=cell[u]; if(c.day) filledIds.add(c.day); if(c.call) filledIds.add(c.call); }
+    let dayFilled=0; for(const [id] of list) if(filledIds.has(id)) dayFilled++;
+    filled+=dayFilled; total+=perDayTotal;
+  }
+  return {filled,total,pct: total?Math.round(filled/total*100):0};
+}
+function renderDash(){
+  if(!document.getElementById('panel-dash')) return;
+  const pendingReq=(requests.list||[]).filter(r=>r.status==='pending').sort((a,b)=>b.ts-a.ts);
+  document.getElementById('dashReqCount').textContent=pendingReq.length;
+  document.getElementById('dashReqSub').textContent=pendingReq.length?'Newest first — review on the Requests page.':'Nothing waiting.';
+  document.getElementById('dashReqList').innerHTML=pendingReq.slice(0,4).map(r=>'<div class="rowline">'+esc(displayName(r.user))+' — '+esc(r.type)+(r.date?' ('+esc(r.date)+')':'')+'</div>').join('');
+
+  const pendingSwap=(swaps.list||[]).filter(s=>s.status==='pending').sort((a,b)=>b.ts-a.ts);
+  document.getElementById('dashSwapCount').textContent=pendingSwap.length;
+  document.getElementById('dashSwapSub').textContent=pendingSwap.length?'Review on the Swaps page.':'Nothing waiting.';
+  document.getElementById('dashSwapList').innerHTML=pendingSwap.slice(0,4).map(s=>'<div class="rowline">'+esc(displayName(s.from))+' ⇄ '+esc(displayName(s.to))+' — '+esc(s.date)+'</div>').join('');
+
+  const cov=dashCoverage();
+  document.getElementById('dashCoveragePct').textContent=curYM?(cov.pct+'%'):'—';
+  document.getElementById('dashCoverageSub').textContent=curYM?(cov.filled+' of '+cov.total+' slots filled — '+MS[Number(curYM.slice(5))-1]+' '+curYM.slice(0,4)):'';
+
+  const log=[...(auditLogData.log||[])].sort((a,b)=>b.ts-a.ts);
+  document.getElementById('dashAuditSub').textContent=log.length?('Last '+Math.min(5,log.length)+' of '+log.length+' logged actions.'):'No activity logged yet.';
+  document.getElementById('dashAuditList').innerHTML=log.slice(0,5).map(e=>'<div class="rowline">'+esc(fmtTs(e.ts))+' — '+esc(e.detail||e.action)+'</div>').join('');
+
+  document.getElementById('dashUserCount').textContent=names.length;
+  const noFte=names.filter(u=>schedFte[u]===undefined).length;
+  document.getElementById('dashUserSub').textContent=names.length?(noFte?(noFte+' of '+names.length+' user(s) have no FTE set here.'):'Every user has an FTE set.'):'No users yet.';
+}
+
+function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); fillOpenShiftSel(); renderAudit(); renderDash(); }
 
 // ── Admin auth gate — SAME admin list (vacations/adminAccess) as the auction ──
 const DEFAULT_ADMIN_EMAILS=['dr.vacation.goddess@gmail.com','aaronjfrankel@gmail.com'];
