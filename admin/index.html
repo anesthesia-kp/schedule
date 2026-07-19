@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 24;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 25;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -215,6 +215,16 @@ table.grid th.stick1{background:var(--s2);z-index:3}
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Users</div>
     <div class="page-sub" style="margin-bottom:12px">Shared with the Vacation Auction — adding or removing a user here changes their roster too.</div>
     <div class="card">
+      <div class="card-title">🔐 Admin Access (Google sign-in)</div>
+      <div class="page-sub" style="margin-bottom:10px">Google accounts allowed to open this admin page and make admin decisions — the SAME list as the Vacation Auction admin, so granting or revoking here changes it there too. Every admin is equal; any admin may grant or revoke any other. The list can never be emptied.</div>
+      <div id="adminAccessList" style="margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="email" id="newAdminEmail" class="inp" style="width:250px" placeholder="their-account@gmail.com">
+        <button class="btn btn-primary" onclick="addAdminEmail()">Grant Admin Access</button>
+      </div>
+      <div id="adminAccessMsg" style="font-size:12px;margin-top:8px"></div>
+    </div>
+    <div class="card">
       <div class="card-title">Add user</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="text" class="inp" id="uInitials" style="width:110px;text-transform:uppercase" placeholder="Initials" maxlength="10">
@@ -408,7 +418,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, updateDoc, deleteField, getDoc, arrayUnion, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, updateDoc, deleteField, getDoc, arrayUnion, arrayRemove, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const app = initializeApp({
@@ -435,14 +445,15 @@ const auditRef    = doc(db,"dailysched","auditLog"); // {log:[{id,ts,admin,actio
 // vacations — READ-ONLY: roster, admin list, approved vacation weeks
 const userListRef   = doc(db,"vacations","userList");
 const usernamesRef  = doc(db,"vacations","usernames");
-const emailsRef      = doc(db,"vacations","emails"); // shared with the Vacation Auction — same roster, same contact info
+const emailsRef      = doc(db,"vacations","emails"); // SECONDARY e-mail — shared with the Vacation Auction (same roster, same contact info)
+const loginEmailsRef = doc(db,"vacations","loginEmails"); // PRIMARY / Google login e-mail — shared with the Vacation Auction (enter on either site, syncs to both)
 const adminAccessRef= doc(db,"vacations","adminAccess");
 const vPhasesRef    = doc(db,"vacations","phases");
 const vApprovalsRef = doc(db,"vacations","approvals");
 
 const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-let names=[], usernamesData={}, emailsData={}, vPhases={}, vApprovals={};
+let names=[], usernamesData={}, emailsData={}, loginEmailsData={}, adminAccessEmails=[], vPhases={}, vApprovals={};
 let auditLogData={log:[]};
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, totals={}, monthData={days:{}};
 let curYM=null, unsubMonth=null, cellSel=null;
@@ -1124,14 +1135,15 @@ window.removeOpen=async function(id){
 function renderUsersGrid(){
   const g=document.getElementById('usersGrid'); if(!g) return;
   const count=document.getElementById('uCount'); if(count) count.textContent=names.length;
-  let head='<tr><th style="text-align:left">Initials</th><th style="text-align:left">Full name</th><th style="text-align:left">E-mail</th><th style="text-align:left">FTE (schedule)</th><th></th></tr>';
+  let head='<tr><th style="text-align:left">Initials</th><th style="text-align:left">Full name</th><th style="text-align:left">Login e-mail (Google)</th><th style="text-align:left">Secondary e-mail</th><th style="text-align:left">FTE (schedule)</th><th></th></tr>';
   let rows='';
   for(const u of names){
     const fte=getSchedFTE(u);
     rows+=`<tr>
       <td style="text-align:left"><strong class="mono">${esc(u)}</strong></td>
       <td style="text-align:left"><input type="text" class="inp" id="ufn_${esc(u)}" style="width:180px" value="${esc(usernamesData[u]||'')}" placeholder="not set"></td>
-      <td style="text-align:left"><input type="email" class="inp" id="uem_${esc(u)}" style="width:200px" value="${esc(emailsData[u]||'')}" placeholder="not set"></td>
+      <td style="text-align:left"><input type="email" class="inp" id="ulem_${esc(u)}" style="width:200px" value="${esc(loginEmailsData[u]||'')}" placeholder="their-google@gmail.com"></td>
+      <td style="text-align:left"><input type="email" class="inp" id="uem_${esc(u)}" style="width:200px" value="${esc(emailsData[u]||'')}" placeholder="optional 2nd address"></td>
       <td style="text-align:left"><input type="number" class="inp" id="ufte_${esc(u)}" style="width:80px" step="0.1" min="0" max="1" value="${fte!==undefined?esc(fte):''}" placeholder="not set"></td>
       <td style="white-space:nowrap">
         <button class="btn btn-success" style="font-size:11px;padding:4px 10px" onclick="saveSchedUser('${esc(u)}')">Save</button>
@@ -1141,6 +1153,41 @@ function renderUsersGrid(){
   }
   g.innerHTML=head+rows;
 }
+// ── Admin Access (shared vacations/adminAccess — identical list to the auction) ──
+const DEFAULT_ADMIN_EMAILS_UI=['dr.vacation.goddess@gmail.com','aaronjfrankel@gmail.com'];
+function renderAdminAccess(){
+  const el=document.getElementById('adminAccessList'); if(!el) return;
+  const list=adminAccessEmails.length?adminAccessEmails:DEFAULT_ADMIN_EMAILS_UI;
+  const last=list.length<=1;
+  el.innerHTML=list.map(email=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px dashed var(--b1)">
+      <span class="mono" style="font-size:12px;color:var(--t1)">${esc(email)}</span>
+      ${email===_currentAdminEmail?'<span style="font-size:10px;font-weight:700;color:var(--green);background:rgba(5,150,105,.12);padding:1px 8px;border-radius:8px">YOU</span>':''}
+      ${last
+        ? '<span style="font-size:10px;color:var(--t3)">last admin — cannot be removed</span>'
+        : `<button class="btn btn-danger" style="padding:2px 8px;font-size:11px" onclick="removeAdminEmail('${esc(email)}')">✕ Remove</button>`}
+    </div>`).join('');
+}
+window.addAdminEmail=async function(){
+  const inp=document.getElementById('newAdminEmail');
+  const msg=document.getElementById('adminAccessMsg'); if(msg) msg.textContent='';
+  const email=(inp?.value||'').trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ if(msg){msg.style.color='var(--red)';msg.textContent='Enter a valid e-mail address.';} return; }
+  if(adminAccessEmails.includes(email)){ if(msg){msg.style.color='var(--t2)';msg.textContent='That account already has admin access.';} return; }
+  if(!confirm('Give '+email+' FULL admin access to BOTH the Daily Schedule and the Vacation Auction?\n\nThey will be able to make every admin change on both sites. Make sure this is their Google account e-mail, spelled exactly.')) return;
+  await setDoc(adminAccessRef,{emails:arrayUnion(email)},{merge:true});
+  if(inp) inp.value='';
+  if(msg){msg.style.color='var(--green)';msg.textContent=email+' now has admin access.';}
+  auditLog('admin.grant','Granted admin access to '+email);
+};
+window.removeAdminEmail=async function(email){
+  if(adminAccessEmails.length<=1){ alert('Cannot remove the last admin — grant someone else access first.'); return; }
+  const self=email===_currentAdminEmail;
+  if(!confirm((self?'⚠️ This is YOUR account — you will be locked out immediately after confirming.\n\n':'')+'Revoke admin access for '+email+'?\n\nThis affects BOTH the Daily Schedule and the Vacation Auction.')) return;
+  await updateDoc(adminAccessRef,{emails:arrayRemove(email)}).catch(()=>{});
+  auditLog('admin.revoke','Revoked admin access for '+email);
+  if(self) window.adminSignOut();
+};
 window.addSchedUser=async function(){
   const msg=document.getElementById('uMsg'); msg.textContent='';
   const initials=document.getElementById('uInitials').value.trim().toUpperCase();
@@ -1163,10 +1210,15 @@ window.addSchedUser=async function(){
 };
 window.saveSchedUser=async function(u){
   const fn=document.getElementById('ufn_'+u).value.trim();
+  const lem=document.getElementById('ulem_'+u)?.value.trim()||'';
   const em=document.getElementById('uem_'+u).value.trim();
   const fteEl=document.getElementById('ufte_'+u);
   const fteRaw=fteEl?fteEl.value.trim():'';
+  if(lem && !lem.includes('@')){ alert('Login e-mail must be a valid address.'); return; }
   if(fn) await setDoc(usernamesRef,{[u]:fn},{merge:true}); else await updateDoc(usernamesRef,{[u]:deleteField()}).catch(()=>{});
+  // Login (Google) e-mail is shared with the Vacation Auction — writing it here
+  // updates it there too, and vice-versa.
+  if(lem) await setDoc(loginEmailsRef,{[u]:lem},{merge:true}); else await updateDoc(loginEmailsRef,{[u]:deleteField()}).catch(()=>{});
   if(em) await setDoc(emailsRef,{[u]:em},{merge:true}); else await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
   if(fteRaw!==''){
     const v=parseFloat(fteRaw);
@@ -1185,6 +1237,7 @@ window.removeSchedUser=async function(u){
   if(!confirm('Remove '+u+' from the shared roster?\n\nThis removes them from BOTH the Daily Schedule and the Vacation Auction — they will no longer be selectable anywhere. Any shifts or vacation weeks already assigned to them stay in the history but they will disappear from user lists. This cannot be undone from here.')) return;
   await setDoc(userListRef,{users:names.filter(n=>n!==u)});
   await updateDoc(usernamesRef,{[u]:deleteField()}).catch(()=>{});
+  await updateDoc(loginEmailsRef,{[u]:deleteField()}).catch(()=>{});
   await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
   await updateDoc(eligRef,{[u]:deleteField()}).catch(()=>{});
   await updateDoc(schedFteRef,{[u]:deleteField()}).catch(()=>{});
@@ -1629,6 +1682,8 @@ authReady.then(()=>{
   onSnapshot(auditRef,snap=>{ auditLogData=snap.exists()?snap.data():{log:[]}; if(!Array.isArray(auditLogData.log)) auditLogData.log=[]; renderAudit(); });
   onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(emailsRef,snap=>{ emailsData=snap.exists()?snap.data():{}; renderAll(); });
+  onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; renderUsersGrid(); });
+  onSnapshot(adminAccessRef,snap=>{ adminAccessEmails=snap.exists()?(snap.data().emails||[]).map(x=>String(x).toLowerCase()):[]; renderAdminAccess(); });
   onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(catalogRef,async snap=>{
