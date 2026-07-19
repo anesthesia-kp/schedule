@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 9;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 10;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -298,21 +298,19 @@ table.grid .wkend{background:var(--s3)}
           <div style="font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#48607a;margin-bottom:6px">Welcome back</div>
           <div id="signWelcomeName" style="font-size:1.9rem;font-weight:800;color:#006ba6;margin:0 0 18px"></div>
           <button class="btn btn-primary" id="signQuickContinueBtn" onclick="quickSignIn()">Continue</button>
-          <div id="signWelcomePwWrap" style="display:none;margin-top:14px">
-            <input type="password" id="signWelcomePass" placeholder="Passcode">
-          </div>
           <div id="signWelcomeErr" style="font-size:12px;color:#b91c1c;margin-top:8px"></div>
           <div style="margin-top:14px"><a onclick="signShowPicker()" style="cursor:pointer;color:#006ba6;text-decoration:underline;font-size:.85rem">Sign in as someone else</a></div>
         </div>
+        <!-- Google-only sign-in -->
         <div id="signPicker">
           <h2 class="modal-title">Sign in</h2>
-          <div class="modal-sub">Enter your username below.</div>
-          <input type="text" id="signUsername" autocomplete="off" placeholder="Username"
-                 oninput="onSignUserInput()" onkeydown="if(event.key==='Enter'){event.preventDefault();doSignIn();}">
-          <input type="password" id="signPass" placeholder="Passcode" style="display:none">
-          <button class="btn btn-primary" onclick="doSignIn()">Continue →</button>
-          <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:#3b566d;cursor:pointer;margin-top:14px"><input type="checkbox" id="signRememberMe"> Remember me on this device</label>
+          <div class="modal-sub">Sign in with your Google account to continue.</div>
+          <button id="userGoogleBtn" onclick="userGoogleSignIn()" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#1f2937;border:1.5px solid #d9e2ec;border-radius:10px;padding:13px 22px;font-size:15px;font-weight:700;cursor:pointer;transition:border-color .15s,box-shadow .15s" onmouseover="this.style.borderColor='#006ba6';this.style.boxShadow='0 6px 18px rgba(0,107,166,.15)'" onmouseout="this.style.borderColor='#d9e2ec';this.style.boxShadow='none'">
+            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            Sign in with Google
+          </button>
           <div id="signErr" style="font-size:12px;color:#b91c1c;margin-top:8px"></div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:#3b566d;cursor:pointer;margin-top:14px"><input type="checkbox" id="signRememberMe" checked> Remember me on this device</label>
         </div>
       </div>
     </div>
@@ -322,7 +320,7 @@ table.grid .wkend{background:var(--s3)}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, doc, setDoc, updateDoc, arrayUnion, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ── Firebase — same project as the Vacation Auction, but ALL scheduling data
 // lives in its own 'dailysched' collection so the two systems never mix.
@@ -354,10 +352,12 @@ const passcodesRef = doc(db,"vacations","passcodes");
 const vAdminRef    = doc(db,"vacations","adminSettings");
 const vPhasesRef   = doc(db,"vacations","phases");
 const vApprovalsRef= doc(db,"vacations","approvals");
+const loginEmailsRef = doc(db,"vacations","loginEmails"); // {INITIALS: google-email} — Google login mapping (shared with the Vacation Auction)
 
 const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 let names=[], usernamesData={}, passcodesData={}, vAdmin={}, vPhases={}, vApprovals={};
+let loginEmailsData={}; // {INITIALS: "their-google-email"} — shared doc mapping Google accounts to accounts
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, monthData={days:{}};
 let me=null, curYM=null, unsubMonth=null;
 
@@ -741,13 +741,18 @@ function resolveUser(raw){
   for(const n of names){ if(displayName(n).toUpperCase()===q) return n; }
   return null;
 }
-window.onSignUserInput=function(){
-  const err=document.getElementById('signErr'); if(err) err.textContent='';
-  // Editing the username after the passcode field revealed → collapse back,
-  // same UX as the Vacation Auction's login.
-  const pw=document.getElementById('signPass');
-  if(pw && pw.style.display!=='none'){ pw.style.display='none'; pw.value=''; }
-};
+// Resolve a Google email -> the user's initials (internal id), or null, using the
+// shared loginEmails doc { INITIALS: "their-google-email" }. Case/whitespace-insensitive.
+function resolveByEmail(email){
+  if(!email) return null;
+  const q=String(email).trim().toLowerCase();
+  for(const n of names){ const e=loginEmailsData[n]; if(e && String(e).trim().toLowerCase()===q) return n; }
+  return null;
+}
+// Obsolete under Google login (there is no username textbox anymore). Kept as a
+// safe no-op because the sign-in markup no longer references it, but leaving the
+// global defined avoids ReferenceErrors from any stale handler.
+window.onSignUserInput=function(){};
 async function finishSignIn(u){
   me=u;
   // Remembering is opt-in via the checkbox — same rule as the Vacation
@@ -761,18 +766,65 @@ async function finishSignIn(u){
   document.getElementById('whoami').textContent=displayName(u);
   renderAll();
 }
-window.doSignIn=async function(){
-  const err=document.getElementById('signErr'); err.textContent='';
-  const raw=document.getElementById('signUsername').value;
-  const u=resolveUser(raw);
-  if(!u){ err.textContent=raw.trim()?"We don't recognize that username.":'Enter your username.'; return; }
-  if(vAdmin.passcodesEnabled===true && passcodesData[u]){
-    const pw=document.getElementById('signPass').value;
-    if(!pw){ document.getElementById('signPass').style.display='block'; err.textContent='Enter your passcode.'; return; }
-    if(await sha256(pw)!==passcodesData[u]){ err.textContent='Wrong passcode.'; return; }
+function showSignErr(msg){ const e=document.getElementById('signErr'); if(e) e.textContent=msg||''; }
+// True only in the brief window right after the user actively clicks "Sign in with
+// Google" — lets a fresh sign-in go straight in rather than bouncing to "Continue".
+let _userJustSignedIn=false;
+// ── Google sign-in ──────────────────────────────────────────────────────────
+// Layered ON TOP of the anonymous read session (which stays untouched and keeps
+// public data flowing). Clicking the button replaces the anonymous user with a
+// Google user; the second onAuthStateChanged handler below resolves that user's
+// email to their initials and runs the EXISTING finishSignIn() flow.
+window.userGoogleSignIn=async function(){
+  showSignErr('');
+  try{
+    const remember=document.getElementById('signRememberMe');
+    const doRemember=!remember || remember.checked;
+    await setPersistence(auth, doRemember ? browserLocalPersistence : browserSessionPersistence).catch(()=>{});
+    _userJustSignedIn=true;
+    const provider=new GoogleAuthProvider();
+    if(provider.setCustomParameters) provider.setCustomParameters({prompt:'select_account'});
+    await signInWithPopup(auth, provider);
+  }catch(e){
+    _userJustSignedIn=false;
+    showSignErr('Google sign-in failed: '+((e&&e.message)||e)+' — if a pop-up was blocked, allow pop-ups for this site and try again.');
   }
-  finishSignIn(u);
 };
+
+// SECOND auth handler (the anonymous bootstrap one below is left intact). Fires on
+// every auth change but only acts on a non-anonymous Google user with an email.
+onAuthStateChanged(auth, u => {
+  if(!(u && !u.isAnonymous && u.email)) return;   // ignore the anon read session
+  const justNow=_userJustSignedIn;
+  const initials=resolveByEmail(u.email);
+  if(!initials){
+    // Not on the allow-list → surface a clear error, keep the app gated, and make
+    // sure the Google button (picker) is visible so a different account can be used.
+    _userJustSignedIn=false;
+    const w=document.getElementById('signWelcome'), p=document.getElementById('signPicker');
+    if(w) w.style.display='none'; if(p) p.style.display='block';
+    showSignErr("This Google account ("+u.email+") isn't registered for scheduling. Please contact your admin.");
+    return;
+  }
+  let remembered=null; try{ remembered=localStorage.getItem('schedUser'); }catch(_){}
+  // Mirror the returning-user gate: a fresh click this moment (or no remembered
+  // value) goes straight in; a restored session on return lands on "Continue as X".
+  if(justNow || !remembered){
+    _userJustSignedIn=false;
+    showSignErr('');
+    finishSignIn(initials);
+  } else {
+    _schedRemembered=initials;
+    const w=document.getElementById('signWelcome'), p=document.getElementById('signPicker');
+    if(p) p.style.display='none';
+    if(w){
+      const nm=document.getElementById('signWelcomeName'); if(nm) nm.textContent=displayName(initials);
+      const b=document.getElementById('signQuickContinueBtn'); if(b) b.textContent='Continue as '+displayName(initials);
+      const werr=document.getElementById('signWelcomeErr'); if(werr) werr.textContent='';
+      w.style.display='block';
+    }
+  }
+});
 
 // ── "Welcome back" one-tap panel — same pattern as the Vacation Auction's
 // login: the site ALWAYS lands on the sign-in screen. If a user is remembered
@@ -797,8 +849,6 @@ function initSchedSigninScreen(){
       w.style.display='block'; p.style.display='none';
       const nm=document.getElementById('signWelcomeName'); if(nm) nm.textContent=displayName(remembered);
       const b=document.getElementById('signQuickContinueBtn'); if(b) b.textContent='Continue as '+displayName(remembered);
-      const pwWrap=document.getElementById('signWelcomePwWrap');
-      if(pwWrap) pwWrap.style.display=(vAdmin.passcodesEnabled===true&&passcodesData[remembered])?'block':'none';
       const werr=document.getElementById('signWelcomeErr'); if(werr) werr.textContent='';
       return;
     }
@@ -809,20 +859,18 @@ window.signShowPicker=function(){
   const w=document.getElementById('signWelcome'), p=document.getElementById('signPicker');
   if(w) w.style.display='none'; if(p) p.style.display='block';
   const err=document.getElementById('signErr'); if(err) err.textContent='';
-  const uEl=document.getElementById('signUsername'); if(uEl){ uEl.value=''; setTimeout(()=>uEl.focus(),60); }
-  const pEl=document.getElementById('signPass'); if(pEl){ pEl.value=''; pEl.style.display='none'; }
+  _schedRemembered=null;
+  // Drop any active Google session so a DIFFERENT account can be chosen, then
+  // re-establish the anonymous read session that keeps public data flowing.
+  try{ signOut(auth).catch(()=>{}); }catch(_){}
+  try{ signInAnonymously(auth).catch(()=>{}); }catch(_){}
 };
 window.quickSignIn=async function(){
   if(!_schedRemembered) return;
-  const u=_schedRemembered;
-  const err=document.getElementById('signWelcomeErr'); if(err) err.textContent='';
   const cb=document.getElementById('signRememberMe'); if(cb) cb.checked=true;
-  if(vAdmin.passcodesEnabled===true && passcodesData[u]){
-    const pw=document.getElementById('signWelcomePass')?.value||'';
-    if(!pw){ if(err) err.textContent='Enter your passcode.'; return; }
-    if(await sha256(pw)!==passcodesData[u]){ if(err) err.textContent='Wrong passcode.'; return; }
-  }
-  finishSignIn(u);
+  const err=document.getElementById('signWelcomeErr'); if(err) err.textContent='';
+  // The Google session is already active on return — finish via the existing flow.
+  finishSignIn(_schedRemembered);
 };
 window.switchUser=function(){
   me=null; try{ localStorage.removeItem('schedUser'); }catch(_){}
@@ -835,10 +883,12 @@ window.switchUser=function(){
   const w=document.getElementById('signWelcome'), p=document.getElementById('signPicker');
   if(w) w.style.display='none';
   if(p) p.style.display='block';
-  const uEl=document.getElementById('signUsername'); if(uEl) uEl.value='';
-  const pEl=document.getElementById('signPass'); if(pEl){ pEl.value=''; pEl.style.display='none'; }
-  const wpEl=document.getElementById('signWelcomePass'); if(wpEl) wpEl.value='';
-  const cb=document.getElementById('signRememberMe'); if(cb) cb.checked=false;
+  const err=document.getElementById('signErr'); if(err) err.textContent='';
+  const cb=document.getElementById('signRememberMe'); if(cb) cb.checked=true;
+  // Drop the active Google session and re-establish the anonymous read session so
+  // a DIFFERENT Google account can sign in.
+  try{ signOut(auth).catch(()=>{}); }catch(_){}
+  try{ signInAnonymously(auth).catch(()=>{}); }catch(_){}
 };
 // Fallback: unlock the sign-in screen after 1.5s if Firestore hasn't fired by
 // then, so nobody is stuck on a blank sign-in card. Firestore typically
@@ -866,6 +916,7 @@ onSnapshot(userListRef,snap=>{
 onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; _usernamesReadySched=true; renderAll(); initSchedSigninScreen(); });
 onSnapshot(passcodesRef,snap=>{ passcodesData=snap.exists()?snap.data():{}; _passcodesReadySched=true; initSchedSigninScreen(); });
 onSnapshot(vAdminRef,snap=>{ vAdmin=snap.exists()?snap.data():{}; _adminReadySched=true; initSchedSigninScreen(); });
+onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; });
 onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
 onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); });
 onSnapshot(catalogRef,snap=>{ catalog=snap.exists()?snap.data():{shifts:{}}; if(!catalog.shifts)catalog.shifts={}; renderAll(); });
