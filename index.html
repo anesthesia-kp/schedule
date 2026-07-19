@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 7;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 8;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -72,8 +72,28 @@ table.grid .wkend{background:var(--s3)}
 .rowline{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px dashed var(--b1);font-size:13px;flex-wrap:wrap}
 .status-pending{color:var(--yellow)} .status-approved{color:var(--green)} .status-denied{color:var(--red)}
 .mono{font-family:var(--mono)}
-#signGate{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:200;padding:18px}
-#signCard{background:var(--s1);border-radius:14px;max-width:380px;width:100%;padding:28px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+/* Sign-in — same split-panel layout, gradient, and type treatment as the
+   Vacation Auction's login screen, so the two sites feel like one product.
+   No year here (this site isn't year-scoped the way the auction is), so
+   "Anesthesia Scheduling" itself takes the large hero position instead. */
+#signGate{position:fixed;inset:0;background:#fff;display:flex;align-items:center;justify-content:center;z-index:200}
+#signCard{display:flex;width:100vw;height:100vh;overflow:hidden;background:#fff;text-align:left}
+.login-hero-panel{flex:0 0 42%;background:linear-gradient(160deg,#0f2744 0%,#00507e 60%,#006ba6 100%);color:#fff;padding:36px 44px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.login-logo{margin-bottom:14px}
+.login-hero-title-solo{font-size:clamp(2.1rem,4.6vw,3.3rem);font-weight:900;line-height:1.08;letter-spacing:.01em}
+.login-form-panel{flex:1 1 58%;padding:36px 44px;display:flex;flex-direction:column;justify-content:center;overflow-y:auto}
+.login-form-inner{width:100%;max-width:380px;margin:0 auto}
+.login-form-inner .modal-title{font-size:1.2rem;font-weight:700;margin-bottom:4px;color:#132f49}
+.login-form-inner .modal-sub{font-size:.8rem;color:#48607a;margin-bottom:16px}
+#signCard select#signSel,#signCard input#signPass{width:100%;padding:12px 14px;font-size:1.05rem;font-weight:600;border:2px solid #9fb4c6;border-radius:10px;background:#fff;color:#111827;box-sizing:border-box;margin-bottom:12px}
+#signCard select#signSel:focus,#signCard input#signPass:focus{outline:none;border-color:#006ba6}
+#signCard .btn-primary{background:linear-gradient(135deg,#006ba6,#3b82f6);border:none;color:#fff;width:100%;padding:13px;font-size:1rem;border-radius:10px;margin-top:4px}
+#signCard .btn-primary:hover{background:linear-gradient(135deg,#006ba6,#3b82f6);transform:translateY(-1px);box-shadow:0 6px 16px rgba(96,165,250,.3)}
+@media (max-width:760px){
+  #signCard{flex-direction:column;overflow-y:auto}
+  .login-hero-panel{flex:none;padding:34px 24px 26px;text-align:center;align-items:center}
+  .login-form-panel{flex:1 0 auto;padding:28px 24px 40px;justify-content:flex-start}
+}
 .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--t2);margin:6px 0 12px}
 .app{display:flex;align-items:flex-start}
 .usernav{width:180px;flex-shrink:0;background:var(--s1);border-right:1px solid var(--b1);padding:14px 0}
@@ -259,13 +279,26 @@ table.grid .wkend{background:var(--s3)}
 <!-- Sign-in gate -->
 <div id="signGate">
   <div id="signCard">
-    <div style="font-size:32px;margin-bottom:8px">📅</div>
-    <div style="font-size:17px;font-weight:800;margin-bottom:4px">Daily Schedule</div>
-    <div style="font-size:12px;color:var(--t2);margin-bottom:16px">Select your name to continue (same roster as the Vacation Auction).</div>
-    <select class="sel" id="signSel" style="width:100%;margin-bottom:10px"></select>
-    <input type="password" class="inp" id="signPass" placeholder="Passcode" style="width:100%;margin-bottom:10px;display:none">
-    <button class="btn btn-primary" style="width:100%" onclick="doSignIn()">Continue</button>
-    <div id="signErr" style="font-size:12px;color:var(--red);margin-top:8px"></div>
+    <!-- LEFT: branded hero — same gradient/icon treatment as the Vacation Auction's login -->
+    <div class="login-hero-panel">
+      <div class="login-logo" aria-hidden="true">
+        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M8 2.5v4M16 2.5v4"/><path d="M8.5 14.5l2.2 2.2 4.3-4.6"/>
+        </svg>
+      </div>
+      <div class="login-hero-title-solo">Anesthesia<br>Scheduling</div>
+    </div>
+    <!-- RIGHT: form -->
+    <div class="login-form-panel">
+      <div class="login-form-inner">
+        <h2 class="modal-title">Sign in</h2>
+        <div class="modal-sub">Select your name to continue (same roster as the Vacation Auction).</div>
+        <select id="signSel"></select>
+        <input type="password" id="signPass" placeholder="Passcode" style="display:none">
+        <button class="btn btn-primary" onclick="doSignIn()">Continue</button>
+        <div id="signErr" style="font-size:12px;color:#b91c1c;margin-top:8px"></div>
+      </div>
+    </div>
   </div>
 </div>
 
