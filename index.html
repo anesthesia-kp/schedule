@@ -6,12 +6,26 @@
 <title>Daily Schedule</title>
 <script>
   // ── Auto-refresh: reload when a newer build is deployed ──
+  // Guarded by sessionStorage so this can reload AT MOST ONCE per version,
+  // ever, per browser tab — never a repeat-reload loop. Without this guard,
+  // any transient mismatch between this file and versions.json (e.g. a CDN
+  // edge still serving a stale copy of one but not the other right after a
+  // deploy) reloads on every single load, forever, since the reload just
+  // re-runs this same check on the fresh page. This previously caused a
+  // real incident: the tab's favicon/refresh icon flickered continuously
+  // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 5;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 7;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
-        if(v && typeof v[PAGE]==='number' && v[PAGE]>BUILD) location.reload(true);
+        if(!v) return;
+        var latest=v[PAGE];
+        var seen=sessionStorage.getItem('vrl-'+PAGE);
+        if(typeof latest==='number' && latest!==BUILD && String(seen)!==String(latest)){
+          sessionStorage.setItem('vrl-'+PAGE, latest);
+          location.reload();
+        }
       }).catch(function(){});
     }
     setInterval(chk, 5*60*1000); chk();
@@ -203,7 +217,39 @@ table.grid .wkend{background:var(--s3)}
         <button class="btn btn-primary" onclick="submitSwap()">Request swap</button>
       </div>
       <div id="swapMsg" style="font-size:12px;margin-top:8px"></div>
-      <div id="mySwapList" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">3-Way Swap (Rotation)</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px">For when a direct swap doesn't work out: your shift moves to one person, theirs moves to a third person, and that person's shift comes back to you — one loop, all three legs happen together or not at all. Coordinate with both people first, then enter what you agreed on.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <span style="font-size:12px;color:var(--t2);min-width:110px">You give up</span>
+        <input type="date" class="inp" id="swap3Date1">
+        <select class="sel" id="swap3Part1"><option value="day">Day shift</option><option value="call">Call</option></select>
+        <span style="font-size:12px;color:var(--t2)">→ goes to</span>
+        <select class="sel" id="swap3With1"></select>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <span style="font-size:12px;color:var(--t2);min-width:110px">They give up</span>
+        <input type="date" class="inp" id="swap3Date2">
+        <select class="sel" id="swap3Part2"><option value="day">Day shift</option><option value="call">Call</option></select>
+        <span style="font-size:12px;color:var(--t2)">→ goes to</span>
+        <select class="sel" id="swap3With2"></select>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <span style="font-size:12px;color:var(--t2);min-width:110px">They give up</span>
+        <input type="date" class="inp" id="swap3Date3">
+        <select class="sel" id="swap3Part3"><option value="day">Day shift</option><option value="call">Call</option></select>
+        <span style="font-size:12px;color:var(--t2)">→ comes back to you</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="text" class="inp" id="swap3Note" placeholder="Note (optional)" style="min-width:180px;flex:1">
+        <button class="btn btn-primary" onclick="submitSwap3()">Request 3-way swap</button>
+      </div>
+      <div id="swap3Msg" style="font-size:12px;margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Your Swaps</div>
+      <div id="mySwapList"></div>
     </div>
   </div>
 
@@ -453,15 +499,22 @@ function renderMyRequests(){
       <span style="margin-left:auto" class="status-${r.status}">${r.status==='pending'?'⏳ pending':r.status==='approved'?'✅ approved':'❌ denied'}</span>
     </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No requests yet.</div>';
 }
+// A user "still owes a decision" on a 3-way swap if they're one of the two
+// non-initiating participants (index 1 or 2 — the initiator at index 0
+// implicitly agreed by creating it) and haven't accepted yet.
+function my3wayTurn(s){ return s.type==='3way'&&s.status==='pending_target'&&(me===s.participants[1]||me===s.participants[2])&&!s.acceptances?.[me]; }
 function renderMySwaps(){
   const badge=document.getElementById('swapNavBadge');
   // Badge only counts swaps genuinely needing MY action right now — someone
   // else proposed it and it's sitting on me to accept/decline. A swap I
   // proposed myself, or one already forwarded to admin, isn't "my to-do".
-  if(badge&&me){ const n=(swaps.list||[]).filter(s=>s.to===me&&s.status==='pending_target').length; badge.textContent=n||''; badge.style.display=n?'inline-block':'none'; }
+  if(badge&&me){
+    const n=(swaps.list||[]).filter(s=>s.type==='3way'?my3wayTurn(s):(s.to===me&&s.status==='pending_target')).length;
+    badge.textContent=n||''; badge.style.display=n?'inline-block':'none';
+  }
   const el=document.getElementById('mySwapList'); if(!el||!me) return;
-  const mine=(swaps.list||[]).filter(s=>s.from===me||s.to===me).sort((a,b)=>b.ts-a.ts);
-  const statusHtml=s=>{
+  const mine=(swaps.list||[]).filter(s=>s.type==='3way'?s.participants.includes(me):(s.from===me||s.to===me)).sort((a,b)=>b.ts-a.ts);
+  const statusHtml2=s=>{
     if(s.status==='pending_target'){
       if(s.to===me) return `<button class="btn btn-success" style="font-size:12px" onclick="acceptSwap('${esc(s.id)}')">✓ Accept</button>
         <button class="btn btn-danger" style="font-size:12px" onclick="declineSwap('${esc(s.id)}')">✗ Decline</button>`;
@@ -472,21 +525,48 @@ function renderMySwaps(){
     if(s.status==='approved') return '<span class="status-approved">✅ approved</span>';
     return '<span class="status-denied">❌ denied by admin</span>';
   };
-  el.innerHTML=mine.length?mine.map(s=>`
+  const statusHtml3=s=>{
+    const [a,b,c]=s.participants;
+    if(s.status==='pending_target'){
+      if(my3wayTurn(s)) return `<button class="btn btn-success" style="font-size:12px" onclick="acceptSwap3('${esc(s.id)}')">✓ Accept</button>
+        <button class="btn btn-danger" style="font-size:12px" onclick="declineSwap3('${esc(s.id)}')">✗ Decline</button>`;
+      const waiting=[b,c].filter(u=>!s.acceptances?.[u]);
+      return `<span class="status-pending">⏳ waiting on ${waiting.map(u=>esc(displayName(u))).join(' &amp; ')}</span>`;
+    }
+    if(s.status==='pending_admin') return '<span class="status-pending">⏳ waiting on admin</span>';
+    if(s.status==='declined_by_target') return `<span class="status-denied">❌ ${esc(displayName(s.declinedBy))} declined</span>`;
+    if(s.status==='approved') return '<span class="status-approved">✅ approved</span>';
+    return '<span class="status-denied">❌ denied by admin</span>';
+  };
+  const row2=s=>`
     <div class="rowline">
       <span class="mono" style="font-size:12px">${esc(s.date)}</span>
       <span style="font-weight:700">${s.part==='call'?'Call':'Day shift'}</span>
       <span style="color:var(--t2)">${esc(displayName(s.from))} ⇄ ${esc(displayName(s.to))}</span>
       ${s.note?'<span style="color:var(--t2)">“'+esc(s.note)+'”</span>':''}
-      <span style="margin-left:auto">${statusHtml(s)}</span>
-    </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No swap requests yet.</div>';
+      <span style="margin-left:auto">${statusHtml2(s)}</span>
+    </div>`;
+  const row3=s=>{
+    const [a,b,c]=s.participants;
+    const leg=i=>esc(s.legs[i].date)+' '+(s.legs[i].part==='call'?'Call':'Day');
+    return `
+    <div class="rowline">
+      <span style="font-weight:700;color:var(--t2)">🔁 3-way</span>
+      <span style="color:var(--t2)">${esc(displayName(a))} → ${esc(displayName(b))} → ${esc(displayName(c))} → ${esc(displayName(a))}</span>
+      <span class="mono" style="font-size:11px;color:var(--t3)">${leg(0)} • ${leg(1)} • ${leg(2)}</span>
+      ${s.note?'<span style="color:var(--t2)">“'+esc(s.note)+'”</span>':''}
+      <span style="margin-left:auto">${statusHtml3(s)}</span>
+    </div>`;
+  };
+  el.innerHTML=mine.length?mine.map(s=>s.type==='3way'?row3(s):row2(s)).join(''):'<div style="font-size:12px;color:var(--t3)">No swap requests yet.</div>';
 }
-function fillSwapWith(){
-  const sel=document.getElementById('swapWith'); if(!sel) return;
+function fillUserSelect(id){
+  const sel=document.getElementById(id); if(!sel) return;
   const cur=sel.value;
   sel.innerHTML=names.filter(u=>u!==me).map(u=>`<option value="${esc(u)}">${esc(displayName(u))}</option>`).join('');
   if(cur) sel.value=cur;
 }
+function fillSwapWith(){ fillUserSelect('swapWith'); fillUserSelect('swap3With1'); fillUserSelect('swap3With2'); }
 function fillReqShift(){
   const sel=document.getElementById('reqShift'); if(!sel) return;
   const cur=sel.value;
@@ -523,7 +603,7 @@ window.submitSwap=async function(){
   if(!date||!to){ msg.textContent='Pick a date and a user to swap with.'; msg.style.color='var(--red)'; return; }
   // Starts as pending_target — the OTHER user has to accept before this
   // ever reaches admin. See renderMySwaps()/acceptSwap()/declineSwap().
-  const s={id:'s'+Date.now()+Math.floor(Math.random()*1e4),from:me,to,date,part,note,status:'pending_target',ts:Date.now()};
+  const s={id:'s'+Date.now()+Math.floor(Math.random()*1e4),type:'2way',from:me,to,date,part,note,status:'pending_target',ts:Date.now()};
   const list=[...(swaps.list||[]),s];
   await setDoc(swapsRef,{list},{merge:true});
   logUserAction('swap.request',displayName(me)+' proposed a swap with '+displayName(to)+' on '+date+' ('+(part==='call'?'call':'day shift')+')');
@@ -547,6 +627,54 @@ window.declineSwap=async function(id){
   const list=(swaps.list||[]).map(x=>x.id===id?{...x,status:'declined_by_target',targetDecidedTs:Date.now()}:x);
   await setDoc(swapsRef,{list},{merge:true});
   logUserAction('swap.decline',displayName(me)+' declined a swap with '+displayName(s.from)+' on '+s.date);
+};
+// 3-way rotation: participants=[you,B,C]; legs[0]=your giveaway (→B),
+// legs[1]=B's giveaway (→C), legs[2]=C's giveaway (→ back to you). You
+// implicitly agree by creating it — only B and C (index 1 & 2) have to
+// accept, in either order; status flips to pending_admin once BOTH have.
+window.submitSwap3=async function(){
+  const msg=document.getElementById('swap3Msg'); msg.textContent='';
+  const b=document.getElementById('swap3With1').value;
+  const c=document.getElementById('swap3With2').value;
+  const d1=document.getElementById('swap3Date1').value, p1=document.getElementById('swap3Part1').value;
+  const d2=document.getElementById('swap3Date2').value, p2=document.getElementById('swap3Part2').value;
+  const d3=document.getElementById('swap3Date3').value, p3=document.getElementById('swap3Part3').value;
+  const note=document.getElementById('swap3Note').value.trim();
+  if(!me) return;
+  if(!b||!c){ msg.textContent='Pick both other people in the loop.'; msg.style.color='var(--red)'; return; }
+  if(b===c){ msg.textContent='The two other people must be different.'; msg.style.color='var(--red)'; return; }
+  if(!d1||!d2||!d3){ msg.textContent='Fill in all three dates.'; msg.style.color='var(--red)'; return; }
+  const s3={
+    id:'s3'+Date.now()+Math.floor(Math.random()*1e4), type:'3way',
+    participants:[me,b,c], legs:[{date:d1,part:p1},{date:d2,part:p2},{date:d3,part:p3}],
+    note, status:'pending_target', acceptances:{}, ts:Date.now()
+  };
+  const list=[...(swaps.list||[]),s3];
+  await setDoc(swapsRef,{list},{merge:true});
+  logUserAction('swap3.request',displayName(me)+' proposed a 3-way swap: '+displayName(me)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(me));
+  document.getElementById('swap3Note').value='';
+  msg.textContent='3-way swap requested — '+displayName(b)+' and '+displayName(c)+' both need to accept.'; msg.style.color='var(--green)';
+};
+window.acceptSwap3=async function(id){
+  const s=(swaps.list||[]).find(x=>x.id===id);
+  if(!s||s.type!=='3way'||s.status!=='pending_target') return;
+  const [a,b,c]=s.participants;
+  if(me!==b&&me!==c) return;
+  if(s.acceptances?.[me]) return;
+  const acceptances={...(s.acceptances||{}),[me]:true};
+  const bothAccepted=!!(acceptances[b]&&acceptances[c]);
+  const list=(swaps.list||[]).map(x=>x.id===id?{...x,acceptances,status:bothAccepted?'pending_admin':'pending_target'}:x);
+  await setDoc(swapsRef,{list},{merge:true});
+  logUserAction('swap3.accept',displayName(me)+' accepted their leg of a 3-way swap ('+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)+')'+(bothAccepted?' — now awaiting admin approval':''));
+};
+window.declineSwap3=async function(id){
+  const s=(swaps.list||[]).find(x=>x.id===id);
+  if(!s||s.type!=='3way'||s.status!=='pending_target') return;
+  const [a,b,c]=s.participants;
+  if(me!==b&&me!==c) return;
+  const list=(swaps.list||[]).map(x=>x.id===id?{...x,status:'declined_by_target',declinedBy:me}:x);
+  await setDoc(swapsRef,{list},{merge:true});
+  logUserAction('swap3.decline',displayName(me)+' declined their leg of a 3-way swap ('+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)+')');
 };
 
 // ── Sign-in (same roster + passcodes as the Vacation Auction) ──
