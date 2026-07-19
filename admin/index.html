@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 21;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 22;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -226,7 +226,10 @@ table.grid th.stick1{background:var(--s2);z-index:3}
     </div>
     <div class="card">
       <div class="card-title">All Users (<span id="uCount">0</span>)</div>
-      <div class="page-sub" style="margin-bottom:10px">FTE here is this site's own value — separate from the Vacation Auction's FTE. New users start blank here (no default) until set; when a user is first added, if the auction already has an FTE for them it's copied over once as a starting point, then the two stay independent.</div>
+      <div class="page-sub" style="margin-bottom:10px">FTE here is this site's own value — totally separate from the Vacation Auction's FTE, with no copying or syncing between them. The same person can have a different FTE on each site. New users start blank here until you set one.</div>
+      <div style="margin-bottom:10px">
+        <button class="btn btn-danger" style="font-size:12px" onclick="clearAllSchedFte()" title="Blanks out the FTE column below for every user on this site — does not touch the Vacation Auction's FTE">Clear all FTE (this site)</button>
+      </div>
       <div style="overflow-x:auto"><table class="grid" id="usersGrid" style="width:100%"></table></div>
     </div>
   </div>
@@ -303,17 +306,25 @@ table.grid th.stick1{background:var(--s2);z-index:3}
   <div class="panel" id="panel-stats">
     <div class="page-title" style="font-size:16px;margin-bottom:10px">Stats — <span id="statsMonth"></span></div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="btn-group" style="display:flex;border:1px solid var(--b2);border-radius:8px;overflow:hidden">
+        <button class="btn btn-primary" id="statsModeMonthBtn" style="font-size:12px;border-radius:0" onclick="setStatsMode('month')">Month</button>
+        <button class="btn" id="statsModeYearBtn" style="font-size:12px;border-radius:0" onclick="setStatsMode('year')">Year</button>
+      </div>
       <button class="btn btn-ghost" style="font-size:12px" onclick="moveYear(-1)" title="Previous year">« Year</button>
-      <button class="btn" onclick="moveMonth(-1)">⟨</button>
-      <button class="btn" onclick="moveMonth(1)">⟩</button>
+      <span id="statsMonthNav" style="display:flex;gap:10px;align-items:center">
+        <button class="btn" onclick="moveMonth(-1)">⟨</button>
+        <button class="btn" onclick="moveMonth(1)">⟩</button>
+      </span>
       <button class="btn btn-ghost" style="font-size:12px" onclick="moveYear(1)" title="Next year">Year »</button>
       <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
-      <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:4px">Jump to
+      <label id="statsJumpTo" style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:4px">Jump to
         <input type="date" class="inp" style="font-size:12px;padding:5px 8px" onchange="jumpToDate(this.value)">
       </label>
+      <button id="statsRefreshBtn" class="btn btn-ghost" style="font-size:12px;display:none" onclick="refreshStatsYear()" title="Re-pull all 12 months in case something changed">🔄 Refresh</button>
     </div>
     <div class="card" style="padding:10px 12px">
-      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Assignments per user for the month shown above — use the controls to jump to any month or year. Call columns highlighted — watch these for even distribution.</div>
+      <div id="statsHint" style="font-size:11px;color:var(--t2);margin-bottom:8px">Assignments per user for the month shown above — use the controls to jump to any month or year. Call columns highlighted — watch these for even distribution.</div>
+      <div id="statsLoading" style="display:none;font-size:12px;color:var(--t2);padding:8px 0">Adding up all 12 months…</div>
       <div style="overflow-x:auto"><table class="grid" id="statsGrid"></table></div>
     </div>
   </div>
@@ -388,7 +399,7 @@ const swapsRef    = doc(db,"dailysched","swaps");
 const openRef     = doc(db,"dailysched","openShifts");
 const totalsRef   = doc(db,"dailysched","callTotals"); // {user:{shiftId:n}} cumulative — keeps call fair across months
 const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);
-const schedFteRef = doc(db,"dailysched","fteMap"); // THIS SITE's own FTE per user — independent of the auction's FTE. Seeded once from the auction's value as a starting point (see maybeSeedFte); edited here afterward, never auto-synced again.
+const schedFteRef = doc(db,"dailysched","fteMap"); // THIS SITE's own FTE per user — totally separate from the Vacation Auction's FTE doc; the same person can carry a different number on each site. Never read from or written to the auction's fteMap — no seeding, no syncing, no fallback to it.
 const auditRef    = doc(db,"dailysched","auditLog"); // {log:[{id,ts,admin,action,detail}]} — who changed what, when
 // vacations — READ-ONLY: roster, admin list, approved vacation weeks
 const userListRef   = doc(db,"vacations","userList");
@@ -397,7 +408,6 @@ const emailsRef      = doc(db,"vacations","emails"); // shared with the Vacation
 const adminAccessRef= doc(db,"vacations","adminAccess");
 const vPhasesRef    = doc(db,"vacations","phases");
 const vApprovalsRef = doc(db,"vacations","approvals");
-const vFteRef        = doc(db,"vacations","fteMap"); // read-only — used ONLY to seed this site's own FTE map, once, per user
 
 const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -405,12 +415,8 @@ let names=[], usernamesData={}, emailsData={}, vPhases={}, vApprovals={};
 let auditLogData={log:[]};
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, totals={}, monthData={days:{}};
 let curYM=null, unsubMonth=null, cellSel=null;
+let statsMode='month', statsYearLoadedFor=null, statsYearData=null;
 let schedFte={}, schedFteLoaded=false, namesLoaded=false;
-// Same fallback the Vacation Auction admin uses, so "pull the current FTE from
-// vacay" reflects what that site actually shows an admin (its raw fteMap doc,
-// falling back to this hardcoded table, falling back to 1.0) — not just the
-// raw doc, which may be missing entries that still show a real value there.
-const VACAY_FTE_FALLBACK={MA:.4,BC:.5,EC:.8,SC:.6,SFI:.8,NG:.8,MK:.8,SYK:.8,SL:.9,JLO:.7,KN:.8,AQ:.6,DR:.8,DNS:.9};
 function getSchedFTE(u){ return schedFte[u]; } // undefined = not set — no default on this site, ever
 
 // Debug helper — the variables above live inside this module script, which
@@ -438,34 +444,6 @@ async function mergeFields(ref, dotted){
     }
     await setDoc(ref, nested, {merge:true});
   }
-}
-
-// One-time-per-user FTE seed: for every current user who has no FTE set on
-// THIS site yet, copy the auction's current effective FTE as a starting
-// point. Runs whenever both the roster and this site's FTE map have loaded
-// (whichever finishes loading second actually does the work); safe to call
-// repeatedly since it only ever fills in gaps, never overwrites a value
-// that's already here (including one an admin already blanked out on
-// purpose — that's why it's per-user-missing, not a single global flag).
-let _fteSeedRunning=false;
-async function maybeSeedFte(){
-  if(_fteSeedRunning || !schedFteLoaded || !namesLoaded || !names.length) return;
-  const missing=names.filter(u=>schedFte[u]===undefined);
-  if(!missing.length) return;
-  _fteSeedRunning=true;
-  try{
-    let vFte={};
-    try{ const vs=await getDoc(vFteRef); vFte=vs.exists()?vs.data():{}; }catch(_){}
-    const patch={};
-    for(const u of missing){
-      const starting = vFte[u]!==undefined ? vFte[u] : VACAY_FTE_FALLBACK[u];
-      if(starting!==undefined) patch[u]=starting;
-    }
-    if(Object.keys(patch).length){
-      schedFte={...schedFte,...patch}; // optimistic, so a slow snapshot refire doesn't re-trigger this
-      await mergeFields(schedFteRef,patch);
-    }
-  } finally { _fteSeedRunning=false; }
 }
 
 // Admin action audit log — who changed what, when. Fire-and-forget (not
@@ -1144,15 +1122,10 @@ window.addSchedUser=async function(){
   await setDoc(userListRef,{users:updated});
   if(fullName) await setDoc(usernamesRef,{[initials]:fullName},{merge:true});
   if(email) await setDoc(emailsRef,{[initials]:email},{merge:true});
-  // New user starts with no FTE on this site — but if the auction already has
-  // one for these initials (re-added user, or added there first), copy it
-  // over once as a starting point, same as the batch seed does for everyone else.
-  try{
-    const vs=await getDoc(vFteRef);
-    const vFte=vs.exists()?vs.data():{};
-    const starting=vFte[initials]!==undefined?vFte[initials]:VACAY_FTE_FALLBACK[initials];
-    if(starting!==undefined) await mergeFields(schedFteRef,{[initials]:starting});
-  }catch(_){}
+  // New user starts with no FTE on this site — this site's FTE is never
+  // copied from, or synced with, the Vacation Auction's FTE. The two are
+  // totally independent; the same person can carry a different number on
+  // each site. The admin sets this site's FTE by hand, below.
   document.getElementById('uInitials').value=''; document.getElementById('uFullName').value=''; document.getElementById('uEmail').value='';
   msg.style.color='var(--green)'; msg.textContent='Added '+initials+' — remember to set their FTE on the Vacation Auction admin before the auction opens.';
   auditLog('user.add','Added user '+initials+(fullName?' ('+fullName+')':''));
@@ -1171,6 +1144,11 @@ window.saveSchedUser=async function(u){
   } else {
     await mergeFields(schedFteRef,{[u]:deleteField()});
   }
+};
+window.clearAllSchedFte=async function(){
+  if(!confirm('Clear the FTE value for every user on this site (Daily Schedule only)?\n\nThe Vacation Auction\'s FTE is untouched — this only blanks the schedule site\'s own FTE column. Users go back to "not set" until entered again. This cannot be undone from here.')) return;
+  await setDoc(schedFteRef,{}); // full overwrite (no merge) — wipes every user's value, including any left over from removed users
+  auditLog('fte.clearAll','Cleared FTE for all users on the Daily Schedule site');
 };
 window.removeSchedUser=async function(u){
   if(!confirm('Remove '+u+' from the shared roster?\n\nThis removes them from BOTH the Daily Schedule and the Vacation Auction — they will no longer be selectable anywhere. Any shifts or vacation weeks already assigned to them stay in the history but they will disappear from user lists. This cannot be undone from here.')) return;
@@ -1399,10 +1377,28 @@ function renderFamilies(){
 }
 
 // ── Stats ──
+// Two modes: Month (live — reads the already-subscribed monthData, same as
+// before) and Year (a one-shot pull of all 12 months' docs, aggregated).
+// Year mode is cached per-year (statsYearLoadedFor) so switching panels or
+// unrelated data elsewhere doesn't re-trigger 12 reads on every render —
+// only entering Year mode, changing the year, or hitting Refresh does.
+window.setStatsMode=function(mode){
+  statsMode=mode;
+  document.getElementById('statsModeMonthBtn').classList.toggle('btn-primary', mode==='month');
+  document.getElementById('statsModeYearBtn').classList.toggle('btn-primary', mode==='year');
+  document.getElementById('statsMonthNav').style.display = mode==='month'?'flex':'none';
+  document.getElementById('statsJumpTo').style.display = mode==='month'?'flex':'none';
+  document.getElementById('statsRefreshBtn').style.display = mode==='year'?'inline-block':'none';
+  renderStats();
+};
+window.refreshStatsYear=function(){ statsYearLoadedFor=null; renderStats(); };
 function renderStats(){
   const g=document.getElementById('statsGrid'); if(!g||!curYM) return;
+  if(statsMode==='year'){ renderStatsYear(); return; }
   const [y,m]=curYM.split('-').map(Number);
   document.getElementById('statsMonth').textContent=MS[m-1]+' '+y;
+  document.getElementById('statsHint').textContent='Assignments per user for the month shown above — use the controls to jump to any month or year. Call columns highlighted — watch these for even distribution.';
+  document.getElementById('statsLoading').style.display='none';
   const shifts=shiftList();
   let head='<tr><th style="text-align:left">User</th>'+shifts.map(([id,s])=>'<th'+(s.kind==='call'?' style="background:#ede9fe"':'')+'>'+esc(s.label)+'</th>').join('')+'<th>OFF</th><th>VAC days</th></tr>';
   const vac=vacationDays();
@@ -1420,6 +1416,58 @@ function renderStats(){
     rows+='<tr><td style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
       +shifts.map(([id,s])=>'<td'+(s.kind==='call'?' style="background:#f5f3ff;font-weight:800"':'')+'>'+(c[id]||'')+'</td>').join('')
       +'<td>'+(off||'')+'</td><td style="color:var(--green);font-weight:700">'+(vd||'')+'</td></tr>';
+  }
+  g.innerHTML=head+rows;
+}
+// One-shot fetch of all 12 months for the visible year (curYM's year), NOT
+// a live subscription — cheap on Firestore reads and simple to reason
+// about, at the cost of needing a manual Refresh if data changes while
+// you're sitting on this view. Re-entrant-safe: if the year changes again
+// before a fetch finishes, statsYearLoadedFor no longer matches when it
+// resolves, so the stale result is dropped instead of overwriting newer work.
+async function renderStatsYear(){
+  const g=document.getElementById('statsGrid'); if(!g||!curYM) return;
+  const y=Number(curYM.split('-')[0]);
+  document.getElementById('statsMonth').textContent=y+' (full year)';
+  document.getElementById('statsHint').textContent='Assignments per user, added up across all 12 months of '+y+'. Call columns highlighted — watch these for even distribution over the year. Hit Refresh if you\'ve made changes since this loaded.';
+  if(statsYearLoadedFor===y){ renderStatsYearTable(y); return; }
+  document.getElementById('statsLoading').style.display='block';
+  g.innerHTML='';
+  const vac=vacationDays();
+  const monthKeys=[]; for(let m=1;m<=12;m++) monthKeys.push(y+'-'+pad(m));
+  const snaps=await Promise.all(monthKeys.map(mk=>getDoc(monthRef(mk)).catch(()=>null)));
+  if(statsMode!=='year'||Number(curYM.split('-')[0])!==y) return; // navigated away mid-fetch
+  const counts={}, offCounts={}, vacCounts={};
+  for(const u of names){ counts[u]={}; offCounts[u]=0; vacCounts[u]=0; }
+  monthKeys.forEach((mk,i)=>{
+    const [my,mm]=mk.split('-').map(Number);
+    const days=snaps[i]?.data?.()?.days||{};
+    const nDays=new Date(my,mm,0).getDate();
+    for(const u of names){
+      for(let d=1;d<=nDays;d++){
+        const dd=pad(d), cell=days[dd]?.[u]||{};
+        if(cell.day) counts[u][cell.day]=(counts[u][cell.day]||0)+1;
+        if(cell.call) counts[u][cell.call]=(counts[u][cell.call]||0)+1;
+        if(cell.off) offCounts[u]++;
+        if(vac[u+'|'+mk+'-'+dd]) vacCounts[u]++;
+      }
+    }
+  });
+  statsYearData={counts,offCounts,vacCounts};
+  statsYearLoadedFor=y;
+  document.getElementById('statsLoading').style.display='none';
+  renderStatsYearTable(y);
+}
+function renderStatsYearTable(y){
+  const g=document.getElementById('statsGrid'); if(!g||!statsYearData) return;
+  const {counts,offCounts,vacCounts}=statsYearData;
+  const shifts=shiftList();
+  let head='<tr><th style="text-align:left">User</th>'+shifts.map(([id,s])=>'<th'+(s.kind==='call'?' style="background:#ede9fe"':'')+'>'+esc(s.label)+'</th>').join('')+'<th>OFF</th><th>VAC days</th></tr>';
+  let rows='';
+  for(const u of names){
+    rows+='<tr><td style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
+      +shifts.map(([id,s])=>'<td'+(s.kind==='call'?' style="background:#f5f3ff;font-weight:800"':'')+'>'+(counts[u]?.[id]||'')+'</td>').join('')
+      +'<td>'+(offCounts[u]||'')+'</td><td style="color:var(--green);font-weight:700">'+(vacCounts[u]||'')+'</td></tr>';
   }
   g.innerHTML=head+rows;
 }
@@ -1521,8 +1569,8 @@ window.adminSignOut=function(){ signOut(auth).catch(()=>{}); };
 // ── Boot (listeners wait for auth, matching the auction admin) ──
 setMonth(ymKey(new Date()));
 authReady.then(()=>{
-  onSnapshot(userListRef,snap=>{ const d=snap.exists()?snap.data():{}; if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort(); namesLoaded=true; renderAll(); maybeSeedFte(); });
-  onSnapshot(schedFteRef,snap=>{ schedFte=snap.exists()?snap.data():{}; schedFteLoaded=true; renderAll(); maybeSeedFte(); });
+  onSnapshot(userListRef,snap=>{ const d=snap.exists()?snap.data():{}; if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort(); namesLoaded=true; renderAll(); });
+  onSnapshot(schedFteRef,snap=>{ schedFte=snap.exists()?snap.data():{}; schedFteLoaded=true; renderAll(); });
   onSnapshot(auditRef,snap=>{ auditLogData=snap.exists()?snap.data():{log:[]}; if(!Array.isArray(auditLogData.log)) auditLogData.log=[]; renderAudit(); });
   onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(emailsRef,snap=>{ emailsData=snap.exists()?snap.data():{}; renderAll(); });
