@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 10;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 11;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -319,7 +319,7 @@ table.grid .wkend{background:var(--s3)}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, updateDoc, arrayUnion, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, updateDoc, arrayUnion, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ── Firebase — same project as the Vacation Auction, but ALL scheduling data
@@ -391,6 +391,23 @@ function logUserAction(action,detail){
   })();
 }
 async function sha256(t){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+
+// Atomically update a { list:[...] } document. Re-reads the CURRENT server state
+// inside a Firestore transaction and applies mutate(currentList) -> newList, so two
+// people acting within the same few seconds can no longer overwrite each other's
+// entry (the old "read local copy, rewrite whole list" pattern silently lost data).
+// mutate runs on the FRESH list and may return null to abort (e.g. a guard no longer
+// holds) — abort writes nothing. Firestore retries mutate automatically on conflict,
+// so it must be free of outside side effects; do logging AFTER this resolves.
+async function txUpdateList(ref, mutate){
+  await runTransaction(db, async (tx)=>{
+    const snap=await tx.get(ref);
+    const cur=(snap.exists()&&Array.isArray(snap.data().list))?snap.data().list:[];
+    const next=mutate(cur);
+    if(next===null||next===undefined) return;   // guard failed on fresh data — no-op
+    tx.set(ref,{list:next},{merge:true});
+  });
+}
 
 // ── Approved vacation weeks from the auction → {user|date: true} ──
 // A week approved in ANY completed phase, or decided live in the current
@@ -532,7 +549,7 @@ window.applyOpen=async function(openId){
   if(!me) return;
   const o=(openShifts.list||[]).find(x=>x.id===openId); if(!o||o.status!=='open') return;
   const req={id:'r'+Date.now()+Math.floor(Math.random()*1e4),user:me,date:o.date,type:'claim',shiftId:o.shiftId,openId,note:'',status:'pending',ts:Date.now()};
-  await setDoc(requestsRef,{list:[...(requests.list||[]),req]},{merge:true});
+  await txUpdateList(requestsRef, cur=>[...cur,req]);
 };
 
 function renderMyRequests(){
@@ -638,8 +655,7 @@ window.submitRequest=async function(){
   if(!date&&type!=='other'){ msg.textContent='Pick a date first.'; msg.style.color='var(--red)'; return; }
   if(type==='other'&&!note){ msg.textContent='Describe what you\'re requesting in the note.'; msg.style.color='var(--red)'; return; }
   const req={id:'r'+Date.now()+Math.floor(Math.random()*1e4),user:me,date:date||null,type,shiftId,note,status:'pending',ts:Date.now()};
-  const list=[...(requests.list||[]),req];
-  await setDoc(requestsRef,{list},{merge:true});
+  await txUpdateList(requestsRef, cur=>[...cur,req]);
   document.getElementById('reqNote').value='';
   msg.textContent='Request submitted — admin will review it.'; msg.style.color='var(--green)';
 };
@@ -654,8 +670,7 @@ window.submitSwap=async function(){
   // Starts as pending_target — the OTHER user has to accept before this
   // ever reaches admin. See renderMySwaps()/acceptSwap()/declineSwap().
   const s={id:'s'+Date.now()+Math.floor(Math.random()*1e4),type:'2way',from:me,to,date,part,note,status:'pending_target',ts:Date.now()};
-  const list=[...(swaps.list||[]),s];
-  await setDoc(swapsRef,{list},{merge:true});
+  await txUpdateList(swapsRef, cur=>[...cur,s]);
   logUserAction('swap.request',displayName(me)+' proposed a swap with '+displayName(to)+' on '+date+' ('+(part==='call'?'call':'day shift')+')');
   document.getElementById('swapNote').value='';
   msg.textContent='Swap requested — '+displayName(to)+' needs to accept it first.'; msg.style.color='var(--green)';
@@ -665,18 +680,28 @@ window.submitSwap=async function(){
 // ever act on a swap that is (a) still awaiting a decision and (b) actually
 // theirs to decide — stale UI or a race with another tab can't double-fire.
 window.acceptSwap=async function(id){
-  const s=(swaps.list||[]).find(x=>x.id===id);
-  if(!s||s.status!=='pending_target'||s.to!==me) return;
-  const list=(swaps.list||[]).map(x=>x.id===id?{...x,status:'pending_admin',targetDecidedTs:Date.now()}:x);
-  await setDoc(swapsRef,{list},{merge:true});
-  logUserAction('swap.accept',displayName(me)+' accepted a swap with '+displayName(s.from)+' on '+s.date+' — now awaiting admin approval');
+  // The guard is re-evaluated on FRESH server data inside the transaction, so a
+  // stale UI or a racing write can't push a swap that was already decided.
+  let acted=false, sFrom=null, sDate=null;
+  await txUpdateList(swapsRef, cur=>{
+    acted=false;
+    const s=cur.find(x=>x.id===id);
+    if(!s||s.status!=='pending_target'||s.to!==me) return null;
+    acted=true; sFrom=s.from; sDate=s.date;
+    return cur.map(x=>x.id===id?{...x,status:'pending_admin',targetDecidedTs:Date.now()}:x);
+  });
+  if(acted) logUserAction('swap.accept',displayName(me)+' accepted a swap with '+displayName(sFrom)+' on '+sDate+' — now awaiting admin approval');
 };
 window.declineSwap=async function(id){
-  const s=(swaps.list||[]).find(x=>x.id===id);
-  if(!s||s.status!=='pending_target'||s.to!==me) return;
-  const list=(swaps.list||[]).map(x=>x.id===id?{...x,status:'declined_by_target',targetDecidedTs:Date.now()}:x);
-  await setDoc(swapsRef,{list},{merge:true});
-  logUserAction('swap.decline',displayName(me)+' declined a swap with '+displayName(s.from)+' on '+s.date);
+  let acted=false, sFrom=null, sDate=null;
+  await txUpdateList(swapsRef, cur=>{
+    acted=false;
+    const s=cur.find(x=>x.id===id);
+    if(!s||s.status!=='pending_target'||s.to!==me) return null;
+    acted=true; sFrom=s.from; sDate=s.date;
+    return cur.map(x=>x.id===id?{...x,status:'declined_by_target',targetDecidedTs:Date.now()}:x);
+  });
+  if(acted) logUserAction('swap.decline',displayName(me)+' declined a swap with '+displayName(sFrom)+' on '+sDate);
 };
 // 3-way rotation: participants=[you,B,C]; legs[0]=your giveaway (→B),
 // legs[1]=B's giveaway (→C), legs[2]=C's giveaway (→ back to you). You
@@ -699,32 +724,42 @@ window.submitSwap3=async function(){
     participants:[me,b,c], legs:[{date:d1,part:p1},{date:d2,part:p2},{date:d3,part:p3}],
     note, status:'pending_target', acceptances:{}, ts:Date.now()
   };
-  const list=[...(swaps.list||[]),s3];
-  await setDoc(swapsRef,{list},{merge:true});
+  await txUpdateList(swapsRef, cur=>[...cur,s3]);
   logUserAction('swap3.request',displayName(me)+' proposed a 3-way swap: '+displayName(me)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(me));
   document.getElementById('swap3Note').value='';
   msg.textContent='3-way swap requested — '+displayName(b)+' and '+displayName(c)+' both need to accept.'; msg.style.color='var(--green)';
 };
 window.acceptSwap3=async function(id){
-  const s=(swaps.list||[]).find(x=>x.id===id);
-  if(!s||s.type!=='3way'||s.status!=='pending_target') return;
-  const [a,b,c]=s.participants;
-  if(me!==b&&me!==c) return;
-  if(s.acceptances?.[me]) return;
-  const acceptances={...(s.acceptances||{}),[me]:true};
-  const bothAccepted=!!(acceptances[b]&&acceptances[c]);
-  const list=(swaps.list||[]).map(x=>x.id===id?{...x,acceptances,status:bothAccepted?'pending_admin':'pending_target'}:x);
-  await setDoc(swapsRef,{list},{merge:true});
-  logUserAction('swap3.accept',displayName(me)+' accepted their leg of a 3-way swap ('+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)+')'+(bothAccepted?' — now awaiting admin approval':''));
+  // Re-reads acceptances from FRESH data inside the transaction and merges this
+  // person's "yes" in, so two participants accepting at nearly the same moment no
+  // longer overwrite each other (which used to silently strand the swap at pending).
+  let acted=false, parts=null, both=false;
+  await txUpdateList(swapsRef, cur=>{
+    acted=false; both=false;
+    const s=cur.find(x=>x.id===id);
+    if(!s||s.type!=='3way'||s.status!=='pending_target') return null;
+    const [a,b,c]=s.participants;
+    if(me!==b&&me!==c) return null;
+    if(s.acceptances?.[me]) return null;   // already accepted on fresh data — don't double-apply
+    const acceptances={...(s.acceptances||{}),[me]:true};
+    const bothAccepted=!!(acceptances[b]&&acceptances[c]);
+    acted=true; parts=[a,b,c]; both=bothAccepted;
+    return cur.map(x=>x.id===id?{...x,acceptances,status:bothAccepted?'pending_admin':'pending_target'}:x);
+  });
+  if(acted){ const [a,b,c]=parts; logUserAction('swap3.accept',displayName(me)+' accepted their leg of a 3-way swap ('+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)+')'+(both?' — now awaiting admin approval':'')); }
 };
 window.declineSwap3=async function(id){
-  const s=(swaps.list||[]).find(x=>x.id===id);
-  if(!s||s.type!=='3way'||s.status!=='pending_target') return;
-  const [a,b,c]=s.participants;
-  if(me!==b&&me!==c) return;
-  const list=(swaps.list||[]).map(x=>x.id===id?{...x,status:'declined_by_target',declinedBy:me}:x);
-  await setDoc(swapsRef,{list},{merge:true});
-  logUserAction('swap3.decline',displayName(me)+' declined their leg of a 3-way swap ('+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)+')');
+  let acted=false, parts=null;
+  await txUpdateList(swapsRef, cur=>{
+    acted=false;
+    const s=cur.find(x=>x.id===id);
+    if(!s||s.type!=='3way'||s.status!=='pending_target') return null;
+    const [a,b,c]=s.participants;
+    if(me!==b&&me!==c) return null;
+    acted=true; parts=[a,b,c];
+    return cur.map(x=>x.id===id?{...x,status:'declined_by_target',declinedBy:me}:x);
+  });
+  if(acted){ const [a,b,c]=parts; logUserAction('swap3.decline',displayName(me)+' declined their leg of a 3-way swap ('+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)+')'); }
 };
 
 // ── Sign-in (same roster + usernames + passcodes as the Vacation Auction —
