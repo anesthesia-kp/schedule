@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 8;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 9;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -76,7 +76,7 @@ table.grid .wkend{background:var(--s3)}
    Vacation Auction's login screen, so the two sites feel like one product.
    No year here (this site isn't year-scoped the way the auction is), so
    "Anesthesia Scheduling" itself takes the large hero position instead. */
-#signGate{position:fixed;inset:0;background:#fff;display:flex;align-items:center;justify-content:center;z-index:200}
+#signGate{position:fixed;inset:0;background:#fff;display:flex;align-items:center;justify-content:center;z-index:200;zoom:1.15}
 #signCard{display:flex;width:100vw;height:100vh;overflow:hidden;background:#fff;text-align:left}
 .login-hero-panel{flex:0 0 42%;background:linear-gradient(160deg,#0f2744 0%,#00507e 60%,#006ba6 100%);color:#fff;padding:36px 44px;display:flex;flex-direction:column;justify-content:center;gap:6px}
 .login-logo{margin-bottom:14px}
@@ -85,8 +85,8 @@ table.grid .wkend{background:var(--s3)}
 .login-form-inner{width:100%;max-width:380px;margin:0 auto}
 .login-form-inner .modal-title{font-size:1.2rem;font-weight:700;margin-bottom:4px;color:#132f49}
 .login-form-inner .modal-sub{font-size:.8rem;color:#48607a;margin-bottom:16px}
-#signCard select#signSel,#signCard input#signPass{width:100%;padding:12px 14px;font-size:1.05rem;font-weight:600;border:2px solid #9fb4c6;border-radius:10px;background:#fff;color:#111827;box-sizing:border-box;margin-bottom:12px}
-#signCard select#signSel:focus,#signCard input#signPass:focus{outline:none;border-color:#006ba6}
+#signCard input#signUsername,#signCard input#signPass,#signCard input#signWelcomePass{width:100%;padding:12px 14px;font-size:1.05rem;font-weight:600;border:2px solid #9fb4c6;border-radius:10px;background:#fff;color:#111827;box-sizing:border-box;margin-bottom:12px}
+#signCard input#signUsername:focus,#signCard input#signPass:focus,#signCard input#signWelcomePass:focus{outline:none;border-color:#006ba6}
 #signCard .btn-primary{background:linear-gradient(135deg,#006ba6,#3b82f6);border:none;color:#fff;width:100%;padding:13px;font-size:1rem;border-radius:10px;margin-top:4px}
 #signCard .btn-primary:hover{background:linear-gradient(135deg,#006ba6,#3b82f6);transform:translateY(-1px);box-shadow:0 6px 16px rgba(96,165,250,.3)}
 @media (max-width:760px){
@@ -291,12 +291,29 @@ table.grid .wkend{background:var(--s3)}
     <!-- RIGHT: form -->
     <div class="login-form-panel">
       <div class="login-form-inner">
-        <h2 class="modal-title">Sign in</h2>
-        <div class="modal-sub">Select your name to continue (same roster as the Vacation Auction).</div>
-        <select id="signSel"></select>
-        <input type="password" id="signPass" placeholder="Passcode" style="display:none">
-        <button class="btn btn-primary" onclick="doSignIn()">Continue</button>
-        <div id="signErr" style="font-size:12px;color:#b91c1c;margin-top:8px"></div>
+        <!-- Returning user one-tap — same pattern as the Vacation Auction's login:
+             always land on this sign-in screen, remember WHO last signed in, but
+             still require a click (and passcode, if enabled) to actually continue. -->
+        <div id="signWelcome" style="display:none">
+          <div style="font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#48607a;margin-bottom:6px">Welcome back</div>
+          <div id="signWelcomeName" style="font-size:1.9rem;font-weight:800;color:#006ba6;margin:0 0 18px"></div>
+          <button class="btn btn-primary" id="signQuickContinueBtn" onclick="quickSignIn()">Continue</button>
+          <div id="signWelcomePwWrap" style="display:none;margin-top:14px">
+            <input type="password" id="signWelcomePass" placeholder="Passcode">
+          </div>
+          <div id="signWelcomeErr" style="font-size:12px;color:#b91c1c;margin-top:8px"></div>
+          <div style="margin-top:14px"><a onclick="signShowPicker()" style="cursor:pointer;color:#006ba6;text-decoration:underline;font-size:.85rem">Sign in as someone else</a></div>
+        </div>
+        <div id="signPicker">
+          <h2 class="modal-title">Sign in</h2>
+          <div class="modal-sub">Enter your username below.</div>
+          <input type="text" id="signUsername" autocomplete="off" placeholder="Username"
+                 oninput="onSignUserInput()" onkeydown="if(event.key==='Enter'){event.preventDefault();doSignIn();}">
+          <input type="password" id="signPass" placeholder="Passcode" style="display:none">
+          <button class="btn btn-primary" onclick="doSignIn()">Continue →</button>
+          <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:#3b566d;cursor:pointer;margin-top:14px"><input type="checkbox" id="signRememberMe"> Remember me on this device</label>
+          <div id="signErr" style="font-size:12px;color:#b91c1c;margin-top:8px"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -710,34 +727,130 @@ window.declineSwap3=async function(id){
   logUserAction('swap3.decline',displayName(me)+' declined their leg of a 3-way swap ('+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)+')');
 };
 
-// ── Sign-in (same roster + passcodes as the Vacation Auction) ──
-function refreshSignSel(){
-  const sel=document.getElementById('signSel');
-  sel.innerHTML='<option value="">— select your name —</option>'+names.map(u=>`<option value="${esc(u)}">${esc(displayName(u))}</option>`).join('');
+// ── Sign-in (same roster + usernames + passcodes as the Vacation Auction —
+// free-text username entry, same mechanism as that site's login). ──
+// Resolve typed text -> a user's initials (the internal id), or null. Matches
+// against each user's CURRENT displayName only — which is their custom
+// username if they've set one, or their initials by default if they haven't.
+// This means: initials work to sign in until a user picks a custom username,
+// and from that point on ONLY the custom username works — bare initials stop
+// resolving, same rule as the Vacation Auction site.
+function resolveUser(raw){
+  const q=(raw||"").trim().toUpperCase();
+  if(!q) return null;
+  for(const n of names){ if(displayName(n).toUpperCase()===q) return n; }
+  return null;
+}
+window.onSignUserInput=function(){
+  const err=document.getElementById('signErr'); if(err) err.textContent='';
+  // Editing the username after the passcode field revealed → collapse back,
+  // same UX as the Vacation Auction's login.
+  const pw=document.getElementById('signPass');
+  if(pw && pw.style.display!=='none'){ pw.style.display='none'; pw.value=''; }
+};
+async function finishSignIn(u){
+  me=u;
+  // Remembering is opt-in via the checkbox — same rule as the Vacation
+  // Auction's login. quickSignIn() pre-checks it before calling this, so
+  // continuing as a remembered user keeps you remembered by default.
+  try{
+    if(document.getElementById('signRememberMe')?.checked) localStorage.setItem('schedUser',u);
+    else localStorage.removeItem('schedUser');
+  }catch(_){}
+  document.getElementById('signGate').style.display='none';
+  document.getElementById('whoami').textContent=displayName(u);
+  renderAll();
 }
 window.doSignIn=async function(){
   const err=document.getElementById('signErr'); err.textContent='';
-  const u=document.getElementById('signSel').value;
-  if(!u){ err.textContent='Select your name.'; return; }
+  const raw=document.getElementById('signUsername').value;
+  const u=resolveUser(raw);
+  if(!u){ err.textContent=raw.trim()?"We don't recognize that username.":'Enter your username.'; return; }
   if(vAdmin.passcodesEnabled===true && passcodesData[u]){
     const pw=document.getElementById('signPass').value;
     if(!pw){ document.getElementById('signPass').style.display='block'; err.textContent='Enter your passcode.'; return; }
     if(await sha256(pw)!==passcodesData[u]){ err.textContent='Wrong passcode.'; return; }
   }
-  me=u; try{ localStorage.setItem('schedUser',u); }catch(_){}
-  document.getElementById('signGate').style.display='none';
-  document.getElementById('whoami').textContent=displayName(u);
-  renderAll();
+  finishSignIn(u);
+};
+
+// ── "Welcome back" one-tap panel — same pattern as the Vacation Auction's
+// login: the site ALWAYS lands on the sign-in screen. If a user is remembered
+// on this device, show their name with a "Continue as X" button instead of
+// the picker — but signing in still takes an explicit click (and passcode,
+// if the admin has them on for this user). Nobody is ever signed in silently. ──
+let _schedRemembered=null;
+let _namesReadySched=false,_usernamesReadySched=false,_passcodesReadySched=false,_adminReadySched=false;
+function _schedSignInDataReady(){ return _namesReadySched&&_usernamesReadySched&&_passcodesReadySched&&_adminReadySched; }
+function initSchedSigninScreen(){
+  if(me) return; // already signed in this session
+  const w=document.getElementById('signWelcome'), p=document.getElementById('signPicker');
+  if(!w||!p) return;
+  let remembered=null; try{ remembered=localStorage.getItem('schedUser'); }catch(_){}
+  if(remembered){
+    // Hold both panels until the roster/usernames/passcodes/admin settings have
+    // loaded (or the 1.5s fallback fires) — rendering earlier flashes raw
+    // initials before the saved username swaps in.
+    if(!_schedSignInDataReady()){ w.style.display='none'; p.style.display='none'; return; }
+    if(names.includes(remembered)){
+      _schedRemembered=remembered;
+      w.style.display='block'; p.style.display='none';
+      const nm=document.getElementById('signWelcomeName'); if(nm) nm.textContent=displayName(remembered);
+      const b=document.getElementById('signQuickContinueBtn'); if(b) b.textContent='Continue as '+displayName(remembered);
+      const pwWrap=document.getElementById('signWelcomePwWrap');
+      if(pwWrap) pwWrap.style.display=(vAdmin.passcodesEnabled===true&&passcodesData[remembered])?'block':'none';
+      const werr=document.getElementById('signWelcomeErr'); if(werr) werr.textContent='';
+      return;
+    }
+  }
+  if(w.style.display!=='block') p.style.display='block';
+}
+window.signShowPicker=function(){
+  const w=document.getElementById('signWelcome'), p=document.getElementById('signPicker');
+  if(w) w.style.display='none'; if(p) p.style.display='block';
+  const err=document.getElementById('signErr'); if(err) err.textContent='';
+  const uEl=document.getElementById('signUsername'); if(uEl){ uEl.value=''; setTimeout(()=>uEl.focus(),60); }
+  const pEl=document.getElementById('signPass'); if(pEl){ pEl.value=''; pEl.style.display='none'; }
+};
+window.quickSignIn=async function(){
+  if(!_schedRemembered) return;
+  const u=_schedRemembered;
+  const err=document.getElementById('signWelcomeErr'); if(err) err.textContent='';
+  const cb=document.getElementById('signRememberMe'); if(cb) cb.checked=true;
+  if(vAdmin.passcodesEnabled===true && passcodesData[u]){
+    const pw=document.getElementById('signWelcomePass')?.value||'';
+    if(!pw){ if(err) err.textContent='Enter your passcode.'; return; }
+    if(await sha256(pw)!==passcodesData[u]){ if(err) err.textContent='Wrong passcode.'; return; }
+  }
+  finishSignIn(u);
 };
 window.switchUser=function(){
   me=null; try{ localStorage.removeItem('schedUser'); }catch(_){}
+  _schedRemembered=null;
   document.getElementById('signGate').style.display='flex';
-  refreshSignSel();
+  // Explicitly reset both panels here rather than relying on
+  // initSchedSigninScreen()'s guarded fallback branch, which only shows the
+  // picker if the welcome panel ISN'T already visible — it won't hide an
+  // already-visible welcome panel on its own.
+  const w=document.getElementById('signWelcome'), p=document.getElementById('signPicker');
+  if(w) w.style.display='none';
+  if(p) p.style.display='block';
+  const uEl=document.getElementById('signUsername'); if(uEl) uEl.value='';
+  const pEl=document.getElementById('signPass'); if(pEl){ pEl.value=''; pEl.style.display='none'; }
+  const wpEl=document.getElementById('signWelcomePass'); if(wpEl) wpEl.value='';
+  const cb=document.getElementById('signRememberMe'); if(cb) cb.checked=false;
 };
-document.getElementById('signSel').addEventListener('change',function(){
-  const u=this.value;
-  document.getElementById('signPass').style.display=(vAdmin.passcodesEnabled===true&&passcodesData[u])?'block':'none';
-});
+// Fallback: unlock the sign-in screen after 1.5s if Firestore hasn't fired by
+// then, so nobody is stuck on a blank sign-in card. Firestore typically
+// responds in <500ms; this only guards against rules issues, auth failures,
+// or network blocks.
+setTimeout(()=>{
+  if(!_schedSignInDataReady()){
+    console.warn('[Sign-in] Firestore did not respond in time — unlocking. Check Firestore rules and anonymous auth.');
+    _namesReadySched=_usernamesReadySched=_passcodesReadySched=_adminReadySched=true;
+    initSchedSigninScreen();
+  }
+}, 1500);
 
 // ── Boot ──
 onAuthStateChanged(auth,u=>{ if(!u) signInAnonymously(auth).catch(e=>console.warn('anon auth',e)); });
@@ -746,14 +859,13 @@ setMonth(ymKey(new Date()));
 onSnapshot(userListRef,snap=>{
   const d=snap.exists()?snap.data():{};
   if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort();
-  refreshSignSel(); renderAll();
-  // restore remembered user once the roster is known
-  if(!me){ let saved=null; try{ saved=localStorage.getItem('schedUser'); }catch(_){}
-    if(saved&&names.includes(saved)){ me=saved; document.getElementById('signGate').style.display='none'; document.getElementById('whoami').textContent=displayName(saved); renderAll(); } }
+  _namesReadySched=true;
+  renderAll();
+  initSchedSigninScreen();
 });
-onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; refreshSignSel(); renderAll(); });
-onSnapshot(passcodesRef,snap=>{ passcodesData=snap.exists()?snap.data():{}; });
-onSnapshot(vAdminRef,snap=>{ vAdmin=snap.exists()?snap.data():{}; });
+onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; _usernamesReadySched=true; renderAll(); initSchedSigninScreen(); });
+onSnapshot(passcodesRef,snap=>{ passcodesData=snap.exists()?snap.data():{}; _passcodesReadySched=true; initSchedSigninScreen(); });
+onSnapshot(vAdminRef,snap=>{ vAdmin=snap.exists()?snap.data():{}; _adminReadySched=true; initSchedSigninScreen(); });
 onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
 onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); });
 onSnapshot(catalogRef,snap=>{ catalog=snap.exists()?snap.data():{shifts:{}}; if(!catalog.shifts)catalog.shifts={}; renderAll(); });
