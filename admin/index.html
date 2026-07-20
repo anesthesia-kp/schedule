@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 27;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 28;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -227,19 +227,25 @@ table.grid th.stick1{background:var(--s2);z-index:3}
     <div class="card">
       <div class="card-title">Add user</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input type="text" class="inp" id="uInitials" style="width:110px;text-transform:uppercase" placeholder="Initials" maxlength="10">
-        <input type="text" class="inp" id="uFullName" style="width:200px" placeholder="Full name">
-        <input type="email" class="inp" id="uEmail" style="width:220px" placeholder="email@address.com">
+        <input type="text" class="inp" id="uInitials" style="width:100px;text-transform:uppercase" placeholder="Initials *" maxlength="10">
+        <input type="text" class="inp" id="uFullName" style="width:170px" placeholder="Full name">
+        <input type="email" class="inp" id="uLoginEmail" style="width:210px" placeholder="Login e-mail (Google)">
+        <input type="email" class="inp" id="uEmail" style="width:200px" placeholder="Secondary e-mail">
+        <input type="number" class="inp" id="uFteNew" style="width:78px" placeholder="FTE" step="0.1" min="0" max="1">
         <button class="btn btn-primary" onclick="addSchedUser()">Add</button>
       </div>
+      <div class="page-sub" style="margin-top:6px">Only <strong>initials</strong> are required. Full name, login e-mail and secondary e-mail are shared with the Vacation Auction; FTE here is this site's own.</div>
       <div id="uMsg" style="font-size:12px;margin-top:8px"></div>
     </div>
     <div class="card">
-      <div class="card-title">All Users (<span id="uCount">0</span>)</div>
-      <div class="page-sub" style="margin-bottom:10px">FTE here is this site's own value — totally separate from the Vacation Auction's FTE, with no copying or syncing between them. The same person can have a different FTE on each site. New users start blank here until you set one.</div>
-      <div style="margin-bottom:10px">
-        <button class="btn btn-danger" style="font-size:12px" onclick="clearAllSchedFte()" title="Blanks out the FTE column below for every user on this site — does not touch the Vacation Auction's FTE">Clear all FTE (this site)</button>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div class="card-title" style="margin:0">All Users (<span id="uCount">0</span>)</div>
+        <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" style="font-size:12px" onclick="saveAllSchedUsers()" title="Save every field for every user on this page at once">💾 Save all changes</button>
+          <button class="btn btn-danger" style="font-size:12px" onclick="clearAllSchedFte()" title="Blanks out the FTE column below for every user on this site — does not touch the Vacation Auction's FTE">Clear all FTE (this site)</button>
+        </div>
       </div>
+      <div class="page-sub" style="margin:8px 0 10px">FTE here is this site's own value — totally separate from the Vacation Auction's FTE, with no copying or syncing between them. The same person can have a different FTE on each site. New users start blank here until you set one.</div>
       <div style="overflow-x:auto"><table class="grid" id="usersGrid" style="width:100%"></table></div>
     </div>
   </div>
@@ -372,33 +378,35 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 <!-- Sign-in gate (same admin list as the Vacation Auction) -->
 <style>
 #authGate{position:fixed;inset:0;z-index:99998;display:flex;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-#authGate .ag-hero{flex:0 0 42%;background:linear-gradient(160deg,#0f2744 0%,#00507e 60%,#006ba6 100%);color:#fff;padding:40px 48px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+/* Amber/gold hero = ADMIN (matches the "Admin Access Only" theme on the landing hub),
+   deliberately DIFFERENT from the blue staff-login hero so the two aren't confused. */
+#authGate .ag-hero{flex:0 0 42%;background:linear-gradient(160deg,#2b1c00 0%,#7a4e00 55%,#b8860b 100%);color:#fff;padding:40px 48px;display:flex;flex-direction:column;justify-content:center;gap:6px}
 #authGate .ag-logo{margin-bottom:16px}
 #authGate .ag-title-solo{font-size:clamp(2.1rem,4.6vw,3.3rem);font-weight:900;line-height:1.08;letter-spacing:.01em}
-#authGate .ag-hero-tag{margin-top:16px;font-size:.78rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#9fd0ec}
+#authGate .ag-hero-tag{margin-top:16px;display:inline-block;align-self:flex-start;background:rgba(0,0,0,.24);border:1px solid rgba(242,215,149,.55);border-radius:999px;padding:5px 14px;font-size:.78rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#f2d795}
 #authGate .ag-panel{flex:1 1 58%;padding:40px 48px;display:flex;flex-direction:column;justify-content:center;overflow-y:auto}
 #authGate .ag-inner{width:100%;max-width:400px;margin:0 auto}
 #authGate .ag-checking{color:#48607a;font-size:13px;letter-spacing:.03em}
 #authGate .ag-h{font-size:1.4rem;font-weight:800;color:#132f49;margin-bottom:6px}
 #authGate .ag-sub{font-size:.85rem;color:#48607a;margin-bottom:20px}
 #authGate .ag-gbtn{display:inline-flex;align-items:center;gap:10px;background:#fff;color:#1f2937;border:1.5px solid #d9e2ec;border-radius:10px;padding:11px 22px;font-size:14px;font-weight:700;cursor:pointer;transition:border-color .15s,box-shadow .15s}
-#authGate .ag-gbtn:hover{border-color:#006ba6;box-shadow:0 6px 18px rgba(0,107,166,.15)}
+#authGate .ag-gbtn:hover{border-color:#b8860b;box-shadow:0 6px 18px rgba(184,134,11,.2)}
 @media (max-width:760px){#authGate{flex-direction:column}#authGate .ag-hero{flex:none;padding:34px 24px 26px;text-align:center;align-items:center}#authGate .ag-panel{flex:1 0 auto;padding:28px 24px 40px;justify-content:flex-start}}
 </style>
 <div id="authGate">
   <div class="ag-hero">
     <div class="ag-logo" aria-hidden="true"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M8 2.5v4M16 2.5v4"/><path d="M8.5 14.5l2.2 2.2 4.3-4.6"/></svg></div>
     <div class="ag-title-solo">Anesthesia<br>Scheduling</div>
-    <div class="ag-hero-tag">Administrator Access</div>
+    <div class="ag-hero-tag">🔒 Administrator Access</div>
   </div>
   <div class="ag-panel">
     <div class="ag-inner">
       <div id="authGateChecking" class="ag-checking">Checking sign-in…</div>
       <div id="authGateWelcome" style="display:none">
         <div style="font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#48607a;margin-bottom:6px">Welcome back</div>
-        <div id="authGateWelcomeEmail" style="font-size:1.4rem;font-weight:800;color:#006ba6;margin:0 0 18px;word-break:break-all"></div>
-        <button class="ag-gbtn" style="background:linear-gradient(135deg,#006ba6,#3b82f6);color:#fff;border-color:transparent;justify-content:center;width:220px" onclick="adminContinue()">Continue →</button>
-        <div style="margin-top:14px"><a onclick="adminSignInAsOther()" style="cursor:pointer;color:#006ba6;text-decoration:underline;font-size:.85rem">Sign in as someone else</a></div>
+        <div id="authGateWelcomeEmail" style="font-size:1.4rem;font-weight:800;color:#8a5a00;margin:0 0 18px;word-break:break-all"></div>
+        <button class="ag-gbtn" style="background:linear-gradient(135deg,#8a5a00,#b8860b);color:#fff;border-color:transparent;justify-content:center;width:220px" onclick="adminContinue()">Continue →</button>
+        <div style="margin-top:14px"><a onclick="adminSignInAsOther()" style="cursor:pointer;color:#8a5a00;text-decoration:underline;font-size:.85rem">Sign in as someone else</a></div>
         <div id="authGateWelcomeErr" style="margin-top:8px;font-size:12px;color:#dc2626"></div>
       </div>
       <div id="authGateCard" style="display:none">
@@ -447,7 +455,11 @@ const userListRef   = doc(db,"vacations","userList");
 const usernamesRef  = doc(db,"vacations","usernames");
 const emailsRef      = doc(db,"vacations","emails"); // SECONDARY e-mail — shared with the Vacation Auction (same roster, same contact info)
 const loginEmailsRef = doc(db,"vacations","loginEmails"); // PRIMARY / Google login e-mail — shared with the Vacation Auction (enter on either site, syncs to both)
-const adminAccessRef= doc(db,"vacations","adminAccess");
+// This site's admin list is INDEPENDENT of the Vacation Auction's. It lives in
+// dailysched/adminAccess so granting/revoking a Daily Schedule admin never touches
+// who can administer the Vacation Auction (and vice-versa). The two built-in
+// default admins still work on both sites via the rules' fallback when a list is empty.
+const adminAccessRef= doc(db,"dailysched","adminAccess");
 const vPhasesRef    = doc(db,"vacations","phases");
 const vApprovalsRef = doc(db,"vacations","approvals");
 
@@ -1139,14 +1151,14 @@ function renderUsersGrid(){
   let rows='';
   for(const u of names){
     const fte=getSchedFTE(u);
+    const sbtn=`<button class="btn btn-success" style="font-size:10px;padding:3px 8px;margin-left:4px" `;
     rows+=`<tr>
       <td style="text-align:left"><strong class="mono">${esc(u)}</strong></td>
-      <td style="text-align:left"><input type="text" class="inp" id="ufn_${esc(u)}" style="width:180px" value="${esc(usernamesData[u]||'')}" placeholder="not set"></td>
-      <td style="text-align:left"><input type="email" class="inp" id="ulem_${esc(u)}" style="width:200px" value="${esc(loginEmailsData[u]||'')}" placeholder="their-google@gmail.com"></td>
-      <td style="text-align:left"><input type="email" class="inp" id="uem_${esc(u)}" style="width:200px" value="${esc(emailsData[u]||'')}" placeholder="optional 2nd address"></td>
-      <td style="text-align:left"><input type="number" class="inp" id="ufte_${esc(u)}" style="width:80px" step="0.1" min="0" max="1" value="${fte!==undefined?esc(fte):''}" placeholder="not set"></td>
+      <td style="text-align:left;white-space:nowrap"><input type="text" class="inp" id="ufn_${esc(u)}" style="width:150px" value="${esc(usernamesData[u]||'')}" placeholder="not set">${sbtn}onclick="saveSchedField('${esc(u)}','fn')">Save</button></td>
+      <td style="text-align:left;white-space:nowrap"><input type="email" class="inp" id="ulem_${esc(u)}" style="width:190px" value="${esc(loginEmailsData[u]||'')}" placeholder="their-google@gmail.com">${sbtn}onclick="saveSchedField('${esc(u)}','lem')">Save</button></td>
+      <td style="text-align:left;white-space:nowrap"><input type="email" class="inp" id="uem_${esc(u)}" style="width:180px" value="${esc(emailsData[u]||'')}" placeholder="optional 2nd address">${sbtn}onclick="saveSchedField('${esc(u)}','em')">Save</button></td>
+      <td style="text-align:left;white-space:nowrap"><input type="number" class="inp" id="ufte_${esc(u)}" style="width:70px" step="0.1" min="0" max="1" value="${fte!==undefined?esc(fte):''}" placeholder="not set">${sbtn}onclick="saveSchedField('${esc(u)}','fte')">Save</button></td>
       <td style="white-space:nowrap">
-        <button class="btn btn-success" style="font-size:11px;padding:4px 10px" onclick="saveSchedUser('${esc(u)}')">Save</button>
         <button class="btn btn-danger" style="font-size:11px;padding:4px 10px" onclick="removeSchedUser('${esc(u)}')">🗑 Remove</button>
       </td>
     </tr>`;
@@ -1203,20 +1215,27 @@ window.addSchedUser=async function(){
   const msg=document.getElementById('uMsg'); msg.textContent='';
   const initials=document.getElementById('uInitials').value.trim().toUpperCase();
   const fullName=document.getElementById('uFullName').value.trim();
+  // Login e-mail is lower-cased so the security rules' case-sensitive match works.
+  const loginEmail=(document.getElementById('uLoginEmail')?.value||'').trim().toLowerCase();
   const email=document.getElementById('uEmail').value.trim();
+  const fteRaw=(document.getElementById('uFteNew')?.value||'').trim();
   if(!initials){ msg.textContent='Enter initials.'; msg.style.color='var(--red)'; return; }
   if(initials.length>10){ msg.textContent='Initials — max 10 characters.'; msg.style.color='var(--red)'; return; }
   if(names.includes(initials)){ msg.textContent=initials+' already exists.'; msg.style.color='var(--red)'; return; }
+  if(loginEmail && !loginEmail.includes('@')){ msg.textContent='Login e-mail must be a valid address.'; msg.style.color='var(--red)'; return; }
+  // Validate FTE up front so an invalid value blocks the whole add.
+  let fteVal=null;
+  if(fteRaw!==''){ const v=parseFloat(fteRaw); if(isNaN(v)||v<0||v>1){ msg.textContent='FTE must be a number between 0 and 1.'; msg.style.color='var(--red)'; return; } fteVal=Math.round(v*10)/10; }
   const updated=[...names,initials].sort();
   await setDoc(userListRef,{users:updated});
+  // Shared with the Vacation Auction (port to the other site): full name, login
+  // e-mail, secondary e-mail. FTE is this site's own and is NOT synced.
   if(fullName) await setDoc(usernamesRef,{[initials]:fullName},{merge:true});
+  if(loginEmail) await setDoc(loginEmailsRef,{[initials]:loginEmail},{merge:true});
   if(email) await setDoc(emailsRef,{[initials]:email},{merge:true});
-  // New user starts with no FTE on this site — this site's FTE is never
-  // copied from, or synced with, the Vacation Auction's FTE. The two are
-  // totally independent; the same person can carry a different number on
-  // each site. The admin sets this site's FTE by hand, below.
-  document.getElementById('uInitials').value=''; document.getElementById('uFullName').value=''; document.getElementById('uEmail').value='';
-  msg.style.color='var(--green)'; msg.textContent='Added '+initials+' — remember to set their FTE on the Vacation Auction admin before the auction opens.';
+  if(fteVal!==null) await mergeFields(schedFteRef,{[initials]:fteVal});
+  ['uInitials','uFullName','uLoginEmail','uEmail','uFteNew'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  msg.style.color='var(--green)'; msg.textContent='Added '+initials+(fteVal===null?' — set their FTE here when ready.':'.');
   auditLog('user.add','Added user '+initials+(fullName?' ('+fullName+')':''));
 };
 window.saveSchedUser=async function(u){
@@ -1242,6 +1261,72 @@ window.saveSchedUser=async function(u){
   if(lem) await setDoc(loginEmailsRef,{[u]:lem},{merge:true}); else await updateDoc(loginEmailsRef,{[u]:deleteField()}).catch(()=>{});
   if(em) await setDoc(emailsRef,{[u]:em},{merge:true}); else await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
   if(fteClear) await mergeFields(schedFteRef,{[u]:deleteField()}); else await mergeFields(schedFteRef,{[u]:fteVal});
+  schedToast('Saved '+u,'ok');
+};
+
+// Brief floating confirmation for the per-field / batch saves below.
+function schedToast(msg,type){
+  let t=document.getElementById('_schedToast');
+  if(!t){ t=document.createElement('div'); t.id='_schedToast'; t.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:100000;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.18);transition:opacity .3s'; document.body.appendChild(t); }
+  t.textContent=msg;
+  t.style.background=type==='err'?'#fde8e8':'#e6f6ec';
+  t.style.color=type==='err'?'#b42318':'#087443';
+  t.style.border='1px solid '+(type==='err'?'#f3b4b4':'#a6e0bd');
+  t.style.opacity='1';
+  clearTimeout(t._h); t._h=setTimeout(()=>{ t.style.opacity='0'; },2200);
+}
+
+// Per-field save — mirrors the Vacation Auction admin's per-field Save buttons.
+// kind: 'fn' full name | 'lem' login e-mail | 'em' secondary e-mail | 'fte' FTE.
+// full name / login e-mail / secondary e-mail are SHARED with the Vacation Auction;
+// FTE is this site's own.
+window.saveSchedField=async function(u,kind){
+  if(kind==='fn'){
+    const v=(document.getElementById('ufn_'+u)?.value||'').trim();
+    if(v) await setDoc(usernamesRef,{[u]:v},{merge:true}); else await updateDoc(usernamesRef,{[u]:deleteField()}).catch(()=>{});
+    schedToast('Saved name · '+u,'ok');
+  } else if(kind==='lem'){
+    const v=(document.getElementById('ulem_'+u)?.value||'').trim().toLowerCase();
+    if(v && !v.includes('@')){ schedToast('Login e-mail must be a valid address','err'); return; }
+    if(v) await setDoc(loginEmailsRef,{[u]:v},{merge:true}); else await updateDoc(loginEmailsRef,{[u]:deleteField()}).catch(()=>{});
+    schedToast('Saved login e-mail · '+u,'ok');
+  } else if(kind==='em'){
+    const v=(document.getElementById('uem_'+u)?.value||'').trim();
+    if(v) await setDoc(emailsRef,{[u]:v},{merge:true}); else await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
+    schedToast('Saved secondary e-mail · '+u,'ok');
+  } else if(kind==='fte'){
+    const raw=(document.getElementById('ufte_'+u)?.value||'').trim();
+    if(raw===''){ await mergeFields(schedFteRef,{[u]:deleteField()}); }
+    else { const val=parseFloat(raw); if(isNaN(val)||val<0||val>1){ schedToast('FTE must be a number between 0 and 1','err'); return; } await mergeFields(schedFteRef,{[u]:Math.round(val*10)/10}); }
+    schedToast('Saved FTE · '+u,'ok');
+  }
+};
+
+// Batch "Save all changes" — reads every row on the page, validates, and writes all
+// four docs once each. Aborts with a clear message if any field is invalid, so a
+// single typo can't half-save the page.
+window.saveAllSchedUsers=async function(){
+  const unameMap={}, lemMap={}, emMap={}, fteMap={}; const bad=[];
+  for(const u of names){
+    const fn=(document.getElementById('ufn_'+u)?.value||'').trim();
+    const lem=(document.getElementById('ulem_'+u)?.value||'').trim().toLowerCase();
+    const em=(document.getElementById('uem_'+u)?.value||'').trim();
+    const raw=(document.getElementById('ufte_'+u)?.value||'').trim();
+    if(lem && !lem.includes('@')) bad.push(u+' — login e-mail');
+    if(raw!==''){ const v=parseFloat(raw); if(isNaN(v)||v<0||v>1) bad.push(u+' — FTE'); else fteMap[u]=Math.round(v*10)/10; }
+    else fteMap[u]=deleteField();
+    unameMap[u]= fn||deleteField();
+    lemMap[u]= lem||deleteField();
+    emMap[u]= em||deleteField();
+  }
+  if(bad.length){ schedToast('Fix before saving: '+bad.slice(0,4).join(', ')+(bad.length>4?'…':''),'err'); return; }
+  // full name / login e-mail / secondary e-mail are shared with the Vacation Auction; FTE is this site's own.
+  await setDoc(usernamesRef,unameMap,{merge:true}).catch(()=>{});
+  await setDoc(loginEmailsRef,lemMap,{merge:true}).catch(()=>{});
+  await setDoc(emailsRef,emMap,{merge:true}).catch(()=>{});
+  await setDoc(schedFteRef,fteMap,{merge:true}).catch(()=>{});
+  auditLog('user.saveAll','Batch-saved all user fields ('+names.length+' users)');
+  schedToast('Saved all '+names.length+' users','ok');
 };
 window.clearAllSchedFte=async function(){
   if(!confirm('Clear the FTE value for every user on this site (Daily Schedule only)?\n\nThe Vacation Auction\'s FTE is untouched — this only blanks the schedule site\'s own FTE column. Users go back to "not set" until entered again. This cannot be undone from here.')) return;
