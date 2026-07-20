@@ -319,7 +319,7 @@ table.grid .wkend{background:var(--s3)}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, updateDoc, arrayUnion, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ── Firebase — same project as the Vacation Auction, but ALL scheduling data
@@ -548,6 +548,9 @@ function renderOpenShifts(){
 window.applyOpen=async function(openId){
   if(!me) return;
   const o=(openShifts.list||[]).find(x=>x.id===openId); if(!o||o.status!=='open') return;
+  // Guard against a double-apply: if this user already has a pending claim for this
+  // open shift, do nothing (prevents duplicate entries in the admin's queue).
+  if((requests.list||[]).some(r=>r.user===me&&r.openId===openId&&r.status==='pending')) return;
   const req={id:'r'+Date.now()+Math.floor(Math.random()*1e4),user:me,date:o.date,type:'claim',shiftId:o.shiftId,openId,note:'',status:'pending',ts:Date.now()};
   await txUpdateList(requestsRef, cur=>[...cur,req]);
 };
@@ -828,8 +831,18 @@ window.userGoogleSignIn=async function(){
 
 // SECOND auth handler (the anonymous bootstrap one below is left intact). Fires on
 // every auth change but only acts on a non-anonymous Google user with an email.
-onAuthStateChanged(auth, u => {
+let _schedSensitiveSubbed=false;
+onAuthStateChanged(auth, async u => {
   if(!(u && !u.isAnonymous && u.email)) return;   // ignore the anon read session
+  // Authenticated now: read the shared login map with OUR OWN credentials, so the
+  // rules can forbid ANONYMOUS reads of it while sign-in still works (no longer
+  // depends on the anonymous bootstrap having pre-loaded loginEmails).
+  try{ const s=await getDoc(loginEmailsRef); loginEmailsData=s.exists()?s.data():{}; }catch(_){}
+  // Roster-load race guard (bug #11): resolveByEmail() scans `names`, so if the
+  // userList snapshot hasn't arrived yet (cold start / slow network) fetch it now —
+  // otherwise a valid clinician is wrongly told "not registered".
+  if(!names.length){ try{ const s=await getDoc(userListRef); const d=s.exists()?s.data():{}; if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort(); }catch(_){} }
+  if(!_schedSensitiveSubbed){ _schedSensitiveSubbed=true; onSnapshot(loginEmailsRef, snap=>{ loginEmailsData=snap.exists()?snap.data():{}; }); }
   const justNow=_userJustSignedIn;
   const initials=resolveByEmail(u.email);
   if(!initials){
@@ -904,8 +917,16 @@ window.quickSignIn=async function(){
   if(!_schedRemembered) return;
   const cb=document.getElementById('signRememberMe'); if(cb) cb.checked=true;
   const err=document.getElementById('signWelcomeErr'); if(err) err.textContent='';
-  // The Google session is already active on return — finish via the existing flow.
-  finishSignIn(_schedRemembered);
+  const cu=auth.currentUser;
+  if(cu && !cu.isAnonymous && cu.email){
+    // Live Google session confirmed — finish via the existing flow.
+    finishSignIn(_schedRemembered);
+  } else {
+    // Remembered session is gone (expired/revoked, or a shared/kiosk device): don't
+    // enter a session-less state where requests/swaps silently fail to save —
+    // re-authenticate for real via the Google picker instead.
+    if(typeof userGoogleSignIn==='function') userGoogleSignIn();
+  }
 };
 window.switchUser=function(){
   me=null; try{ localStorage.removeItem('schedUser'); }catch(_){}
@@ -956,7 +977,7 @@ onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll();
 onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); });
 onSnapshot(catalogRef,snap=>{ catalog=snap.exists()?snap.data():{shifts:{}}; if(!catalog.shifts)catalog.shifts={}; renderAll(); });
 onSnapshot(eligRef,snap=>{ elig=snap.exists()?snap.data():{}; });
-onSnapshot(requestsRef,snap=>{ requests=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(requests.list))requests.list=[]; renderMyRequests(); });
+onSnapshot(requestsRef,snap=>{ requests=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(requests.list))requests.list=[]; renderMyRequests(); renderOpenShifts(); });
 onSnapshot(swapsRef,snap=>{ swaps=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(swaps.list))swaps.list=[]; renderMySwaps(); });
 onSnapshot(openRef,snap=>{ openShifts=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(openShifts.list))openShifts.list=[]; renderOpenShifts(); });
 </script>
