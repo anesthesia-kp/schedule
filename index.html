@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 16;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 17;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -354,6 +354,10 @@ const vAdminRef    = doc(db,"vacations","adminSettings");
 const vPhasesRef   = doc(db,"vacations","phases");
 const vApprovalsRef= doc(db,"vacations","approvals");
 const loginEmailsRef = doc(db,"vacations","loginEmails"); // {INITIALS: google-email} — Google login mapping (shared with the Vacation Auction)
+// True when opened from an admin "Other Systems" portal link (?portal=1). Only skips the
+// "Continue as X" click when a live, registered session is already present — never grants
+// access on its own (the account must still resolve to a registered user).
+const _portalBypass = /[?&]portal=1(?:&|$)/.test(location.search);
 
 const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -861,9 +865,12 @@ onAuthStateChanged(auth, async u => {
     return;
   }
   let remembered=null; try{ remembered=localStorage.getItem('schedUser'); }catch(_){}
+  // Portal bypass (?portal=1 from an admin "Other Systems" link): a live, registered
+  // session enters directly, skipping the "Continue as X" click. Reaches here only after
+  // the account resolved to a registered user, so the flag never grants access by itself.
   // Mirror the returning-user gate: a fresh click this moment (or no remembered
   // value) goes straight in; a restored session on return lands on "Continue as X".
-  if(justNow || !remembered){
+  if(justNow || !remembered || _portalBypass){
     _userJustSignedIn=false;
     showSignErr('');
     finishSignIn(initials);

@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 30;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 31;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -1772,6 +1772,10 @@ window.saveBaseline=async function(){
 
 // ── Admin auth gate — SAME admin list (vacations/adminAccess) as the auction ──
 const DEFAULT_ADMIN_EMAILS=['dr.vacation.goddess@gmail.com','aaronjfrankel@gmail.com'];
+// Opened from an admin "Other Systems" portal link (?portal=1): skip the one-tap Continue
+// hero when this session is ALREADY an authorized schedule admin. Consulted only after
+// checkAdminAccess() passes, so it cannot grant access — a non-admin still gets the gate.
+const _portalBypass = /[?&]portal=1(?:&|$)/.test(location.search);
 let _currentAdminEmail=null;
 async function checkAdminAccess(u){
   if(!u || u.isAnonymous || typeof u.email!=='string' || u.emailVerified===false) return false;
@@ -1816,7 +1820,9 @@ onAuthStateChanged(auth, async u=>{
   const card=document.getElementById('authGateCard');
   if(ok){
     let remembered=false; try{ remembered=!!localStorage.getItem('adminRemembered'); }catch(_){}
-    if(justNow || !remembered){ _enterAdmin(u); return; }
+    // Fresh sign-in, not remembered, or an admin portal jump (?portal=1) with this
+    // already-authorized session → straight in, no Continue click.
+    if(justNow || !remembered || _portalBypass){ _enterAdmin(u); return; }
     _pendingAdminUser=u;
     if(gate) gate.style.display='flex';
     if(card) card.style.display='none';
