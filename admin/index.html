@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 29;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 30;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -173,6 +173,15 @@ table.grid th.stick1{background:var(--s2);z-index:3}
       <button class="btn btn-primary" onclick="autoPopulate()">⚡ Auto-Populate Month</button>
       <button class="btn btn-primary" onclick="autoPopulateYear()">⚡ Auto-Populate Year</button>
       <button class="btn btn-danger" onclick="clearMonth()">Clear Month</button>
+    </div>
+    <div class="card" style="padding:10px 14px;margin-bottom:10px">
+      <div style="font-size:12px;color:var(--t2)"><b>Call fairness:</b> Auto-Populate balances each shift using a <b>rolling 12-month average</b> — it counts the last 12 months of the actual saved schedule (plus each person's starting baseline below) and gives the next shift to whoever has done it least.</div>
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--t1)">⚙️ Set starting baseline — prior call not yet in the system</summary>
+        <div style="font-size:11px;color:var(--t2);margin:6px 0 8px">Enter how many of each call shift each person has already done in the past ~12 months. These seed the rolling window so fairness starts from the right place. As the system builds a full 12-month history, lower these toward 0.</div>
+        <div style="overflow-x:auto"><table class="grid" id="baselineGrid" style="width:auto"></table></div>
+        <button class="btn btn-primary" style="font-size:12px;margin-top:8px" onclick="saveBaseline()">💾 Save baseline</button>
+      </details>
     </div>
     <div class="card" style="padding:10px 12px">
       <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Click any cell to assign a day shift, call, or day off. <b>VAC</b> comes from the auction automatically and cannot be edited here. Users see every change immediately.</div>
@@ -447,7 +456,8 @@ const eligRef     = doc(db,"dailysched","eligibility");
 const requestsRef = doc(db,"dailysched","requests");
 const swapsRef    = doc(db,"dailysched","swaps");
 const openRef     = doc(db,"dailysched","openShifts");
-const totalsRef   = doc(db,"dailysched","callTotals"); // {user:{shiftId:n}} cumulative — keeps call fair across months
+const totalsRef   = doc(db,"dailysched","callTotals"); // legacy counter — no longer used for fairness (see windowShiftCounts)
+const callBaselineRef = doc(db,"dailysched","callBaseline"); // {user:{shiftId:n}} admin-set STARTING baseline (prior call not yet in the schedule)
 const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);
 const schedFteRef = doc(db,"dailysched","fteMap"); // THIS SITE's own FTE per user — totally separate from the Vacation Auction's FTE doc; the same person can carry a different number on each site. Never read from or written to the auction's fteMap — no seeding, no syncing, no fallback to it.
 const auditRef    = doc(db,"dailysched","auditLog"); // {log:[{id,ts,admin,action,detail}]} — who changed what, when
@@ -471,7 +481,7 @@ let auditLogData={log:[]};
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, totals={}, monthData={days:{}};
 let curYM=null, unsubMonth=null, cellSel=null;
 let statsMode='month', statsYearLoadedFor=null, statsYearData=null;
-let schedFte={}, schedFteLoaded=false, namesLoaded=false;
+let schedFte={}, schedFteLoaded=false, namesLoaded=false, baselineData={};
 function getSchedFTE(u){ return schedFte[u]; } // undefined = not set — no default on this site, ever
 
 // Debug helper — the variables above live inside this module script, which
@@ -858,11 +868,33 @@ window.saveCell=async function(clear){
   closeCellModal();
 };
 
+// ── Fairness: rolling 12-month window ──
+// Counts each user's day/call assignments over the `priorMonths` calendar months
+// BEFORE endYm, read from the ACTUAL saved schedule (never a stored counter that
+// drifts), PLUS the admin-entered starting baseline (call already done in the past
+// ~12 months that isn't in the system yet). The caller adds the current month on top,
+// so window + current = a rolling 12-month view. `cache` (ym -> days) avoids re-reading
+// the same month and lets a full-year run see the months it just filled.
+async function windowShiftCounts(endYm, priorMonths, cache){
+  const counts={};
+  // Seed with the admin baseline for every user/shift.
+  for(const u in (baselineData||{})){ const row=baselineData[u]||{}; for(const s in row){ const n=Number(row[s])||0; if(n>0) counts[u+'|'+s]=(counts[u+'|'+s]||0)+n; } }
+  const [ey,em]=endYm.split('-').map(Number);
+  for(let k=priorMonths;k>=1;k--){
+    const d=new Date(ey, em-1-k, 1);
+    const ym=d.getFullYear()+'-'+pad(d.getMonth()+1);
+    let days = (cache && cache[ym]!==undefined) ? cache[ym] : null;
+    if(days===null){ try{ const snap=await getDoc(monthRef(ym)); days=(snap.exists()&&snap.data().days)||{}; }catch(_){ days={}; } if(cache) cache[ym]=days; }
+    for(const dd in days) for(const u in days[dd]){ const c=days[dd][u]; if(c&&c.day) counts[u+'|'+c.day]=(counts[u+'|'+c.day]||0)+1; if(c&&c.call) counts[u+'|'+c.call]=(counts[u+'|'+c.call]||0)+1; }
+  }
+  return counts;
+}
+
 // ── Auto-populate ──
 // Fills EVERY day of the visible month: each day shift and each call shift in
 // the catalog gets one eligible user. Skips users on vacation, on a day off,
 // or already holding that slot type that day. Fairness: pick the eligible user
-// with the LOWEST total count for that shift (cumulative callTotals + this
+// with the LOWEST rolling-12-month count for that shift (window + baseline + this
 // month so far) — this is what keeps call16/call24/OB PM evenly spread.
 window.autoPopulate=async function(){
   const [y,m]=curYM.split('-').map(Number);
@@ -870,11 +902,11 @@ window.autoPopulate=async function(){
   if(!confirm('Auto-populate '+MS[m-1]+' '+y+'?\n\nFills every empty slot for every shift in the catalog using eligibility + even call distribution. Existing assignments are kept. Users see changes immediately.')) return;
   const vac=vacationDays();
   const days=JSON.parse(JSON.stringify(monthData.days||{}));
-  const counts={}; // user|shift → count (cumulative + this month)
-  const cnt=(u,s)=>counts[u+'|'+s]??((totals?.[u]?.[s]||0)+0);
-  for(const u of names) for(const [id] of shiftList()) counts[u+'|'+id]=(totals?.[u]?.[id]||0);
+  // Rolling 12-month fairness: 11 prior months of real schedule + the admin baseline…
+  const counts= await windowShiftCounts(curYM, 11);
+  const cnt=(u,s)=>counts[u+'|'+s]||0;
+  // …plus THIS month's already-placed assignments (the 12th month of the window).
   for(const dd in days) for(const u in days[dd]){ const c=days[dd][u]; if(c.day) counts[u+'|'+c.day]=(counts[u+'|'+c.day]||0)+1; if(c.call) counts[u+'|'+c.call]=(counts[u+'|'+c.call]||0)+1; }
-  const newTotals=JSON.parse(JSON.stringify(totals||{}));
   let filled=0, unfillable=[];
   for(let d=1;d<=nDays;d++){
     const dd=pad(d), dk=curYM+'-'+dd;
@@ -894,13 +926,11 @@ window.autoPopulate=async function(){
         const pick=cands[0];
         days[dd][pick]=Object.assign({day:null,call:null,off:false},days[dd][pick],{[slot]:id});
         counts[pick+'|'+id]=cnt(pick,id)+1;
-        newTotals[pick]=newTotals[pick]||{}; newTotals[pick][id]=(newTotals[pick][id]||0)+1;
         filled++; have++;
       }
     }
   }
   await setDoc(monthRef(curYM),{days},{merge:true});
-  await setDoc(totalsRef,newTotals);
   auditLog('autopopulate.month','Auto-populated '+MS[m-1]+' '+y+' — '+filled+' assignments'+(unfillable.length?', '+unfillable.length+' unfillable':''));
   alert('Auto-populate complete — '+filled+' assignments made.'+(unfillable.length?'\n\n⚠️ Could not fill (no eligible user):\n'+unfillable.slice(0,15).join('\n')+(unfillable.length>15?'\n…and '+(unfillable.length-15)+' more':''):''));
 };
@@ -915,16 +945,17 @@ window.autoPopulateYear=async function(){
   const year=curYM?Number(curYM.split('-')[0]):new Date().getFullYear();
   if(!confirm('Auto-populate ALL 12 months of '+year+' (January–December)?\n\nRuns the same fill as Auto-Populate Month, one month at a time in order, keeping existing assignments and balancing call fairness across the whole year. This can take a few seconds and writes to all 12 months.')) return;
   const vac=vacationDays();
-  let liveTotals=JSON.parse(JSON.stringify(totals||{}));
+  const _cache={}; // ym -> days; updated as we fill each month so later rolling windows see this run's fresh fills
   let grandFilled=0; const grandUnfillable=[];
   for(let m=1;m<=12;m++){
     const ym=year+'-'+pad(m);
     const nDays=new Date(year,m,0).getDate();
-    let days={};
-    try{ const snap=await getDoc(monthRef(ym)); if(snap.exists()&&snap.data().days) days=JSON.parse(JSON.stringify(snap.data().days)); }catch(_){}
-    const counts={};
-    const cnt=(u,s)=>counts[u+'|'+s]??((liveTotals?.[u]?.[s]||0));
-    for(const u of names) for(const [id] of shiftList()) counts[u+'|'+id]=(liveTotals?.[u]?.[id]||0);
+    let days = (_cache[ym]!==undefined) ? _cache[ym] : {};
+    if(_cache[ym]===undefined){ try{ const snap=await getDoc(monthRef(ym)); if(snap.exists()&&snap.data().days) days=JSON.parse(JSON.stringify(snap.data().days)); }catch(_){} }
+    // Rolling 12-month window (prior 11 months + baseline), reusing the cache so this
+    // year-run's already-filled earlier months count toward later months' fairness.
+    const counts= await windowShiftCounts(ym, 11, _cache);
+    const cnt=(u,s)=>counts[u+'|'+s]||0;
     for(const dd in days) for(const u in days[dd]){ const c=days[dd][u]; if(c.day) counts[u+'|'+c.day]=(counts[u+'|'+c.day]||0)+1; if(c.call) counts[u+'|'+c.call]=(counts[u+'|'+c.call]||0)+1; }
     for(let d=1;d<=nDays;d++){
       const dd=pad(d), dk=ym+'-'+dd;
@@ -940,14 +971,13 @@ window.autoPopulateYear=async function(){
           const pick=cands[0];
           days[dd][pick]=Object.assign({day:null,call:null,off:false},days[dd][pick],{[slot]:id});
           counts[pick+'|'+id]=cnt(pick,id)+1;
-          liveTotals[pick]=liveTotals[pick]||{}; liveTotals[pick][id]=(liveTotals[pick][id]||0)+1;
           grandFilled++; have++;
         }
       }
     }
     await setDoc(monthRef(ym),{days},{merge:true});
+    _cache[ym]=days; // so later months' rolling windows include this month's fresh fills
   }
-  await setDoc(totalsRef,liveTotals);
   auditLog('autopopulate.year','Auto-populated all of '+year+' — '+grandFilled+' assignments'+(grandUnfillable.length?', '+grandUnfillable.length+' unfillable':''));
   alert('Auto-populate year complete for '+year+' — '+grandFilled+' assignments made across all 12 months.'+(grandUnfillable.length?'\n\n⚠️ Could not fill (no eligible user) — '+grandUnfillable.length+' slot(s):\n'+grandUnfillable.slice(0,15).join('\n')+(grandUnfillable.length>15?'\n…and '+(grandUnfillable.length-15)+' more':''):''));
 };
@@ -1708,7 +1738,37 @@ function renderDash(){
   document.getElementById('dashUserSub').textContent=names.length?(noFte?(noFte+' of '+names.length+' user(s) have no FTE set here.'):'Every user has an FTE set.'):'No users yet.';
 }
 
-function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); fillOpenShiftSel(); renderAudit(); renderDash(); }
+function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); }
+
+// ── Call-fairness baseline table (users × call shifts) ──
+function renderBaseline(){
+  const g=document.getElementById('baselineGrid'); if(!g) return;
+  const callShifts=[...shiftList()].filter(([id,s])=>s.kind==='call');
+  if(!names.length){ g.innerHTML='<tr><td style="font-size:11px;color:var(--t3)">No users yet.</td></tr>'; return; }
+  if(!callShifts.length){ g.innerHTML='<tr><td style="font-size:11px;color:var(--t3)">No call shifts in the catalog yet.</td></tr>'; return; }
+  let head='<tr><th style="text-align:left">User</th>'+callShifts.map(([id,s])=>`<th>${esc(s.label||id)}</th>`).join('')+'</tr>';
+  let rows='';
+  for(const u of names){
+    rows+='<tr><td style="text-align:left"><strong class="mono">'+esc(u)+'</strong></td>'+
+      callShifts.map(([id])=>{ const v=(baselineData[u]&&baselineData[u][id]!==undefined)?baselineData[u][id]:''; return `<td><input type="number" min="0" step="1" class="inp" id="bl_${esc(u)}_${esc(id)}" style="width:60px" value="${v!==''?esc(v):''}" placeholder="0"></td>`; }).join('')+
+      '</tr>';
+  }
+  g.innerHTML=head+rows;
+}
+window.saveBaseline=async function(){
+  const callShifts=[...shiftList()].filter(([id,s])=>s.kind==='call');
+  const map={};
+  for(const u of names){
+    for(const [id] of callShifts){
+      const el=document.getElementById('bl_'+u+'_'+id); if(!el) continue;
+      const raw=(el.value||'').trim();
+      if(raw!==''){ const n=Math.max(0,Math.round(Number(raw)||0)); if(n>0){ if(!map[u]) map[u]={}; map[u][id]=n; } }
+    }
+  }
+  await setDoc(callBaselineRef, map); // the table is the full source of truth (blank = 0)
+  if(typeof schedToast==='function') schedToast('Saved call-fairness baseline','ok');
+  auditLog('fairness.baseline','Updated call-fairness starting baseline');
+};
 
 // ── Admin auth gate — SAME admin list (vacations/adminAccess) as the auction ──
 const DEFAULT_ADMIN_EMAILS=['dr.vacation.goddess@gmail.com','aaronjfrankel@gmail.com'];
@@ -1891,6 +1951,7 @@ authReady.then(()=>{
   onSnapshot(swapsRef,snap=>{ swaps=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(swaps.list))swaps.list=[]; renderSwaps(); });
   onSnapshot(openRef,snap=>{ openShifts=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(openShifts.list))openShifts.list=[]; renderOpenAdmin(); });
   onSnapshot(totalsRef,snap=>{ totals=snap.exists()?snap.data():{}; });
+  onSnapshot(callBaselineRef,snap=>{ baselineData=snap.exists()?snap.data():{}; renderBaseline(); });
 });
 </script>
 </body>
