@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 34;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 35;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -31,7 +31,21 @@
    different person's e-mail) into any field on this site. Applies to every field
    present now and any added later (user rows, modals, report fields, etc.). */
 (function(){
-  function off(el){ try{ el.setAttribute('autocomplete','off'); }catch(e){} }
+  function off(el){
+    try{
+      // "new-password" reliably stops Chrome's contact/e-mail autofill where "off" is
+      // ignored; a random name breaks its field-name matching; and holding text fields
+      // readonly until first focus sidesteps the on-load autofill that mis-fills boxes.
+      el.setAttribute('autocomplete','new-password');
+      var tag=el.tagName, t=(el.type||'').toLowerCase();
+      if(tag==='INPUT' && t!=='radio' && t!=='checkbox' && !el.name){ el.name='nf_'+Math.random().toString(36).slice(2); }
+      if(tag==='INPUT' && /^(text|email|tel|search|url|number|)$/.test(t) && !el.__afRO){
+        el.__afRO=true; el.setAttribute('readonly','readonly');
+        var unlock=function(){ el.removeAttribute('readonly'); };
+        el.addEventListener('focus',unlock); el.addEventListener('mousedown',unlock); el.addEventListener('touchstart',unlock);
+      }
+    }catch(e){}
+  }
   function sweep(root){ try{ (root||document).querySelectorAll('input,select,textarea').forEach(off); }catch(e){} }
   function start(){
     sweep(document);
