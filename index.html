@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 19;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 21;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -388,7 +388,9 @@ const usernamesRef = doc(db,"vacations","usernames");
 const passcodesRef = doc(db,"vacations","passcodes");
 const vAdminRef    = doc(db,"vacations","adminSettings");
 const vPhasesRef   = doc(db,"vacations","phases");
-const vApprovalsRef= doc(db,"vacations","approvals");
+// [C-2] vacations/approvals holds LIVE mid-phase decisions — never read here. The
+// auction's Critical invariant is that users must not see decisions before results
+// are released; H-4 rules also now block this read from the schedule site.
 const loginEmailsRef = doc(db,"vacations","loginEmails"); // {INITIALS: google-email} — Google login mapping (shared with the Vacation Auction)
 // True when opened from an admin "Other Systems" portal link (?portal=1). Only skips the
 // "Continue as X" click when a live, registered session is already present — never grants
@@ -397,7 +399,7 @@ const _portalBypass = /[?&]portal=1(?:&|$)/.test(location.search);
 
 const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-let names=[], usernamesData={}, passcodesData={}, vAdmin={}, vPhases={}, vApprovals={};
+let names=[], usernamesData={}, passcodesData={}, vAdmin={}, vPhases={};
 let loginEmailsData={}; // {INITIALS: "their-google-email"} — shared doc mapping Google accounts to accounts
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, monthData={days:{}};
 let me=null, curYM=null, unsubMonth=null;
@@ -428,7 +430,14 @@ function logUserAction(action,detail){
   const entry={id:Math.random().toString(36).slice(2),ts:Date.now(),admin:displayName(me),action,detail};
   (async()=>{
     try{ await updateDoc(auditRef,{log:arrayUnion(entry)}); }
-    catch(e){ await setDoc(auditRef,{log:[entry]},{merge:true}).catch(()=>{}); }
+    catch(e){
+      // Only create-and-seed when the doc genuinely doesn't exist yet. On any
+      // other transient failure (unavailable / deadline-exceeded / size limit),
+      // a setDoc-merge would REPLACE the whole log array with one entry and wipe
+      // the history — so in that case just warn and leave the log intact. [M-17]
+      if(e && e.code==='not-found'){ await setDoc(auditRef,{log:[entry]},{merge:true}).catch(()=>{}); }
+      else { console.warn('audit append failed',e); }
+    }
   })();
 }
 async function sha256(t){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
@@ -459,9 +468,21 @@ function vacationDays(){
     const [y,m,d]=wk.split('-').map(Number); const base=new Date(y,m-1,d);
     for(let i=0;i<7;i++){ const dd=new Date(base); dd.setDate(base.getDate()+i); map[u+'|'+dKey(dd)]=true; }
   };
+  // [C-2] Only paint winners from RELEASED phases — mirrors the auction's Critical
+  // invariant that clinicians never see embargoed decisions. A completed phase's
+  // winners are visible only once its results were emailed (sent) OR a later phase
+  // has completed (it is no longer the newest completed phase). No live-doc read.
+  const curPh=Number(vPhases?.currentPhase||1);
+  const sent=vPhases?.resultsSent||{};
   const cps=vPhases?.completedPhases||{};
-  for(const ph in cps){ const ap=cps[ph]?.approvals||{}; for(const wk in ap) for(const u of (ap[wk]||[])) addWeek(u,wk); }
-  for(const wk in (vApprovals||{})) for(const u of (vApprovals[wk]||[])) addWeek(u,wk);
+  const completedNums=Object.keys(cps).map(Number).filter(n=>!isNaN(n));
+  const maxCompleted=completedNums.length?Math.max(...completedNums):0;
+  for(const ph of completedNums){
+    if(ph>=curPh) continue;                       // not a prior, decided phase
+    if(!(sent[ph]||ph<maxCompleted)) continue;    // still embargoed (newest completed, results not yet emailed)
+    const ap=cps[ph]?.approvals||{};
+    for(const wk in ap) for(const u of (ap[wk]||[])) addWeek(u,wk);
+  }
   return map;
 }
 
@@ -589,11 +610,16 @@ function renderOpenShifts(){
 window.applyOpen=async function(openId){
   if(!me) return;
   const o=(openShifts.list||[]).find(x=>x.id===openId); if(!o||o.status!=='open') return;
-  // Guard against a double-apply: if this user already has a pending claim for this
-  // open shift, do nothing (prevents duplicate entries in the admin's queue).
+  // Cheap local short-circuit against an obvious double-apply.
   if((requests.list||[]).some(r=>r.user===me&&r.openId===openId&&r.status==='pending')) return;
   const req={id:'r'+Date.now()+Math.floor(Math.random()*1e4),user:me,date:o.date,type:'claim',shiftId:o.shiftId,openId,note:'',status:'pending',ts:Date.now()};
-  await txUpdateList(requestsRef, cur=>[...cur,req]);
+  // [L-9] Authoritative dedup INSIDE the transaction on the fresh list — a fast double-click
+  // (before the button flips to "applied") or the same user in two tabs can otherwise create
+  // duplicate pending claims, which the admin could then approve twice. Re-check and abort.
+  await txUpdateList(requestsRef, cur=>{
+    if(cur.some(r=>r.user===me&&r.openId===openId&&r.status==='pending')) return null;
+    return [...cur,req];
+  });
 };
 
 function renderMyRequests(){
@@ -968,8 +994,18 @@ window.quickSignIn=async function(){
   const err=document.getElementById('signWelcomeErr'); if(err) err.textContent='';
   const cu=auth.currentUser;
   if(cu && !cu.isAnonymous && cu.email){
-    // Live Google session confirmed — finish via the existing flow.
-    finishSignIn(_schedRemembered);
+    // [M-15] The live Google session is the ONLY identity source — verify it maps to
+    // the remembered user before continuing. On a shared/kiosk device a stale
+    // localStorage('schedUser') plus any other registered Google login could
+    // otherwise let the current person operate the whole UI as someone else.
+    const initials=resolveByEmail(cu.email);
+    if(initials && initials===_schedRemembered){
+      finishSignIn(initials);
+    } else {
+      // Live account doesn't match the remembered user (or isn't registered) —
+      // force an explicit re-pick rather than trusting localStorage.
+      signShowPicker();
+    }
   } else {
     // Remembered session is gone (expired/revoked, or a shared/kiosk device): don't
     // enter a session-less state where requests/swaps silently fail to save —
@@ -1026,7 +1062,8 @@ onSnapshot(passcodesRef,snap=>{ passcodesData=snap.exists()?snap.data():{}; _pas
 onSnapshot(vAdminRef,snap=>{ vAdmin=snap.exists()?snap.data():{}; _adminReadySched=true; initSchedSigninScreen(); });
 onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; });
 onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
-onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); });
+// [C-2] Removed onSnapshot(vApprovalsRef,…) — the schedule site no longer reads live
+// auction approvals (privacy leak + H-4 rules now deny this read anyway).
 onSnapshot(catalogRef,snap=>{ catalog=snap.exists()?snap.data():{shifts:{}}; if(!catalog.shifts)catalog.shifts={}; renderAll(); });
 onSnapshot(eligRef,snap=>{ elig=snap.exists()?snap.data():{}; });
 onSnapshot(requestsRef,snap=>{ requests=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(requests.list))requests.list=[]; renderMyRequests(); renderOpenShifts(); });
