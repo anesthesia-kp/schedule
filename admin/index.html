@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 38;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 39;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -264,7 +264,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
       <div class="page-sub" style="margin-bottom:10px">Google accounts allowed to open this admin page and make admin decisions — this controls the <strong>Daily Schedule only</strong>. Vacation Auction admins are a separate list, managed on the auction admin site's own Admin Access panel. Every admin here is equal; any admin may grant or revoke any other. The list can never be emptied.</div>
       <div id="adminAccessList" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input type="email" id="newAdminEmail" class="inp" style="width:250px" placeholder="their-account@gmail.com">
+        <input type="email" id="newAdminEmail" class="inp" autocomplete="off" style="width:250px" placeholder="their-account@gmail.com">
         <button class="btn btn-primary" onclick="addAdminEmail()">Grant Admin Access</button>
       </div>
       <div id="adminAccessMsg" style="font-size:12px;margin-top:8px"></div>
@@ -272,11 +272,11 @@ table.grid th.stick1{background:var(--s2);z-index:3}
     <div class="card">
       <div class="card-title">Add user</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input type="text" class="inp" id="uInitials" style="width:100px;text-transform:uppercase" placeholder="Initials *" maxlength="10">
-        <input type="text" class="inp" id="uFullName" style="width:170px" placeholder="Full name">
-        <input type="email" class="inp" id="uLoginEmail" style="width:210px" placeholder="Login e-mail (Google)">
-        <input type="email" class="inp" id="uEmail" style="width:200px" placeholder="KP e-mail">
-        <input type="number" class="inp" id="uFteNew" style="width:78px" placeholder="FTE" step="0.1" min="0" max="1">
+        <input type="text" class="inp" autocomplete="off" id="uInitials" style="width:100px;text-transform:uppercase" placeholder="Initials *" maxlength="10">
+        <input type="text" class="inp" autocomplete="off" id="uFullName" style="width:170px" placeholder="Full name">
+        <input type="email" class="inp" autocomplete="off" id="uLoginEmail" style="width:210px" placeholder="Login e-mail (Google)">
+        <input type="email" class="inp" autocomplete="off" id="uEmail" style="width:200px" placeholder="KP e-mail">
+        <input type="number" class="inp" autocomplete="off" id="uFteNew" style="width:78px" placeholder="FTE" step="0.1" min="0" max="1">
         <button class="btn btn-primary" onclick="addSchedUser()">Add</button>
       </div>
       <div class="page-sub" style="margin-top:6px">Only <strong>initials</strong> are required. Full name, login e-mail and KP e-mail are shared with the Vacation Auction; FTE here is this site's own.</div>
@@ -1320,10 +1320,10 @@ function renderUsersGrid(){
     const sbtn=`<button class="btn btn-success" style="font-size:10px;padding:3px 8px;margin-left:4px" `;
     rows+=`<tr>
       <td style="text-align:left"><strong class="mono">${esc(u)}</strong></td>
-      <td style="text-align:left;white-space:nowrap"><input type="text" class="inp" id="ufn_${esc(u)}" style="width:150px" value="${esc(usernamesData[u]||'')}" placeholder="not set">${sbtn}onclick="saveSchedField('${esc(u)}','fn')">Save</button></td>
-      <td style="text-align:left;white-space:nowrap"><input type="email" class="inp" id="ulem_${esc(u)}" style="width:190px" value="${esc(loginEmailsData[u]||'')}" placeholder="their-google@gmail.com">${sbtn}onclick="saveSchedField('${esc(u)}','lem')">Save</button></td>
-      <td style="text-align:left;white-space:nowrap"><input type="email" class="inp" id="uem_${esc(u)}" style="width:180px" value="${esc(emailsData[u]||'')}" placeholder="KP e-mail">${sbtn}onclick="saveSchedField('${esc(u)}','em')">Save</button></td>
-      <td style="text-align:left;white-space:nowrap"><input type="number" class="inp" id="ufte_${esc(u)}" style="width:70px" step="0.1" min="0" max="1" value="${fte!==undefined?esc(fte):''}" placeholder="not set">${sbtn}onclick="saveSchedField('${esc(u)}','fte')">Save</button></td>
+      <td style="text-align:left;white-space:nowrap"><input type="text" class="inp" autocomplete="off" id="ufn_${esc(u)}" style="width:150px" value="${esc(usernamesData[u]||'')}" placeholder="not set">${sbtn}onclick="saveSchedField('${esc(u)}','fn')">Save</button></td>
+      <td style="text-align:left;white-space:nowrap"><input type="email" class="inp" autocomplete="off" id="ulem_${esc(u)}" style="width:190px" value="${esc(loginEmailsData[u]||'')}" placeholder="their-google@gmail.com">${sbtn}onclick="saveSchedField('${esc(u)}','lem')">Save</button></td>
+      <td style="text-align:left;white-space:nowrap"><input type="email" class="inp" autocomplete="off" id="uem_${esc(u)}" style="width:180px" value="${esc(emailsData[u]||'')}" placeholder="KP e-mail">${sbtn}onclick="saveSchedField('${esc(u)}','em')">Save</button></td>
+      <td style="text-align:left;white-space:nowrap"><input type="number" class="inp" autocomplete="off" id="ufte_${esc(u)}" style="width:70px" step="0.1" min="0" max="1" value="${fte!==undefined?esc(fte):''}" placeholder="not set">${sbtn}onclick="saveSchedField('${esc(u)}','fte')">Save</button></td>
       <td style="white-space:nowrap">
         <button class="btn btn-danger" style="font-size:11px;padding:4px 10px" onclick="removeSchedUser('${esc(u)}')">🗑 Remove</button>
       </td>
