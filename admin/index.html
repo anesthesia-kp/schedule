@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 39;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 40;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -502,6 +502,7 @@ const userListRef   = doc(db,"vacations","userList");
 const usernamesRef  = doc(db,"vacations","usernames");
 const emailsRef      = doc(db,"vacations","emails"); // SECONDARY e-mail — shared with the Vacation Auction (same roster, same contact info)
 const loginEmailsRef = doc(db,"vacations","loginEmails"); // PRIMARY / Google login e-mail — shared with the Vacation Auction (enter on either site, syncs to both)
+const emailToUserRef = doc(db,"vacations","emailToUser"); // [H-3] reverse map the auction security rules read to confine each user to their OWN bids — MUST be re-synced after any loginEmails change
 // This site's admin list is INDEPENDENT of the Vacation Auction's. It lives in
 // dailysched/adminAccess so granting/revoking a Daily Schedule admin never touches
 // who can administer the Vacation Auction (and vice-versa). The two built-in
@@ -1377,6 +1378,24 @@ window.removeAdminEmail=async function(email){
   auditLog('admin.revoke','Revoked admin access for '+email);
   if(self) window.adminSignOut();
 };
+// [H-3] Rebuild vacations/emailToUser from the CURRENT loginEmails doc. Called after every
+// login-e-mail write on this site — without it, a user whose address was entered here can
+// sign in to the auction but every bid write is rejected by the security rules.
+async function syncEmailToUserFromLogin(){
+  try{
+    const s=await getDoc(loginEmailsRef);
+    const led=s.exists()?s.data():{};
+    const map={};
+    for(const k of Object.keys(led)){ const em=String(led[k]||'').trim().toLowerCase(); if(!em||!em.includes('@')) continue; (map[em]=map[em]||[]).push(k); }
+    await setDoc(emailToUserRef,map);
+    return true;
+  }catch(e){
+    schedToast((e&&e.code==='permission-denied')
+      ?'E-mail saved, but the auction bid-security map needs a Vacation Auction admin — open the Vacation admin site once to auto-sync'
+      :'E-mail saved, but the login map sync failed — open the Vacation admin site to re-sync','err');
+    return false;
+  }
+}
 window.addSchedUser=async function(){
   const msg=document.getElementById('uMsg'); msg.textContent='';
   const initials=document.getElementById('uInitials').value.trim().toUpperCase();
@@ -1398,11 +1417,12 @@ window.addSchedUser=async function(){
   // (in dailysched/adminAccess but not vacations/adminAccess) gets permission-denied —
   // surface that clearly instead of aborting silently with the fields still filled.
   try{
-    await setDoc(userListRef,{users:updated});
+    try{ await updateDoc(userListRef,{users:arrayUnion(initials)}); }
+    catch(e2){ if(e2&&e2.code==='not-found') await setDoc(userListRef,{users:[initials]},{merge:true}); else throw e2; }
     // Shared with the Vacation Auction (port to the other site): full name, login
     // e-mail, secondary e-mail. FTE is this site's own and is NOT synced.
     if(fullName) await setDoc(usernamesRef,{[initials]:fullName},{merge:true});
-    if(loginEmail) await setDoc(loginEmailsRef,{[initials]:loginEmail},{merge:true});
+    if(loginEmail){ await setDoc(loginEmailsRef,{[initials]:loginEmail},{merge:true}); await syncEmailToUserFromLogin(); }
     if(email) await setDoc(emailsRef,{[initials]:email},{merge:true});
     if(fteVal!==null) await mergeFields(schedFteRef,{[initials]:fteVal});
   }catch(e){
@@ -1437,6 +1457,7 @@ window.saveSchedUser=async function(u){
   // Login (Google) e-mail is shared with the Vacation Auction — writing it here
   // updates it there too, and vice-versa.
   if(lem) await setDoc(loginEmailsRef,{[u]:lem},{merge:true}); else await updateDoc(loginEmailsRef,{[u]:deleteField()}).catch(()=>{});
+  await syncEmailToUserFromLogin();
   if(em) await setDoc(emailsRef,{[u]:em},{merge:true}); else await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
   if(fteClear) await mergeFields(schedFteRef,{[u]:deleteField()}); else await mergeFields(schedFteRef,{[u]:fteVal});
   schedToast('Saved '+u,'ok');
@@ -1475,6 +1496,7 @@ window.saveSchedField=async function(u,kind){
     if(v && !v.includes('@')){ schedToast('Login e-mail must be a valid address','err'); return; }
     try{ if(v) await setDoc(loginEmailsRef,{[u]:v},{merge:true}); else await updateDoc(loginEmailsRef,{[u]:deleteField()}).catch(()=>{}); }
     catch(e){ return sharedErr(e); }
+    await syncEmailToUserFromLogin();
     schedToast('Saved login e-mail · '+u,'ok');
   } else if(kind==='em'){
     const v=(document.getElementById('uem_'+u)?.value||'').trim();
@@ -1516,6 +1538,7 @@ window.saveAllSchedUsers=async function(){
   try{
     await setDoc(usernamesRef,unameMap,{merge:true});
     await setDoc(loginEmailsRef,lemMap,{merge:true});
+    await syncEmailToUserFromLogin();
     await setDoc(emailsRef,emMap,{merge:true});
     await setDoc(schedFteRef,fteMap,{merge:true});
   }catch(e){
@@ -1531,13 +1554,14 @@ window.clearAllSchedFte=async function(){
   auditLog('fte.clearAll','Cleared FTE for all users on the Daily Schedule site');
 };
 window.removeSchedUser=async function(u){
-  if(!confirm('Remove '+u+' from the shared roster?\n\nThis removes them from BOTH the Daily Schedule and the Vacation Auction — they will no longer be selectable anywhere. Any shifts or vacation weeks already assigned to them stay in the history but they will disappear from user lists. This cannot be undone from here.')) return;
+  if(!confirm('Remove '+u+' from the shared roster?\n\nThis removes them from BOTH the Daily Schedule and the Vacation Auction — they will no longer be selectable anywhere. Any shifts or vacation weeks already assigned to them stay in the history but they will disappear from user lists. This cannot be undone from here.\n\n⚠️ IF A VACATION AUCTION PHASE IS LIVE, DO NOT remove the user here — use the Vacation admin site instead. Removing here leaves their auction bids orphaned and still competing.')) return;
   // [M-12] userList is an auction-collection doc — a schedule-only admin can't write it.
   // Surface the failure instead of leaving the roster half-changed with no message.
-  try{ await setDoc(userListRef,{users:names.filter(n=>n!==u)}); }
+  try{ await updateDoc(userListRef,{users:arrayRemove(u)}); }
   catch(e){ schedToast((e&&e.code==='permission-denied')?'Only a Vacation Auction admin can remove users from the shared roster':'Could not remove user — please try again','err'); return; }
   await updateDoc(usernamesRef,{[u]:deleteField()}).catch(()=>{});
   await updateDoc(loginEmailsRef,{[u]:deleteField()}).catch(()=>{});
+  await syncEmailToUserFromLogin();
   await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
   await updateDoc(eligRef,{[u]:deleteField()}).catch(()=>{});
   await updateDoc(schedFteRef,{[u]:deleteField()}).catch(()=>{});
