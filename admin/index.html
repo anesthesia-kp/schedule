@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 43;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 44;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -1134,21 +1134,38 @@ window.decideReq=async function(id,status){
   if(!wrote || !r) return; // gate on the transaction's REAL outcome, not a flag set inside the retried closure
   if(status==='approved'&&r.date){
     const mk=r.date.slice(0,7), dd=r.date.slice(8);
+    // [AUDIT 2026-07-25 #7] For an open-shift CLAIM, win the shift BEFORE writing any
+    // assignment. The order used to be reversed: the schedule patch landed first and the
+    // transaction below only protected the openShifts DOC — so with two pending claims on
+    // one capacity-1 shift, approving the second still assigned it, silently double-booking
+    // the date. Nothing auto-denies the loser, so this is reachable by ordinary admin use.
+    if(r.type==='claim'&&r.openId){
+      const won=await txUpdateList(openRef, ol=>{
+        const o=ol.find(x=>x.id===r.openId);
+        if(!o || o.status!=='open') return null;   // already claimed/removed — we lose
+        return ol.map(x=>x.id===r.openId?{...x,status:'claimed',claimedBy:r.user}:x);
+      });
+      if(!won){
+        // Someone else already holds it. Undo our approval so the decided list can't show
+        // an "approved" claim that was never assigned, and say why. No schedule write ran.
+        await txUpdateList(requestsRef, cur2=>{
+          const item=cur2.find(x=>x.id===id);
+          if(!item) return null;
+          return cur2.map(x=>x.id===id?{...x,status:'denied',decidedTs:Date.now(),autoDenied:'open shift already claimed'}:x);
+        });
+        auditLog('request.decide','Auto-denied claim from '+displayName(r.user)+' ('+r.date+') — open shift already claimed by someone else');
+        alert('That open shift has already been claimed by someone else.\n\nThe request was marked denied and nothing was assigned.');
+        return;
+      }
+    }
     const cur=(mk===curYM)?cellOf(r.user,dd):((await getDoc(monthRef(mk))).data()?.days?.[dd]?.[r.user]||{});
     let patch=null;
     if(r.type==='shift'||r.type==='claim'){ const kind=catalog.shifts?.[r.shiftId]?.kind==='call'?'call':'day'; patch={...cur,day:null,call:null,off:false,[kind]:r.shiftId}; } // [M-18] cur spread FIRST, then defaults+assignment, so an approved shift clears any existing off:true instead of leaving the user both OFF and assigned
     if(r.type==='dayoff') patch={...cur,day:null,call:null,off:true}; // nulls AFTER cur so an approved day-off actually clears any existing shift/call (not both at once)
     if(r.type==='nocall') patch={...{day:null,off:false},...cur,call:null};
     if(patch) await mergeFields(monthRef(mk),{['days.'+dd+'.'+r.user]:patch});
-    if(r.type==='claim'&&r.openId){
-      // [H-10/M-18] Re-check inside a transaction that the open shift is STILL open, so two
-      // pending claims for the same shift can't both be approved (double-assign).
-      await txUpdateList(openRef, ol=>{
-        const o=ol.find(x=>x.id===r.openId);
-        if(!o || o.status!=='open') return null; // already claimed/removed — leave it
-        return ol.map(x=>x.id===r.openId?{...x,status:'claimed',claimedBy:r.user}:x);
-      });
-    }
+    // (The open-shift claim transaction now runs BEFORE this assignment — see [AUDIT #7]
+    // above. Winning the shift is what authorises the write, not the other way round.)
   }
   auditLog('request.decide',(status==='approved'?'Approved':'Denied')+' '+r.type+' request from '+displayName(r.user)+(r.date?' ('+r.date+')':''));
 };
