@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 46;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 48;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -1431,6 +1431,15 @@ window.removeAdminEmail=async function(email){
   auditLog('admin.revoke','Revoked admin access for '+email);
   if(self) window.adminSignOut();
 };
+// [build 47] Who (other than exceptUser) already holds this login address? Case-insensitive.
+// Twin of the Vacation admin's _loginEmailOwner — the two sites must refuse duplicates alike.
+function _schedLoginEmailOwner(email,exceptUser){
+  const s=String(email||'').trim().toLowerCase(); if(!s) return null;
+  for(const k of Object.keys(loginEmailsData||{})){
+    if(k!==exceptUser&&String(loginEmailsData[k]||'').trim().toLowerCase()===s) return k;
+  }
+  return null;
+}
 // [H-3] Rebuild vacations/emailToUser from the CURRENT loginEmails doc. Called after every
 // login-e-mail write on this site — without it, a user whose address was entered here can
 // sign in to the auction but every bid write is rejected by the security rules.
@@ -1440,6 +1449,14 @@ async function syncEmailToUserFromLogin(){
     const led=s.exists()?s.data():{};
     const map={};
     for(const k of Object.keys(led)){ const em=String(led[k]||'').trim().toLowerCase(); if(!em||!em.includes('@')) continue; (map[em]=map[em]||[]).push(k); }
+    // [build 47 · DUPLICATE-LOGIN-EMAIL CRITICAL — twin of the Vacation admin fix, keep in sync]
+    // The auction's security rules read this map to decide whose bids a Google account may
+    // write. An address held by TWO initials hands one physician write access to the other's
+    // bids. Collisions FAIL CLOSED: the address is excluded (that account can bid as nobody
+    // until fixed) and the admin is told loudly. The entry guards below stop new duplicates.
+    const dup=[];
+    for(const em of Object.keys(map)){ if(map[em].length>1){ dup.push(map[em].join(' + ')+' share '+em); delete map[em]; } }
+    if(dup.length) schedToast('🚨 DUPLICATE login e-mail: '+dup.join(' · ')+' — these users CANNOT BID in the auction until each has their own address','err');
     await setDoc(emailToUserRef,map);
     return true;
   }catch(e){
@@ -1461,6 +1478,8 @@ window.addSchedUser=async function(){
   if(initials.length>10){ msg.textContent='Initials — max 10 characters.'; msg.style.color='var(--red)'; return; }
   if(names.includes(initials)){ msg.textContent=initials+' already exists.'; msg.style.color='var(--red)'; return; }
   if(loginEmail && !loginEmail.includes('@')){ msg.textContent='Login e-mail must be a valid address.'; msg.style.color='var(--red)'; return; }
+  // [build 47 · DUPLICATE-LOGIN-EMAIL CRITICAL] one Google account is one person — refuse, naming the holder
+  if(loginEmail){ const _h=_schedLoginEmailOwner(loginEmail,initials); if(_h){ msg.textContent='NOT added — '+loginEmail+' is already the login e-mail for '+_h+'. Two users can never share a Google login.'; msg.style.color='var(--red)'; return; } }
   // Validate FTE up front so an invalid value blocks the whole add.
   let fteVal=null;
   if(fteRaw!==''){ const v=parseFloat(fteRaw); if(isNaN(v)||v<0||v>1){ msg.textContent='FTE must be a number between 0 and 1.'; msg.style.color='var(--red)'; return; } fteVal=Math.round(v*10)/10; }
@@ -1490,6 +1509,10 @@ window.addSchedUser=async function(){
   auditLog('user.add','Added user '+initials+(fullName?' ('+fullName+')':''));
 };
 window.saveSchedUser=async function(u){
+  // [build 48 · audit] Same loaded-gate as saveSchedField/saveAllSchedUsers: before the shared
+  // docs load, a blank grid would deleteField() real values AND the duplicate guard below would
+  // be checking against an empty cache (vacuous).
+  if(!(usernamesLoaded&&emailsLoaded&&loginEmailsLoaded)){ schedToast('Still loading user data — try again in a moment','err'); return; }
   const fn=document.getElementById('ufn_'+u).value.trim();
   // Lower-cased so the security rules' case-sensitive match against the signed-in Google e-mail works.
   const lem=(document.getElementById('ulem_'+u)?.value||'').trim().toLowerCase();
@@ -1509,6 +1532,9 @@ window.saveSchedUser=async function(u){
   // [M-12] Shared-roster writes can be denied for a schedule-only admin — surface it
   // (specific toast) instead of dying as a silent unhandled rejection mid-save.
   try{
+    // [build 47 · DUPLICATE-LOGIN-EMAIL CRITICAL] refuse before ANY of the shared docs write,
+    // so a duplicate can't half-save the row
+    if(lem){ const _h=_schedLoginEmailOwner(lem,u); if(_h){ schedToast('NOT saved — '+lem+' is already the login e-mail for '+_h,'err'); return; } }
     if(fn) await setDoc(usernamesRef,{[u]:fn},{merge:true}); else await updateDoc(usernamesRef,{[u]:deleteField()}).catch(()=>{});
     // Login (Google) e-mail is shared with the Vacation Auction — writing it here
     // updates it there too, and vice-versa.
@@ -1554,6 +1580,8 @@ window.saveSchedField=async function(u,kind){
   } else if(kind==='lem'){
     const v=(document.getElementById('ulem_'+u)?.value||'').trim().toLowerCase();
     if(v && !v.includes('@')){ schedToast('Login e-mail must be a valid address','err'); return; }
+    // [build 47 · DUPLICATE-LOGIN-EMAIL CRITICAL]
+    if(v){ const _h=_schedLoginEmailOwner(v,u); if(_h){ schedToast('NOT saved — '+v+' is already the login e-mail for '+_h,'err'); return; } }
     try{ if(v) await setDoc(loginEmailsRef,{[u]:v},{merge:true}); else await updateDoc(loginEmailsRef,{[u]:deleteField()}).catch(()=>{}); }
     catch(e){ return sharedErr(e); }
     await syncEmailToUserFromLogin();
@@ -1585,6 +1613,13 @@ window.saveAllSchedUsers=async function(){
     const em=(document.getElementById('uem_'+u)?.value||'').trim();
     const raw=(document.getElementById('ufte_'+u)?.value||'').trim();
     if(lem && !lem.includes('@')) bad.push(u+' — login e-mail');
+    // [build 47 · DUPLICATE-LOGIN-EMAIL CRITICAL] catch duplicates INSIDE the submitted batch
+    // too — two rows pasted with the same address would sail past a stored-data-only check.
+    if(lem){ for(const o of Object.keys(lemMap)){ if(lemMap[o]===lem){ bad.push(u+' + '+o+' — same login e-mail ('+lem+')'); break; } } }
+    // [build 48 · audit] and against ORPHANED stored entries (initials no longer on the roster —
+    // e.g. a swallowed delete): the batch only rewrites roster rows, so an orphan's address
+    // survives it and a duplicate against one would otherwise slip through to the backstop.
+    if(lem){ const _oh=_schedLoginEmailOwner(lem,u); if(_oh&&!names.includes(_oh)) bad.push(u+' — '+lem+' still belongs to former user '+_oh); }
     if(raw!==''){ const v=parseFloat(raw); if(isNaN(v)||v<0||v>1) bad.push(u+' — FTE'); else fteMap[u]=Math.round(v*10)/10; }
     else fteMap[u]=deleteField();
     unameMap[u]= fn||deleteField();
