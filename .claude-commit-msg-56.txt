@@ -1,0 +1,72 @@
+Build 56 (admin) — Stage 1: BULK ENTRY. Duplicate-an-existing, and paste-a-list.
+
+DECISIONS §23, §40, §3. Admin only; staff untouched at 27. No rules change.
+
+WHY
+
+  There are 92 shifts to give times, sites and demand rules to, one row at a time. §23 is
+  already settled — the owner: "Love the duplicate idea" — because the catalog is full of
+  near-identical clusters (ICU7A8 / ICU7A12 / ICU7B8 / ICU7B12, D10 / D10+ / D10 Float)
+  where exactly one field differs.
+
+DUPLICATE-AN-EXISTING — the priority route (§23)
+
+  Pick a shift, press "Copy its settings up", and the Add form fills with everything except
+  the label: times, site, capacity, family, role, provisional flag — AND ITS DEMAND RULES.
+
+  The demand rules matter most and are the easiest thing to leave out. Copying a shift
+  without them produces something that looks completely configured and is never asked for
+  (§9) — the worst of both, and silent.
+
+  IT WRITES NOTHING. Duplicating fills the form; the shift is created when Add is pressed,
+  like any other. The label is deliberately left blank because it is the one field that must
+  differ, and the cursor lands there.
+
+PASTE-A-LIST — second, and previewed before anything happens
+
+  One shift per line, tab or comma separated: label · start · end · site. Everything after
+  the label is optional. A header row is ignored if pasted. Times use the same 24-hour rules
+  as everywhere else.
+
+  Deliberately FORGIVING ABOUT SHAPE and STRICT ABOUT VALUES. A bad time is a rejected ROW
+  WITH A REASON, never a silently coerced value — and the reasons differ, because the
+  differences are useful: "12:75" is rejected because 75 is not minutes; "7:5" is rejected
+  because it is not a time at all. A site that is not Oakland or Richmond is rejected and
+  the valid ones are named. The same shift appearing twice in one list is caught.
+
+  NOTHING IS WRITTEN UNTIL THE PREVIEW HAS BEEN READ AND THE BUTTON UNDER IT PRESSED (§3).
+  The preview separates NEW / CHANGED / LEFT ALONE / REJECTED, shows changes as
+  before → after rather than just "updated", and says why each left-alone row was skipped.
+  Rejected rows are dropped; everything else still goes through.
+
+  An "update shifts that already exist" switch, on by default, turns the whole update path
+  off — so a paste can be made purely additive.
+
+  A PASTE NEVER TOUCHES DEMAND RULES OR CAPACITY. Only labels, times and sites. That is
+  stated in the preview, in the confirmation, and asserted by the suite.
+
+WHAT IS NOT HERE, ON PURPOSE
+
+  Bulk DEMAND editing. §40 — the owner declined it outright: it would REPLACE whatever
+  demand rules each selected shift already had, which made it the most destructive bulk
+  operation on the page. The suite asserts it is absent, so nobody adds it later without
+  reading §40 first.
+
+  Group edit of times across a multi-shift selection (§13) is also still owed. Duplicate and
+  paste cover the same ground for now, and §13's requirement — a before → after table naming
+  every affected shift — is exactly what the paste preview already does.
+
+GATES
+
+  · sched/build56-test.mjs — 39/39, three consecutive runs, driven in a real browser.
+  · Honesty check — the same suite against build 55/27 scores 15 pass / 24 fail.
+  · Whole schedule battery green on these bytes: isolation 27/27 · elig 33/33 ·
+    build50 37/37 · build51 88/88 · build52 49/49 · build53 29/29 · build54 45/45 ·
+    build55 45/45.
+  · AUCTION battery, on the owner's machine — 14 suites, 1074 assertions, green.
+
+  The suite's paste fixture is built to exercise every branch in one list: a header row, a
+  new shift, an identical existing one, a comma-separated line, three different rejection
+  reasons, and a within-list duplicate.
+
+Bumped: var BUILD in admin/index.html AND versions.json -> {"index":27,"admin":56}

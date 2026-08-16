@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 55;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 56;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -484,6 +484,33 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
       </div>
       <div style="font-size:11px;color:var(--t3);margin-top:5px">24-hour clock. Type <b>0730</b>, <b>7:30</b> or <b>07.30</b> — all the same thing. Leave both blank if you do not know the times yet; blank is a real answer and nothing will guess for you (§38).</div>
       <div id="catColorNote" style="font-size:11px;color:var(--t3);margin-top:6px"></div>
+      <!-- §23 — "Love the duplicate idea." Duplicate-an-existing is the PRIORITY route,
+           ahead of paste-a-list, because the catalog is full of near-identical clusters
+           (ICU7A8 / ICU7A12 / ICU7B8 / ICU7B12 …) where one field differs. -->
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid var(--b1)">
+        <span class="lbl" style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em">Start from an existing shift</span>
+        <select class="sel" id="catDupFrom" style="font-size:12px;min-width:200px"></select>
+        <button class="btn" style="font-size:12px" onclick="dupShiftInto()">⧉ Copy its settings up</button>
+        <span style="font-size:11px;color:var(--t3)">Fills the form above with everything but the label — times, site, demand, family, role, capacity. Change what differs and press Add. Nothing is written until you do.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Paste a list of shifts</div>
+      <div style="font-size:11.5px;color:var(--t2);line-height:1.55;margin-bottom:8px">
+        One shift per line. Separate the columns with a <b>tab or a comma</b>:
+        <b>label · start · end · site</b> — everything after the label is optional.
+        A header row is ignored if you paste one. Times use the same 24-hour rules as everywhere else: <b>0730</b>, <b>7:30</b> or <b>07.30</b>.<br>
+        <b>Nothing is written until you have read the preview and pressed the button under it</b> (§3).
+      </div>
+      <textarea class="inp" id="catPaste" rows="6" style="width:100%;font-family:'SF Mono',Consolas,monospace;font-size:12px" placeholder="D10&#9;0730&#9;1730&#9;Oakland&#10;Call 16&#9;1530&#9;0730&#9;Oakland&#10;Eye Call&#9;0730&#9;1530"></textarea>
+      <div class="row" style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+        <button class="btn" style="font-size:12px" onclick="previewPaste()">👁 Preview what this would do</button>
+        <label style="font-size:11.5px;color:var(--t2);display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" id="catPasteUpdate" checked onchange="previewPaste()"> update shifts that already exist
+        </label>
+      </div>
+      <div id="catPastePreview"></div>
     </div>
     <div class="card">
       <div class="card-title">Holidays</div>
@@ -2763,6 +2790,150 @@ window.setShiftProvisional=async function(id,val){
   auditLog('shift.time',(val?'Marked ':'Un-marked ')+(s.label||id)+' times as provisional');
 };
 
+// ══════════════════════════════════════════════════════════════════════════════
+// [56] BULK ENTRY — DECISIONS §23.  "Love the duplicate idea."
+//
+// Duplicate-an-existing is the PRIORITY route, ahead of paste-a-list, because the catalog
+// is full of near-identical clusters where exactly one field differs. Paste-a-list is
+// second, and bulk DEMAND editing is not built at all — §40, the owner declined it as the
+// most destructive bulk operation on the page.
+//
+// Nothing here writes until the admin has seen exactly what would happen and pressed a
+// button under it (§3). A bulk operation that acts first and reports afterwards is how a
+// catalog gets quietly mangled.
+// ══════════════════════════════════════════════════════════════════════════════
+window.dupShiftInto=function(){
+  if(catLockedRefuse()) return;
+  const id=document.getElementById('catDupFrom').value;
+  const s=catalog.shifts?.[id];
+  if(!s){ schedToast('Pick a shift to copy from','err'); return; }
+  const set=(el,v)=>{ const e=document.getElementById(el); if(e) e.value=v==null?'':v; };
+  set('catStart',s.start||''); set('catEnd',s.end||''); set('catSite',s.site||'');
+  set('catKind',s.kind||'day'); set('catRole',s.role||''); set('catFamily',s.family||'');
+  set('catCapacity',s.capacity||1);
+  const prov=document.getElementById('catProvisional'); if(prov) prov.checked=!!s.timesProvisional;
+  // The demand rules come too — they are the slowest thing to re-enter by hand.
+  _dupDemand=demandRules(s).map(r=>({...r}));
+  onCatFamilyChange(); onCatTimePreview();
+  const lab=document.getElementById('catLabel'); if(lab){ lab.value=''; lab.focus(); }
+  schedToast('Copied '+(s.label||id)+"'s settings"+(_dupDemand.length?' including its '+_dupDemand.length+' demand rule'+(_dupDemand.length===1?'':'s'):'')+' — give it a label','ok');
+};
+let _dupDemand=null;
+
+// ── Paste a list ──
+// Deliberately forgiving about SHAPE and strict about VALUES: tabs or commas, an optional
+// header, any number of trailing columns missing. A bad time is a rejected ROW with a
+// reason, never a silently coerced value.
+function parsePasteRows(raw){
+  const out=[];
+  const lines=String(raw||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  lines.forEach((line,i)=>{
+    const cells=line.split(/\t|,/).map(c=>c.trim());
+    // Drop a header row if the first cell plainly names a column rather than a shift.
+    if(i===0 && /^(label|shift|name)$/i.test(cells[0]||'')) return;
+    const [label,st,en,site]=cells;
+    if(!label) return;
+    const row={line:i+1,label,raw:line};
+    const ps=parseHHMM(st||''), pe=parseHHMM(en||'');
+    if(!ps.ok){ row.reject='start time — '+ps.why; out.push(row); return; }
+    if(!pe.ok){ row.reject='end time — '+pe.why; out.push(row); return; }
+    row.start=ps.val; row.end=pe.val;
+    if(site){
+      const match=siteList().find(x=>x.toLowerCase()===site.toLowerCase());
+      if(!match){ row.reject='site "'+site+'" is not one of '+siteList().join(' or '); out.push(row); return; }
+      row.site=match;
+    }
+    row.id=label.toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+    if(!row.id){ row.reject='that label has no letters or numbers in it, so it cannot be an id'; out.push(row); return; }
+    out.push(row);
+  });
+  // A list that names the same shift twice is a mistake worth catching before it is applied.
+  const seen=new Map();
+  for(const r of out){
+    if(r.reject||!r.id) continue;
+    if(seen.has(r.id)) r.reject='"'+seen.get(r.id)+'" on line '+seen.get(r.id+'_line')+' is the same shift';
+    else { seen.set(r.id,r.label); seen.set(r.id+'_line',r.line); }
+  }
+  return out;
+}
+function pastePlan(){
+  const rows=parsePasteRows(document.getElementById('catPaste').value);
+  const doUpdate=!!document.getElementById('catPasteUpdate').checked;
+  const create=[], update=[], skip=[], reject=[];
+  for(const r of rows){
+    if(r.reject){ reject.push(r); continue; }
+    const ex=catalog.shifts?.[r.id];
+    if(!ex){ create.push(r); continue; }
+    if(!doUpdate){ skip.push({...r,why:'already exists, and "update existing" is off'}); continue; }
+    const before={start:ex.start||'',end:ex.end||'',site:ex.site||''};
+    const after={start:r.start||'',end:r.end||'',site:r.site!==undefined?r.site:(ex.site||'')};
+    if(before.start===after.start&&before.end===after.end&&before.site===after.site){
+      skip.push({...r,why:'already exactly this'}); continue;
+    }
+    update.push({...r,before,after,label:ex.label||r.label});
+  }
+  return {create,update,skip,reject};
+}
+window.previewPaste=function(){
+  const host=document.getElementById('catPastePreview'); if(!host) return;
+  const raw=document.getElementById('catPaste').value.trim();
+  if(!raw){ host.innerHTML=''; return; }
+  const p=pastePlan();
+  const t=(x,c)=>'<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:'+c+'">'+x+'</span>';
+  const fmt=r=>esc(r.label)+' <span class="mono" style="font-size:11px;color:var(--t2)">'
+    +(r.start&&r.end?esc(r.start)+'–'+esc(r.end)+' · '+esc(fmtDur(shiftMinutes(r.start,r.end))):(r.start||r.end)?'<b style="color:#b91c1c">half a time</b>':'no times')
+    +(r.site?' · '+esc(r.site):'')+'</span>';
+  let h='<div style="margin-top:11px;padding:11px 13px;border:1px solid var(--b1);border-radius:10px;background:var(--s2)">';
+  h+='<div style="font-weight:800;font-size:12.5px;margin-bottom:8px">This would '
+    +[p.create.length?p.create.length+' new':'',p.update.length?p.update.length+' changed':'',p.skip.length?p.skip.length+' left alone':'',p.reject.length?p.reject.length+' rejected':'']
+      .filter(Boolean).join(' · ')+'</div>';
+  if(p.create.length) h+='<div style="margin-bottom:7px">'+t('NEW','#dbeafe;color:#1e3a8a')+'</div>'
+    +p.create.map(r=>'<div style="font-size:12px;padding:2px 0">'+fmt(r)+'</div>').join('');
+  if(p.update.length) h+='<div style="margin:9px 0 5px">'+t('CHANGED','#fef3c7;color:#92400e')+'</div>'
+    +p.update.map(r=>'<div style="font-size:12px;padding:2px 0">'+esc(r.label)+' <span class="mono" style="font-size:11px">'
+      +esc(r.before.start||'—')+'–'+esc(r.before.end||'—')+(r.before.site?' · '+esc(r.before.site):'')
+      +' <b style="color:#92400e">→</b> '+esc(r.after.start||'—')+'–'+esc(r.after.end||'—')+(r.after.site?' · '+esc(r.after.site):'')+'</span></div>').join('');
+  if(p.skip.length) h+='<div style="margin:9px 0 5px">'+t('LEFT ALONE','#f1f5f9;color:#5b6b7c')+'</div>'
+    +p.skip.map(r=>'<div style="font-size:11.5px;color:var(--t2);padding:2px 0">'+esc(r.label)+' — '+esc(r.why)+'</div>').join('');
+  if(p.reject.length) h+='<div style="margin:9px 0 5px">'+t('REJECTED','#fee2e2;color:#991b1b')+'</div>'
+    +p.reject.map(r=>'<div style="font-size:11.5px;color:#991b1b;padding:2px 0">line '+r.line+': <b>'+esc(r.label||r.raw)+'</b> — '+esc(r.reject)+'</div>').join('');
+  h+='<div style="font-size:11.5px;color:var(--t2);margin-top:9px">Rejected rows are skipped; everything else still goes through. Demand rules and capacity are never touched by a paste — only labels, times and sites.</div>';
+  if(p.create.length||p.update.length)
+    h+='<div style="margin-top:11px"><button class="btn btn-primary" style="font-size:12.5px" onclick="applyPaste()">Apply — '
+      +[p.create.length?'add '+p.create.length:'',p.update.length?'change '+p.update.length:''].filter(Boolean).join(' and ')+'</button></div>';
+  h+='</div>';
+  host.innerHTML=h;
+};
+window.applyPaste=async function(){
+  if(catLockedRefuse()) return;
+  const p=pastePlan();
+  if(!p.create.length&&!p.update.length){ schedToast('Nothing to apply','err'); return; }
+  if(!confirm('Apply this list?\n\n'
+    +(p.create.length?'ADD '+p.create.length+' new shift'+(p.create.length===1?'':'s')+': '+p.create.map(r=>r.label).join(', ')+'\n\n':'')
+    +(p.update.length?'CHANGE the times or site of '+p.update.length+': '+p.update.map(r=>r.label).join(', ')+'\n\n':'')
+    +(p.reject.length?p.reject.length+' rejected row'+(p.reject.length===1?'':'s')+' will be skipped.\n\n':'')
+    +'Demand rules and capacity are not touched.')) return;
+  const patch={};
+  let order=Math.max(0,...Object.values(catalog.shifts||{}).map(x=>x.order??0));
+  for(const r of p.create){
+    order++;
+    patch['shifts.'+r.id]={label:r.label,kind:'day',color:PALETTE[0],family:'',role:'',order,capacity:1,
+      start:r.start||'',end:r.end||'',timesProvisional:false,site:r.site||''};
+  }
+  for(const r of p.update){
+    patch['shifts.'+r.id+'.start']=r.after.start;
+    patch['shifts.'+r.id+'.end']=r.after.end;
+    if(r.after.site!==(catalog.shifts?.[r.id]?.site||'')) patch['shifts.'+r.id+'.site']=r.after.site;
+  }
+  try{
+    await mergeFields(catalogRef,patch);
+    auditLog('shift.paste','Pasted a shift list — added '+p.create.length+' ('+p.create.map(r=>r.label).join(', ')
+      +'), changed '+p.update.length+' ('+p.update.map(r=>r.label).join(', ')+'), rejected '+p.reject.length);
+    schedToast('Applied — '+p.create.length+' added, '+p.update.length+' changed','ok');
+    document.getElementById('catPaste').value=''; previewPaste();
+  }catch(e){ schedToast('Could not apply that: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); }
+};
+
 // ── Holidays UI ──
 function renderHolidays(){
   const sel=document.getElementById('holYear'); if(!sel) return;
@@ -3011,6 +3182,12 @@ function renderCatalog(){
   if(dmShift) renderDemand();
   const ss=document.getElementById('catSite');
   if(ss){ const keep=ss.value; ss.innerHTML=siteOptionsHtml(''); if(keep) ss.value=keep; }
+  const dp=document.getElementById('catDupFrom');
+  if(dp){ const keep=dp.value;
+    dp.innerHTML='<option value="">— pick a shift to copy —</option>'
+      +shiftList().map(([i,x])=>'<option value="'+esc(i)+'">'+esc(x.label||i)
+        +(x.start&&x.end?' · '+esc(x.start)+'–'+esc(x.end):'')+(x.site?' · '+esc(x.site):'')+'</option>').join('');
+    if(keep) dp.value=keep; }
 }
 function renderCatFamilyOptions(){
   const sel=document.getElementById('catFamily'); if(!sel) return;
@@ -3075,15 +3252,22 @@ window.addShift=async function(){
   const id=label.toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('S'+Date.now());
   if(catalog.shifts?.[id]){ schedToast('A shift called "'+label+'" already exists','err'); return; }
   const order=Math.max(0,...Object.values(catalog.shifts||{}).map(s=>s.order??0))+1;
-  await mergeFields(catalogRef,{['shifts.'+id]:{label,kind,color,family,role,order,capacity,start,end,timesProvisional,site}});
+  const rec={label,kind,color,family,role,order,capacity,start,end,timesProvisional,site};
+  // §23 — a duplicate carries the demand rules too. They are the slowest part to re-enter,
+  // and copying a shift without them produces something that looks right and is never asked
+  // for (§9), which is the worst of both.
+  if(_dupDemand&&_dupDemand.length) rec.demand=_dupDemand.map(r=>({...r}));
+  await mergeFields(catalogRef,{['shifts.'+id]:rec});
   auditLog('shift.add','Added shift "'+label+'" ('+id+')'
     +(start&&end?' — '+start+'–'+end+' ('+fmtDur(shiftMinutes(start,end))+(crossesMidnight(start,end)?', crosses midnight':'')+')':' — no times set')
     +(timesProvisional?' [provisional]':'')
     +(site?' — '+site:' — no site')
+    +((_dupDemand&&_dupDemand.length)?' — copied '+_dupDemand.length+' demand rule'+(_dupDemand.length===1?'':'s'):'')
     +(capacity>1?' — up to '+capacity+' people/day':''));
   ['catLabel','catRole','catFamily','catStart','catEnd','catSite'].forEach(x=>{ const e=document.getElementById(x); if(e) e.value=''; });
   document.getElementById('catCapacity').value='1';
   document.getElementById('catProvisional').checked=false;
+  _dupDemand=null;
   onCatFamilyChange(); onCatTimePreview();
 };
 window.setShiftCapacity=async function(id,val){
