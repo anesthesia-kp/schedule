@@ -1,92 +1,40 @@
-Build 50 / 26 — small-fix batch: stale-build gate, Quick View, staff error surface, Users lock, audit trail, sticky column
+docs: correct the build-50 paperwork — it shipped while the docs still said "awaiting push"
 
-Six independent fixes the owner approved on 16 Aug (DECISIONS §33), plus one
-comment correction. No Firestore rules change, so NO Firebase console step.
+Build 50 / 26 was pushed as 8c43847 and verified live (versions.json read
+{"index":26,"admin":50} cache-busted). HANDOFF.md, NEXT-CHAT-START-PROMPT.md
+and TODO.md were all still describing it as filed-and-awaiting-push, and the
+start prompt additionally listed the live builds as 49 / 25 in its opening
+section while its own status table said 50 / 26 — internally contradictory,
+which is worse for a fresh session than being plainly out of date.
 
-WHAT CHANGED
+CORRECTED
+  · all three files now state 50 / 26 LIVE, with the commit ref
+  · the start prompt's "What this is" section no longer contradicts its own
+    status table
+  · every build number in both documents is now framed as a snapshot that must
+    be re-verified against a cache-busted versions.json, with that instruction
+    placed at the TOP rather than buried in a later section
 
-1. Stale-build gate — ported from Vacation Auction build 268 (both pages)
-   Both pages checked versions.json and then called a bare location.reload().
-   If a CDN edge still held the old page, the reload changed nothing — and the
-   once-per-version sessionStorage guard had already recorded that version as
-   "seen", so the tab never tried again and was stranded on the old build until
-   the cache expired or the user hard-refreshed.
-   Now: location.replace() to a ?v=<latest> URL, so the edge must re-fetch, and
-   the stale page is not left in back history. Plus a re-check when the tab is
-   refocused (visibilitychange + focus), throttled to once a minute — an idle
-   tab used to sit on the old build until its next 5-minute tick, which is
-   exactly when someone returns to it and starts clicking.
-   Closes defect 30. The auction's requiredBuilds ratchet was NOT ported.
+ADDED — two harness traps that cost real time on 16 Aug, now written down
+  · a fixture's versions.json must match the `var BUILD` of the bytes under
+    test, or the new stale-build gate reloads the page mid-run and wipes the
+    seeded fakes. It reads exactly like a page bug. Both harnesses now derive
+    the number from the file.
+  · the fake auth starts SIGNED OUT; hiding #authGate is not enough, and
+    without window.__signInNow() every grid renders header-only. This produced
+    8 failures against a page that was completely fine.
+  · and the general form: a red test caused by the harness is indistinguishable
+    from a red test caused by the code. Run the suite against the PREVIOUS
+    build before believing a new failure.
 
-2. Quick View month boundary (staff 26)
-   The next-7-days strip always showed 7 days from today, but assignment data
-   was only loaded for the *browsed* month. Paging away turned the whole strip
-   into the literal text "view month", and a week straddling a month boundary
-   was half blank even on first load. It now subscribes to every month the
-   window touches and resolves each day from the right one. The "view month"
-   placeholder is gone. Closes defect 11.
+ADDED — the honesty record in the switching-sites section
+  This is the third instance of answering from stale in-session memory instead
+  of from disk: 269-already-live, the stale battery claim, and now build 50
+  being live while the docs said otherwise. The owner caught the last one, not
+  the process. Recorded as such, because the pattern is the point.
 
-3. Staff error surface (staff 26)
-   The staff page had NO way to report a failure — 25 silent catch blocks. A
-   rejected transaction showed the user nothing at all; the action simply did
-   not happen. Added a toast, plain-language messages per Firestore error code
-   (permission-denied / unavailable / deadline-exceeded / other), a transaction
-   wrapper that reports before rethrowing, and an unhandledrejection guard so a
-   handled failure does not also spray the console. Closes defect 14.
+HANDOFF.md also gained an index of all 34 owner rulings, grouped by area, with
+the four that overruled Claude flagged — script-verified that every ruling in
+DECISIONS.md appears exactly once and that the index invents none.
 
-4. Users page lock (admin 50) — DECISIONS §20 and §30
-   The Users panel writes to the LIVE Vacation Auction's roster: userList,
-   usernames, loginEmails, emails, emailToUser. That access stays (owner ruling
-   §1) but it no longer sits one stray click away.
-   The page opens LOCKED on every load. The lock is in memory, so it re-locks on
-   reload rather than remembering an unlock. Unlocking goes through a confirm
-   that names the auction consequences in plain words, and the unlock itself is
-   written to the audit log. The refusal guard sits at the top of all eight
-   mutating handlers, not on the buttons — calling a handler directly while
-   locked writes nothing and says so.
-
-5. The writes that used to leave no trace (admin 50)
-   postOpen, removeOpen (which now captures what it removed before the
-   transaction), and all four per-user field saves — name, login e-mail, KP
-   e-mail, FTE — wrote with no audit entry at all. An admin could change
-   anyone's Google login address and nothing recorded it. All six are audited
-   now, as is the Users-page unlock.
-
-6. Sticky name column on the Schedule Grid (admin 50)
-   At ~31 columns the name scrolled out of view and you lost track of whose row
-   you were reading. The eligibility grid already did this; the schedule grid
-   now matches. Closes defect 19.
-
-7. A comment that was not true (admin 50)
-   The Users section carried "// vacations — READ-ONLY: roster, admin list,
-   approved vacation weeks" while writing 25 auction documents. Replaced with an
-   accurate description. The isolation test now fails if that claim reappears
-   while the writes are still there.
-
-CARDINAL RULE — no schedule work may degrade the live Vacation Auction
-
-  · tests/sched/isolation-test.mjs — 27/27. Zero new write paths to any
-    vacations/* document. Auction writes still occur only in the six sanctioned
-    Users-panel handlers (owner ruling §1).
-  · FTE independence — 5/5. dailysched/fteMap stays the schedule's own (§2).
-  · tests/run-all.mjs (the AUCTION battery) — 14 suites, 1074 assertions, green.
-    Same numbers as before this change.
-
-  Worth recording: this change turned the auction battery RED before it was
-  fixed. test-audit-fixes.mjs is an auction suite that extracts and executes the
-  schedule page's saveSchedField; the new lock guard was not in its scope, so the
-  suite crashed. Nothing in production was affected, but it is a live example of
-  the two sites touching — the auction battery gets run after every schedule
-  change, not just the ones that look shared.
-
-GATES
-
-  · tests/sched/build50-test.mjs — 37/37, three consecutive runs, both pages
-    driven in a real browser against an in-memory Firestore that records every
-    write.
-  · Honesty check — the same suite against build 49/25 scores 11 pass / 26 fail.
-    A suite that passes on the pre-fix bytes proves nothing.
-  · tests/sched/elig-test.mjs — 33/33 against these bytes, and 33/33 against 49
-    as a control, so build 50 breaks nothing that 49 shipped.
-
-Bumped: var BUILD in both pages AND versions.json → {"index":26,"admin":50}.
+No code change. No test change. No Firebase console step.

@@ -1,7 +1,12 @@
 # NEXT CHAT START PROMPT — Daily Schedule
 
-**Written 16 Aug 2026** by the session that shipped schedule admin 49 / staff 25, designed
-the foundations, and designed the Reports section. Read fully before touching anything.
+**Written 16 Aug 2026** by the session that shipped schedule admin 49 / staff 25, built
+50 / 26, designed the foundations, and designed the Reports section. Read fully before
+touching anything.
+
+**Build numbers in this file go stale the moment the owner pushes.** Every one of them is
+written as "live X · filed Y". Verify against a cache-busted `versions.json` before you
+believe any of them — that is step 2 under *First moves*, and it is not optional.
 
 Companion to the Vacation Auction's own `NEXT-CHAT-START-PROMPT.md`, which governs that
 site. **Both sites are worked in ONE chat, moving between them** — owner decision 16 Aug,
@@ -51,8 +56,8 @@ the auction session, not this one. Full detail in `HANDOFF.md`.
 A daily shift-scheduling site for ~60 anesthesiologists (Kaiser East Bay), sharing one
 Firebase project with the live Vacation Auction.
 
-* Staff: `anesthesia-kp.github.io/schedule/` — build **25**
-* Admin: `anesthesia-kp.github.io/schedule/admin/` — build **49**
+* Staff: `anesthesia-kp.github.io/schedule/` — build **26**
+* Admin: `anesthesia-kp.github.io/schedule/admin/` — build **50**
 * Repo `anesthesia-kp/schedule`, local at `Documents/GitHub/schedule`
 * Its own Firestore collection `dailysched`; its own admin list
   (`dailysched/adminAccess`), independent of the auction's
@@ -70,21 +75,22 @@ The demo banner came off on 16 Aug, but it is not in real use yet.
 
 | page | live | working tree |
 |---|---|---|
-| admin | 49 — live | **50 filed, green, awaiting push** |
-| staff | 25 — live | **26 filed, green, awaiting push** |
+| admin | **50 — live** | clean |
+| staff | **26 — live** | clean |
 
 **Build 49 / 25** — Shift Eligibility readability rebuild + demo banner removed from both
 pages. No rules change, so **no Firebase console step**.
 
-**Build 50 / 26 — GREEN and FILED, awaiting the owner's push.** Six approved small fixes
+**Build 50 / 26 — PUSHED and LIVE 16 Aug** (commit `8c43847`). Six approved small fixes
 (stale-build gate ported from auction 268 · Quick View month-boundary bug · a staff error
 surface, the page had none at all · Users-page lock · missing audit entries · sticky name
 column), plus the correction to the false `// vacations — READ-ONLY` comment.
 Full detail and the gate results in `HANDOFF.md`.
 
-**Before anything else: check whether it is live.** Fetch `versions.json` cache-busted.
-If it reads `{"index":26,"admin":50}` the owner has pushed; if it still reads 49/25 he has
-not. Do not answer this from memory — a previous session was wrong about exactly this.
+**Verified live on 16 Aug** — `versions.json` read `{"index":26,"admin":50}` cache-busted.
+**Re-verify anyway before you touch anything.** The owner pushes between sessions, and on
+16 Aug he pushed *while this file was being written*, which made it wrong within the hour.
+Do not answer this from memory.
 
 Gates, executed 16 Aug: `sched/build50-test.mjs` **37/37** ×3 · honesty `--pre` vs 49/25
 **11 pass / 26 fail** · `sched/elig-test.mjs` **33/33** on 50 and 33/33 on 49 as a control ·
@@ -190,9 +196,21 @@ auth starts **signed out**, so a test must call `window.__signInNow()` — hidin
 gate is not enough, and without it every grid renders header-only and dozens of assertions
 fail for no real reason.
 
-Fixtures: pre-49 admin md5 `7b1a4822a2d1eb66e20a4e22b1e9a9b9`, staff
-`9ff369118eebd8b12c253dcb25893d42`. Reconstruct with
-`git show <pre-49-ref>:admin/index.html > /tmp/schedpre/admin_index.html`.
+Fixtures for an honesty baseline — the PREVIOUS build's bytes. `build50-test.mjs` and
+`elig-test.mjs` both look in `/tmp/schedpre/` by default (override with `PRE_ADMIN` /
+`PRE_STAFF`). Reconstruct from git:
+
+```
+mkdir -p /tmp/schedpre
+git -C ../schedule show <ref>:admin/index.html > /tmp/schedpre/admin_index.html
+git -C ../schedule show <ref>:index.html      > /tmp/schedpre/staff_index.html
+```
+
+For the **50 / 26** honesty run, `<ref>` is the build-49/25 commit — admin md5
+`c50aaad09d5890941221716f9ba546f1`, staff `f838c9492990d3e860dbbcc45b1d10ce`.
+For the older 49 baseline, pre-49 admin was `7b1a4822a2d1eb66e20a4e22b1e9a9b9`, staff
+`9ff369118eebd8b12c253dcb25893d42`. **When you ship the next build, add its predecessor's
+md5s here** — a baseline you cannot reconstruct is a baseline you will skip.
 
 Chromium: `PW_CHROMIUM=/opt/pw-browsers/chromium` in a cloud session.
 

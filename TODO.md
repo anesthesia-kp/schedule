@@ -16,8 +16,8 @@ reference.
 
 | page | live | in working tree | state |
 |---|---|---|---|
-| admin | 49 | **50** | filed, byte-verified, green, **awaiting owner push** |
-| staff | 25 | **26** | filed, byte-verified, green, **awaiting owner push** |
+| admin | **50** | 50 | **PUSHED and live 16 Aug**, commit `8c43847` |
+| staff | **26** | 26 | **PUSHED and live 16 Aug**, commit `8c43847` |
 
 **Build 50 / 26** — the small-fix batch (DECISIONS §33): stale-build gate ported from
 auction 268 · Quick View month-boundary fix · a staff error surface (the page had none) ·

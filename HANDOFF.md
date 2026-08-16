@@ -1,7 +1,13 @@
 # HANDOFF — Daily Schedule site
 
 **As of 16 Aug 2026.** Companion to `NEXT-CHAT-START-PROMPT.md` (read that first),
-`DECISIONS.md` (34 owner rulings) and `TODO.md` (open questions + 30 defects).
+`DECISIONS.md` (34 owner rulings) and `TODO.md` (open questions + 30 defects, 4 of them
+closed by build 50 / 26).
+
+> **Every build number in this file is a snapshot and goes stale the moment the owner
+> pushes.** They are written as "live X · filed Y". Verify against a cache-busted
+> `versions.json` before believing any of them. This file has been confidently wrong about
+> exactly this before.
 
 ---
 
@@ -42,10 +48,13 @@ is the entire guarantee. Run it before filing anything.
 
 | | live | working tree |
 |---|---|---|
-| schedule admin | 49 — live | **50 filed, green, awaiting push** |
-| schedule staff | 25 — live | **26 filed, green, awaiting push** |
+| schedule admin | **50 — PUSHED and live 16 Aug** | clean |
+| schedule staff | **26 — PUSHED and live 16 Aug** | clean |
 | auction admin | 269 | clean |
 | auction staff / mobile | 139 / 17 | clean |
+
+The auction numbers are as of 16 Aug and are **not** maintained by schedule sessions —
+re-check them from the auction's own records before relying on them.
 
 **Build 49 / 25 (LIVE):** Shift Eligibility readability rebuild + demo banner
 removed from both pages. No rules change → no Firebase console step.
@@ -53,7 +62,7 @@ Gates: `sched/elig-test.mjs` 33/33 executed in a browser · honesty `--pre` vs t
 fixture fails 9, none vacuous · isolation test 9 failures on 48 and 9 on 49 = **zero new
 auction writes** · FTE-independence 5/5.
 
-**Build 50 / 26 — GREEN and FILED, awaiting the owner's push.** Six small independent
+**Build 50 / 26 — PUSHED and LIVE (commit `8c43847`), verified cache-busted.** Six small independent
 fixes the owner approved (`DECISIONS.md` §33):
 
 | # | fix | why it mattered |
@@ -214,8 +223,16 @@ confidently wrong about the health of a live system's safety net.
    too if anything might have crossed over.
 4. Report the state in a few lines. Then work.
 
-Cheap, and it has already caught two things: build 269 being live when the notes said it
-was awaiting push, and the stale battery claim above.
+Cheap, and it has already caught three things: build 269 being live when the notes said it
+was awaiting push; the stale battery claim above; and — on 16 Aug — build 50 / 26 being
+**pushed and live while this very file was still describing it as "awaiting push".** The
+owner pushed mid-session and Claude did not notice until he questioned a build number in
+the start prompt. Note the sequence: the owner caught it, not the process. Assume every
+build number you did not personally verify in the last few minutes is stale.
+
+**The same applies to files.** On 16 Aug an hour went into diagnosing a "failing test"
+that was a stale in-session copy of a file the owner's machine had already had fixed for
+hours. Read from disk. `md5sum` both sides when it matters.
 
 **And when in doubt during the day: run it, don't recall it.** Both batteries run on the
 owner's machine — `node run-all.mjs` (auction) and `node sched/run-all.mjs` (schedule).
@@ -234,7 +251,7 @@ owner's machine — `node run-all.mjs` (auction) and `node sched/run-all.mjs` (s
 * This repo is **PUBLIC** — describe defects by shape, never by reproduction.
 * Plain language. The owner is not a coder. Push back on bad ideas.
 
-## Two traps a fresh session will fall into
+## Four traps a fresh session will fall into
 
 1. **Module scope.** Both pages are one `<script type="module">`. A plain `function foo`
    is invisible to inline `onclick=`/`oninput=` handlers **and** to `page.evaluate` in
@@ -247,14 +264,28 @@ owner's machine — `node run-all.mjs` (auction) and `node sched/run-all.mjs` (s
    in the real SDK; an earlier version of the fake dropped the rejected promise and
    reported denied writes as successful, which would have hidden exactly the bug class
    these tests exist to catch.
+3. **A fixture's `versions.json` must match the `var BUILD` of the bytes under test.**
+   From build 50 both pages carry a stale-build gate: on a mismatch the page reloads
+   itself mid-run and wipes the seeded fakes. It looks exactly like a page bug and is not
+   one — it cost most of an hour on 16 Aug. Both harnesses now read the number out of the
+   file, so they keep working on every future build; do not reintroduce a hardcoded one.
+4. **The fake auth starts SIGNED OUT.** Hiding `#authGate` is not enough — nothing has
+   fired `onAuthStateChanged`, so the page never resolves who it is talking to and every
+   grid renders header-only. Call `window.__signInNow()`. On 16 Aug this made `elig-test`
+   report 8 failures against a page that was completely fine; adding the call took it
+   straight back to 33/0 with no change to the page at all.
+
+   Both of these have the same shape, and it is the shape to watch for: **a red test that
+   is the harness's fault reads exactly like a red test that is the code's fault.** Before
+   believing a new failure, run the same suite against the PREVIOUS build. If it fails
+   there too, the harness moved, not the page.
 
 ## Next actions, in order
 
 1. ~~Push 49 / 25 + the docs~~ — **done, live 16 Aug.**
-2. ~~Finish the build 50 harness~~ — **done. 50/26 is green and filed, awaiting the owner's push.**
-3. **After the push:** verify `versions.json` live and cache-busted — it must read
-   `{"index":26,"admin":50}`. Do not take this file's word for it.
-4. Answer the open questions at the top of `TODO.md` — several are one-liners that unblock
+2. ~~Finish the build 50 harness, file and push it~~ — **done. 50 / 26 live 16 Aug,
+   `versions.json` verified cache-busted.**
+3. Answer the open questions at the top of `TODO.md` — several are one-liners that unblock
    real work; the four SUSPECT call times are the most valuable.
-5. Then **stage 1** (the shift editor) or **stage 9** (reports — needs only the
+4. Then **stage 1** (the shift editor) or **stage 9** (reports — needs only the
    Overnight-call tag, so it lands sooner).
