@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 57;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 58;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -250,6 +250,7 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
   <a onclick="nav('catalog',this)">🧰 Shift Catalog</a>
   <a onclick="nav('families',this)">🎨 Shift Families</a>
   <a onclick="nav('stats',this)">📊 Stats</a>
+  <a onclick="nav('coverage',this)">🩺 Coverage</a>
   <div class="nav-section">Testing</div>
   <a onclick="nav('simulator',this)">🎲 Simulator</a>
   <div class="nav-section">Admin</div>
@@ -588,6 +589,25 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
       <div id="statsHint" style="font-size:11px;color:var(--t2);margin-bottom:8px">Assignments per user for the month shown above — use the controls to jump to any month or year. Call columns highlighted — watch these for even distribution.</div>
       <div id="statsLoading" style="display:none;font-size:12px;color:var(--t2);padding:8px 0">Adding up all 12 months…</div>
       <div style="overflow-x:auto"><table class="grid" id="statsGrid"></table></div>
+    </div>
+  </div>
+
+  <!-- COVERAGE — stage 2 -->
+  <div class="panel" id="panel-coverage">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">🩺 Coverage — <span id="covMonth"></span></div>
+    <div class="page-sub" style="margin-bottom:10px">What the demand rules ask for, against what is actually assigned. <b>A shift with no demand rules is not counted at all</b> — it is not being asked for, which is different from being short (§9).</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn" onclick="moveMonth(-1)">⟨</button>
+      <button class="btn" onclick="moveMonth(1)">⟩</button>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
+      <span style="width:1px;height:20px;background:var(--b2)"></span>
+      <label style="font-size:12.5px;font-weight:700;color:var(--t2);display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="covShowOver" onchange="renderCoverage()"> also show days with MORE people than asked for
+      </label>
+    </div>
+    <div id="covSummary" class="card" style="padding:11px 14px"></div>
+    <div class="card" style="padding:10px 12px">
+      <div style="overflow-x:auto"><table class="grid" id="covGrid"></table></div>
     </div>
   </div>
 
@@ -3489,23 +3509,99 @@ function renderStatsYearTable(y){
 // Same "one slot per catalog shift per day, filled or not" definition
 // autoPopulate() itself uses — kept as a single aggregate percentage here
 // (not a calendar), per the plain-number card style this dashboard uses.
-function dashCoverage(){
-  if(!curYM) return {filled:0,total:0,pct:0};
-  const [y,m]=curYM.split('-').map(Number);
+// ══════════════════════════════════════════════════════════════════════════════
+// [58] COVERAGE — stage 2.  DECISIONS §9.  Closes defect 6.
+//
+// The old number was meaningless and defect 6 said so: the denominator was every shift ×
+// its capacity × every day of the month, so a catalog of 92 shifts made the percentage
+// structurally near-zero no matter how well the month was staffed.
+//
+// The denominator is now WHAT WAS ACTUALLY ASKED FOR. Demand rules (build 55) say how many
+// people each shift needs on each date; anything a rule does not ask for is not counted at
+// all. §9: "Not all shifts need a person every day… A shift with no rules is never demanded
+// and never counts as uncovered."
+//
+// `demanded:false` is returned separately from a 0% figure, because "nothing has been asked
+// for yet" and "nothing has been filled" are different statements and only one of them is
+// a problem.
+// ══════════════════════════════════════════════════════════════════════════════
+function coverageRows(ym,days){
+  const [y,m]=ym.split('-').map(Number);
   const nDays=new Date(y,m,0).getDate();
-  const list=shiftList();
-  const perDayCapacity=list.reduce((sum,[,s])=>sum+(s.capacity||1),0);
-  let filled=0, total=0;
+  const rows=[]; let need=0, have=0, shiftsWithDemand=0;
+  for(const [,sh] of shiftList()) if(demandRules(sh).length) shiftsWithDemand++;
   for(let d=1;d<=nDays;d++){
-    const dd=pad(d);
-    const cell=monthData.days?.[dd]||{};
+    const dd=pad(d), dt=new Date(y,m-1,d);
+    const cell=(days&&days[dd])||{};
     const counts={};
     for(const u in cell) for(const id of shiftsOf(cell[u])) counts[id]=(counts[id]||0)+1;
-    let dayFilled=0; for(const [id,s] of list) dayFilled+=Math.min(counts[id]||0,s.capacity||1);
-    filled+=dayFilled; total+=perDayCapacity;
+    for(const [id,sh] of shiftList()){
+      const n=demandOn(sh,dt);
+      if(n===null) continue;               // never asked for — not a gap (§9)
+      const f=counts[id]||0;
+      need+=n; have+=Math.min(f,n);
+      if(f!==n) rows.push({dd,date:dKey(dt),dow:DOW_SHORT[dt.getDay()],id,label:sh.label||id,
+                           need:n,filled:f,short:n-f,holiday:isHoliday(dKey(dt))});
+    }
   }
-  return {filled,total,pct: total?Math.round(filled/total*100):0};
+  return {rows,need,have,shiftsWithDemand,
+          pct:need?Math.round(have/need*100):null,
+          demanded:need>0||shiftsWithDemand>0};
 }
+function dashCoverage(){
+  if(!curYM) return {filled:0,total:0,pct:null,demanded:false};
+  const c=coverageRows(curYM,monthData.days||{});
+  return {filled:c.have,total:c.need,pct:c.pct,demanded:c.demanded};
+}
+function renderCoverage(){
+  const g=document.getElementById('covGrid'); if(!g||!curYM) return;
+  document.getElementById('covMonth').textContent=MS[Number(curYM.slice(5))-1]+' '+curYM.slice(0,4);
+  const c=coverageRows(curYM,monthData.days||{});
+  const showOver=!!document.getElementById('covShowOver')?.checked;
+  const short=c.rows.filter(r=>r.short>0);
+  const over=c.rows.filter(r=>r.short<0);
+  const sum=document.getElementById('covSummary');
+
+  if(!c.demanded){
+    sum.innerHTML='<div style="font-size:13px;font-weight:800;color:#92400e">Nothing is being asked for yet.</div>'
+      +'<div style="font-size:12px;color:var(--t2);margin-top:5px;line-height:1.55">No shift in the catalog has demand rules, so there is nothing to be short of. '
+      +'This is <b>not</b> the same as being fully covered — it means the question has not been asked. '
+      +'Set demand on the <b>Shift Catalog</b> page: each shift gets a list of rules saying which days it runs and how many people it needs.</div>';
+    g.innerHTML=''; return;
+  }
+  if(c.need===0){
+    sum.innerHTML='<div style="font-size:13px;font-weight:800">Nothing is asked for this month.</div>'
+      +'<div style="font-size:12px;color:var(--t2);margin-top:5px">'+c.shiftsWithDemand+' shift'+(c.shiftsWithDemand===1?' has':'s have')+' demand rules, but none of them match any day in '
+      +MS[Number(curYM.slice(5))-1]+'. Worth checking the 60-day preview on those shifts — a rule that matches nothing looks exactly like a rule that works.</div>';
+    g.innerHTML=''; return;
+  }
+  const pctColor=c.pct>=100?'#065f46':c.pct>=90?'#92400e':'#991b1b';
+  sum.innerHTML='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">'
+    +'<span style="font-size:24px;font-weight:800;color:'+pctColor+'">'+c.pct+'%</span>'
+    +'<span style="font-size:13px;font-weight:700">'+c.have+' of '+c.need+' asked-for places filled</span></div>'
+    +'<div style="font-size:12px;color:var(--t2);margin-top:6px;line-height:1.55">'
+    +(short.length?'<b style="color:#991b1b">'+short.length+' gap'+(short.length===1?'':'s')+'</b> — '+short.reduce((a,r)=>a+r.short,0)+' place'+(short.reduce((a,r)=>a+r.short,0)===1?'':'s')+' unfilled.':'<b style="color:#065f46">No gaps.</b> Everything asked for is covered.')
+    +(over.length?' · <b style="color:#92400e">'+over.length+'</b> day'+(over.length===1?'':'s')+' have more people than asked for.':'')
+    +' · Counted against <b>'+c.shiftsWithDemand+'</b> shift'+(c.shiftsWithDemand===1?'':'s')+' with demand rules; the rest are not asked for and are not counted (§9).</div>';
+
+  const rows=[...short,...(showOver?over:[])].sort((a,b)=>a.date.localeCompare(b.date)||a.label.localeCompare(b.label));
+  if(!rows.length){ g.innerHTML='<tr><td style="font-size:12px;color:#065f46;font-weight:700;padding:8px">Nothing short'+(showOver?' and nothing over-staffed':'')+'.</td></tr>'; return; }
+  g.innerHTML='<tr><th style="text-align:left">Date</th><th style="text-align:left">Shift</th><th>Asked for</th><th>Assigned</th><th style="text-align:left">Result</th></tr>'
+    +rows.map(r=>'<tr>'
+      +'<td style="text-align:left;white-space:nowrap"><b>'+esc(r.dow)+' '+esc(r.date.slice(8))+'</b>'+(r.holiday?' <span style="font-size:9.5px;font-weight:800;color:#5b21b6">HOLIDAY</span>':'')+'</td>'
+      +'<td style="text-align:left">'+esc(r.label)+'</td>'
+      +'<td>'+r.need+'</td><td>'+r.filled+'</td>'
+      +'<td style="text-align:left">'+(r.short>0
+        ?'<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:#fee2e2;color:#991b1b">SHORT '+r.short+'</span>'
+        :'<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:#fef3c7;color:#92400e">'+(-r.short)+' MORE THAN ASKED</span>')
+      +'</td></tr>').join('');
+}
+
+// Module scope is invisible to inline onchange= handlers — HANDOFF trap 1, which has now
+// caused one shipped bug and several test failures. The switch on the Coverage page calls
+// this by name from markup.
+window.renderCoverage=renderCoverage;
+
 function renderDash(){
   if(!document.getElementById('panel-dash')) return;
   const pendingReq=(requests.list||[]).filter(r=>r.status==='pending').sort((a,b)=>b.ts-a.ts);
@@ -3523,9 +3619,16 @@ function renderDash(){
     ?'<div class="rowline">🔁 '+s.participants.map(u=>esc(displayName(u))).join(' → ')+'</div>'
     :'<div class="rowline">'+esc(displayName(s.from))+' ⇄ '+esc(displayName(s.to))+' — '+esc(s.date)+'</div>').join('');
 
+  // [58] "Nothing has been asked for yet" and "nothing is filled" are different statements,
+  // and only one of them is a problem. Showing 0% for the first is what made the old number
+  // useless (defect 6).
   const cov=dashCoverage();
-  document.getElementById('dashCoveragePct').textContent=curYM?(cov.pct+'%'):'—';
-  document.getElementById('dashCoverageSub').textContent=curYM?(cov.filled+' of '+cov.total+' slots filled — '+MS[Number(curYM.slice(5))-1]+' '+curYM.slice(0,4)):'';
+  const monthLbl=curYM?(MS[Number(curYM.slice(5))-1]+' '+curYM.slice(0,4)):'';
+  document.getElementById('dashCoveragePct').textContent = !curYM ? '—' : (cov.pct===null ? '—' : cov.pct+'%');
+  document.getElementById('dashCoverageSub').textContent = !curYM ? ''
+    : !cov.demanded ? 'No shift has demand rules yet, so nothing is being asked for — set them in the Shift Catalog.'
+    : cov.total===0 ? ('Nothing is asked for in '+monthLbl+' — the rules match no day this month.')
+    : (cov.filled+' of '+cov.total+' asked-for places filled — '+monthLbl);
 
   const log=[...(auditLogData.log||[])].sort((a,b)=>b.ts-a.ts);
   document.getElementById('dashAuditSub').textContent=log.length?('Last '+Math.min(5,log.length)+' of '+log.length+' logged actions.'):'No activity logged yet.';
@@ -3536,7 +3639,7 @@ function renderDash(){
   document.getElementById('dashUserSub').textContent=names.length?(noFte?(noFte+' of '+names.length+' user(s) have no FTE set here.'):'Every user has an FTE set.'):'No users yet.';
 }
 
-function renderAll(){ if(cellSel) renderCellModal(); renderRehearsal(); renderCatLock(); renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); renderUsersLock(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); renderReports(); }
+function renderAll(){ if(cellSel) renderCellModal(); renderRehearsal(); renderCatLock(); renderCoverage(); renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); renderUsersLock(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); renderReports(); }
 
 // ── Call-fairness baseline table (users × call shifts) ──
 function renderBaseline(){

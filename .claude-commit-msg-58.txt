@@ -1,0 +1,65 @@
+Build 58 (admin) — Stage 2: COVERAGE against demand. Closes defect 6.
+
+DECISIONS §9. Admin only; staff untouched at 27. No rules change. Read-only page.
+
+WHY
+
+  Defect 6: "dashCoverage is meaningless — denominator is every shift × capacity × every
+  day. Structurally near-zero." With 92 shifts in the catalog the percentage said nothing
+  about whether the month was staffed; it mostly reported how big the catalog was.
+
+  Demand rules (build 55) made a real denominator possible for the first time: WHAT WAS
+  ACTUALLY ASKED FOR.
+
+THE NUMBER NOW MEANS SOMETHING
+
+  need  = the sum of what the demand rules ask for, day by day, shift by shift
+  have  = what is actually assigned against that, capped at what was asked
+
+  A shift with NO demand rules contributes nothing to either side. §9: "Not all shifts need
+  a person every day… A shift with no rules is never demanded and never counts as
+  uncovered." It is not being asked for, which is a different thing from being short, and
+  the old denominator's central mistake was conflating them.
+
+  The suite pins this with a catalog of three shifts where one — "Never" — has no rules:
+  the denominator comes out at exactly days × 3, and "Never" never appears as a gap.
+
+TWO STATES THAT ARE NOT 0%
+
+  This is the part worth keeping. "Nothing has been filled" and "nothing has been asked
+  for" are different statements, and only one of them is a problem. So:
+
+  · NO SHIFT HAS DEMAND RULES → the page says so in words, says explicitly that this is NOT
+    the same as being fully covered, points at the Shift Catalog, and shows a dash rather
+    than a percentage. The dashboard tile says the same.
+  · RULES EXIST BUT MATCH NO DAY THIS MONTH → called out separately, with a pointer to the
+    60-day preview, because that is precisely where a rule that quietly matches nothing
+    becomes visible. It does NOT read as 100% covered.
+
+  Both are asserted. A page that showed 0% for the first, or 100% for the second, would be
+  worse than no page at all.
+
+THE BOARD
+
+  Gaps listed by date and shift — asked for, assigned, short by how many — with holidays
+  marked. Over-staffed days are hidden by default but always COUNTED in the summary, so
+  they are never invisible; a switch shows them.
+
+  The page writes nothing. The suite asserts zero writes of any kind across the whole run,
+  not just zero auction writes.
+
+GATES
+
+  · sched/build58-test.mjs — 26/26, three consecutive runs, driven in a real browser.
+  · Honesty check — the same suite against build 57/27 scores 7 pass / 17 fail.
+  · Whole schedule battery green on these bytes: isolation 27/27 · elig 33/33 ·
+    build50 37/37 · build51 88/88 · build52 49/49 · build53 29/29 · build54 45/45 ·
+    build55 45/45 · build56 39/39 · build57 19/19.
+  · AUCTION battery, on the owner's machine — 14 suites, 1074 assertions, green.
+
+  One real bug the suite caught in this build, and it is the third time this exact trap has
+  fired: renderCoverage() was module-scope, so the "show over-staffed" switch called it by
+  name from markup and got nothing. HANDOFF trap 1. It would have failed for the owner
+  exactly as it failed in the test.
+
+Bumped: var BUILD in admin/index.html AND versions.json -> {"index":27,"admin":58}
