@@ -150,6 +150,41 @@ type a person may make per period. Not specified, deliberately not invented (§2
 
 ---
 
+## FUTURE CAPABILITY — ideas raised in conversation. NOT yet specified, NOT scheduled.
+
+> **⚠️ WHY THIS SECTION EXISTS, AND THE LESSON IN IT.** On 16 Aug 2026 the owner asked that
+> earlier recommendations stay on the list — *"there were a lot of good ideas in there such as
+> linking to calendars on phones, e-mail setup…"*. They were not recoverable. They had been
+> raised in chat and **never written to any file**, and the session's context had since been
+> compacted. The only surviving transcript begins after that point.
+>
+> **A chat is not storage.** An idea that lives only in a conversation is one compaction away
+> from gone. **BINDING, from now on: when an idea, preference or "we should eventually…" is
+> raised, write it into this section in the same turn** — one line is enough. Do not wait for
+> it to be specified, scheduled, or agreed. Capturing a rough idea costs nothing; losing a
+> good one costs the owner something he cannot get back.
+
+**Recovered so far — the two the owner named on 16 Aug.** Both are HIS words and are recorded
+here deliberately unelaborated, because the detail was lost and inventing it would breach §22
+(never present invented data as the owner's). Ask him to specify before designing either.
+
+- [ ] **Linking to calendars on phones.** Owner-raised, detail lost. The obvious shape is a
+      per-doctor subscribable feed (`.ics`) that a phone can subscribe to so a doctor's shifts
+      appear in their own calendar and update when the schedule changes — but that is MY guess
+      at what he meant, not his specification. Confirm before building. Note the auction
+      already has an "Auction Calendar" concept in its admin; check whether he wants these
+      unified or kept separate.
+- [ ] **E-mail setup.** Owner-raised, detail lost. The auction already sends mail through
+      EmailJS (shared template `template_rss3fn3`, footer added 13 Aug — see the auction's
+      TODO). Whether the schedule should reuse that template, use its own, and what it should
+      send (assignment changes? open-shift alerts? request decisions?) is unspecified. Ask.
+
+- [ ] **Anything else the owner remembers from the pre-16-Aug sessions.** He said there were
+      "a lot of good ideas". These two are the ones he named. **Ask him directly what else he
+      recalls, and write each one here the moment he says it.**
+
+---
+
 ## Staged roadmap
 
 From `SCHEDULE-FOUNDATIONS-SPEC.md` §6. Each stage ships on its own and leaves the site
