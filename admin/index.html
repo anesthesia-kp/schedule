@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 50;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 51;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -141,6 +141,18 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 .lockbar .who{font-weight:600;font-size:11.5px;opacity:.85}
 .pagelocked{opacity:.55;pointer-events:none}
 
+/* ── Reports [build 51] ── the tick-list used for the overnight-call tag and for
+   who counts toward the group comparison. Same control, two jobs. */
+.btn-sm{font-size:11.5px;padding:3px 9px;border-radius:6px}
+.tagpick{display:flex;flex-wrap:wrap;gap:5px}
+.tp{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--b2);background:var(--s1);
+  border-radius:999px;padding:3px 11px 3px 9px;font-size:12px;font-weight:700;cursor:pointer;user-select:none}
+.tp:hover{background:var(--s3)}
+.tp.on{border-color:#7c3aed;background:#f5f3ff;color:#5b21b6;box-shadow:0 0 0 2px rgba(124,58,237,.14)}
+.tp .m{font-family:'SF Mono',Consolas,monospace;font-size:10.5px;color:var(--t2);font-weight:600}
+.tp.on .m{color:#7c3aed}
+.tp.warn{border-color:#fcd34d;background:#fffbeb;color:#92400e}
+
 /* ── Shift Eligibility grid [build 49] ──────────────────────────────────────
    The old grid was one column per shift in catalog `order`, families interleaved,
    nowrap headers — ~4,000px wide at the seeded catalog size, with nothing to hold
@@ -239,6 +251,7 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
   <a onclick="nav('families',this)">🎨 Shift Families</a>
   <a onclick="nav('stats',this)">📊 Stats</a>
   <div class="nav-section">Admin</div>
+  <a onclick="nav('reports',this)">📈 Reports</a>
   <a onclick="nav('audit',this)">🧾 Audit Log</a>
   <div class="nav-section">Other Systems</div>
   <a href="https://anesthesia-kp.github.io/vacation/admin/" target="_blank" rel="noopener">🏖️ Vacation Auction Admin →</a>
@@ -510,6 +523,84 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
     </div>
   </div>
 
+  <!-- REPORTS — ADMIN ONLY (DECISIONS §28) -->
+  <div class="panel" id="panel-reports">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">📈 Reports
+      <span style="font-size:10px;font-weight:800;background:var(--s3);color:var(--t2);border-radius:999px;padding:2px 9px;vertical-align:middle;margin-left:6px">ADMIN ONLY</span></div>
+    <div class="page-sub" style="margin-bottom:10px">Per doctor, for any period you choose: how many of each shift they did with overnight call first, every overnight call listed by date, and a comparison with the group adjusted for FTE. Opens in its own tab using the Vacation Auction's report stylesheet, so both sites produce identical-looking paperwork.</div>
+
+    <div class="lockbar" id="reportsLockBar"></div>
+
+    <div id="reportsLockable">
+      <div class="card">
+        <div class="card-title">Which shifts count as overnight call?</div>
+        <div class="tagpick" id="ocTagPick"></div>
+        <div id="ocTagState" style="font-size:11.5px;margin-top:8px"></div>
+        <div style="font-size:11.5px;color:var(--t2);margin-top:6px;line-height:1.5">
+          <b>You set this — nothing is worked out automatically.</b> It cannot be: shifts that cross midnight would sweep in <b>RCH-ICU B</b>, a night ICU shift, and everything in the call family would sweep in <b>Eye Call</b> (07:30–15:30) and <b>Call 12 AM</b> (07:30–19:30), which are daytime. Anything left unticked is simply not overnight call, whatever its name or hours suggest.
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" style="font-size:12px" onclick="saveOvernightTag()">Save overnight-call list</button>
+          <button class="btn btn-ghost" style="font-size:12px" onclick="resetOvernightTag()">Back to Call 16 · Call 24 · OB PM</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Who counts toward the group comparison?</div>
+        <div style="font-size:11.5px;color:var(--t2);margin-bottom:9px;line-height:1.5">
+          Everyone counts unless you untick them. Untick <b>per diem and locums</b> — they are still scheduled, still reported on in full, and still get their own numbers; they just don't affect anyone else's group average. Anyone with <b>no FTE set</b> is left out of the average automatically, because there is no way to work out their share, and the report says so on their page.
+        </div>
+        <div id="compPoolList" class="tagpick"></div>
+        <div style="margin-top:10px"><button class="btn btn-primary" style="font-size:12px" onclick="saveCompPool()">Save who counts</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">1 · Period</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-sm" id="rpP_day"     style="font-size:11.5px" onclick="setRepPeriod('day')">Day</button>
+        <button class="btn btn-sm btn-primary" id="rpP_month" style="font-size:11.5px" onclick="setRepPeriod('month')">Month</button>
+        <button class="btn btn-sm" id="rpP_quarter" style="font-size:11.5px" onclick="setRepPeriod('quarter')">Quarter</button>
+        <button class="btn btn-sm" id="rpP_year"    style="font-size:11.5px" onclick="setRepPeriod('year')">Year</button>
+        <button class="btn btn-sm" id="rpP_range"   style="font-size:11.5px" onclick="setRepPeriod('range')">Custom range</button>
+        <span style="width:1px;height:20px;background:var(--b2)"></span>
+        <span id="repPeriodCtl" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"></span>
+      </div>
+      <div id="repPeriodEcho" style="font-size:11.5px;color:var(--t2);margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">2 · Which doctor</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select class="sel" id="repWho" style="font-size:12px;min-width:220px"></select>
+        <span style="width:1px;height:20px;background:var(--b2)"></span>
+        <label style="font-size:12.5px;font-weight:700;color:var(--t2);display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="repBatch" onchange="document.getElementById('repWho').disabled=this.checked"> Produce one for <b>every doctor</b>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">3 · Output</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="runReport('view')">👁 Open report</button>
+        <button class="btn" onclick="runReport('print')">🖨 PDF / print</button>
+        <button class="btn" onclick="runReport('xlsx')">📊 Excel</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--t2);margin-top:9px;line-height:1.5">
+        Counts come from what is actually saved in the schedule for the period you pick. The admin call baseline is <b>not</b> included here — it has no dates, so it cannot belong to any particular month. Use the fairness view below to see it.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Fairness view — last 12 months</div>
+      <div style="font-size:11.5px;color:var(--t2);margin-bottom:9px;line-height:1.5">
+        This is the one place the <b>call baseline is included</b>. It shows exactly what auto-populate and the fairness maths see: the last 12 months of real schedule plus your entered baseline, faded by how long ago you entered it. Numbers here can be fractional and will change as time passes — that is deliberate, and it is why this is kept apart from the dated reports above.
+      </div>
+      <button class="btn btn-primary" onclick="runFairnessView()">👁 Open fairness view</button>
+    </div>
+  </div>
+
   <!-- AUDIT LOG -->
   <div class="panel" id="panel-audit">
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Audit Log</div>
@@ -618,6 +709,11 @@ const callBaselineRef = doc(db,"dailysched","callBaseline"); // {user:{shiftId:n
 const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);
 const schedFteRef = doc(db,"dailysched","fteMap"); // THIS SITE's own FTE per user — totally separate from the Vacation Auction's FTE doc; the same person can carry a different number on each site. Never read from or written to the auction's fteMap — no seeding, no syncing, no fallback to it.
 const auditRef    = doc(db,"dailysched","auditLog"); // {log:[{id,ts,admin,action,detail}]} — who changed what, when
+// [51] Reports. Both live in dailysched — this site's own data. NEITHER may ever move to a
+// vacations/* document: the auction knows nothing about tags or this site's fairness pool,
+// and a write there would breach the cardinal rule. Pinned by tests/sched/isolation-test.mjs.
+const tagsRef     = doc(db,"dailysched","tags");     // {overnightCall:{label,shifts:[shiftId,…]}} — admin-defined tags (DECISIONS §25/§27)
+const compPoolRef = doc(db,"dailysched","compPool"); // {initials:false} — ONLY exclusions are stored, so everyone counts by default (DECISIONS §35)
 // vacations — the VACATION AUCTION's collection. Read-only here with ONE sanctioned
 // exception: the Users panel writes the shared roster (owner ruling — see the schedule
 // repo's DECISIONS.md §1). Nothing else on this site may write a vacations/* document.
@@ -645,6 +741,7 @@ let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShift
 let curYM=null, unsubMonth=null, cellSel=null;
 let statsMode='month', statsYearLoadedFor=null, statsYearData=null;
 let schedFte={}, schedFteLoaded=false, namesLoaded=false, baselineData={};
+let tagsData=null, compPool={};   // [51] Reports — see tagsRef / compPoolRef above
 // [H-12] Track whether the shared roster docs have actually loaded. Until they do,
 // every Users-grid input renders blank; saving then would map those blanks to
 // deleteField() and WIPE the shared usernames / loginEmails / emails docs — deleting
@@ -2355,7 +2452,7 @@ function renderDash(){
   document.getElementById('dashUserSub').textContent=names.length?(noFte?(noFte+' of '+names.length+' user(s) have no FTE set here.'):'Every user has an FTE set.'):'No users yet.';
 }
 
-function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); renderUsersLock(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); }
+function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); renderUsersLock(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); renderReports(); }
 
 // ── Call-fairness baseline table (users × call shifts) ──
 function renderBaseline(){
@@ -2470,6 +2567,626 @@ window.adminGoogleSignIn=async function(){
 };
 window.adminSignOut=function(){ try{localStorage.removeItem('adminRemembered');}catch(_){}; signOut(auth).catch(()=>{}); };
 
+// ══════════════════════════════════════════════════════════════════════════════
+// REPORTS — ADMIN ONLY.  DECISIONS §25 §27 §28 §29 §32 §35 §36 §37
+//
+// Three sections per doctor, in the owner's order: what they did with overnight call
+// FIRST, every overnight call listed by date, then a comparison with the group that is
+// adjusted for FTE with the method printed on the page.
+//
+// Two rules that are easy to break and must not be:
+//  · Overnight call is a LIST THE ADMIN SETS. Never derived from hours, never from the
+//    shift's name, never from `kind`. §27 spells out why both shortcuts are wrong.
+//  · The dated reports read REAL SCHEDULE DATA ONLY. The call baseline is a lump with no
+//    dates that decays over 12 months, so it cannot belong to a chosen period and would
+//    make the same report give different answers on different days. It appears in the
+//    separate fairness view, and nowhere else. §37.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// The owner's own starting set, 16 Aug: "You can start with call 16 call 24 and OB PM."
+// Used only until the admin saves their own list. Not a guess — his instruction.
+const OVERNIGHT_SEED=['CALL16','CALL24','OBPM'];
+function overnightSaved(){ return !!(tagsData && tagsData.overnightCall && Array.isArray(tagsData.overnightCall.shifts)); }
+function overnightIds(){ return overnightSaved() ? tagsData.overnightCall.shifts.slice() : OVERNIGHT_SEED.slice(); }
+function overnightSet(){ return new Set(overnightIds()); }
+// Draft the picker edits into, so ticking boxes doesn't write until Save is pressed.
+let ocDraft=null;
+function ocWorking(){ return ocDraft!==null ? ocDraft : overnightIds(); }
+
+// §35 — everyone counts unless explicitly excluded, so only exclusions are stored and
+// adding a new person to the roster needs no write here at all.
+// §36 — no FTE means no share can be worked out, so they cannot sit in the pool. FTE 0 is
+// treated the same way: it would divide by zero, and "expected 0" is not a comparison.
+function inCompPool(u){ return compPool[u]!==false; }
+function fteOf(u){ const v=getSchedFTE(u); return (typeof v==='number' && isFinite(v)) ? v : null; }
+function poolEligible(u){ const f=fteOf(u); return inCompPool(u) && f!==null && f>0; }
+function poolOf(list){ return list.filter(poolEligible); }
+function whyNotInPool(u){
+  const f=fteOf(u);
+  if(!inCompPool(u)) return 'excluded from the comparison by an admin (per diem / locum)';
+  if(f===null) return 'no FTE recorded, so no expected number can be worked out';
+  if(f<=0) return 'FTE is 0, so no expected number can be worked out';
+  return null;
+}
+let compDraft=null;
+function compWorking(u){ return compDraft ? compDraft[u]!==false : inCompPool(u); }
+
+// ── Page lock ── §20 gives each admin page one master switch. Reports was not on that
+// list because it did not exist. Running a report is read-only and never needs unlocking;
+// the switch covers the two settings above, which are configuration.
+let reportsLocked=true;
+function renderReportsLock(){
+  const bar=document.getElementById('reportsLockBar'); if(!bar) return;
+  const box=document.getElementById('reportsLockable');
+  bar.className='lockbar '+(reportsLocked?'locked':'open');
+  bar.innerHTML = reportsLocked
+    ? '🔒 <b>Report settings are locked</b> — running a report never needs unlocking. Unlock only to change which shifts count as overnight call, or who counts toward the comparison.'
+      +'<span style="flex:1"></span><button class="btn" style="font-size:12px;padding:4px 10px" onclick="unlockReports()">Unlock settings</button>'
+    : '🔓 <b>Report settings unlocked.</b> Changing these changes every report from now on.'
+      +'<span class="who">unlocked by '+esc(_currentAdminEmail||'you')+'</span>'
+      +'<span style="flex:1"></span><button class="btn btn-primary" style="font-size:12px;padding:4px 10px" onclick="relockReports()">Lock settings</button>';
+  if(box) box.className = reportsLocked?'pagelocked':'';
+}
+window.unlockReports=function(){
+  if(!confirm('Unlock the report settings?\n\nThese two lists decide what every report says:\n\n'
+    +'  • which shifts are counted as overnight call\n'
+    +'  • who counts toward the group comparison\n\n'
+    +'Changing them changes every report produced afterwards. Nothing already printed changes.\n\n'
+    +'They relock when you lock them or reload the page.')) return;
+  reportsLocked=false;
+  auditLog('reports.unlock','Unlocked the Reports settings (overnight-call list and comparison pool)');
+  renderReportsLock();
+};
+window.relockReports=function(){ reportsLocked=true; ocDraft=null; compDraft=null; renderReports(); };
+function reportsLockedRefuse(){
+  if(!reportsLocked) return false;
+  schedToast('Report settings are locked — unlock them first','err');
+  return true;
+}
+
+// ── The two settings ──
+window.togOvernight=function(id){
+  if(reportsLockedRefuse()) return;
+  const cur=ocWorking(); const i=cur.indexOf(id);
+  if(i>=0) cur.splice(i,1); else cur.push(id);
+  ocDraft=cur; renderReports();
+};
+window.saveOvernightTag=async function(){
+  if(reportsLockedRefuse()) return;
+  const next=ocWorking().slice();
+  const labelOf=id=>((catalog.shifts||{})[id]?.label)||id;
+  const before=overnightIds();
+  const added=next.filter(x=>!before.includes(x)).map(labelOf);
+  const removed=before.filter(x=>!next.includes(x)).map(labelOf);
+  if(!added.length && !removed.length){ schedToast('Nothing changed','err'); return; }
+  if(!confirm('Save the overnight-call list?\n\n'
+    +'Counting as overnight call: '+(next.length?next.map(labelOf).join(', '):'NOTHING — every report will show zero overnight call')+'\n\n'
+    +(added.length?'Adding: '+added.join(', ')+'\n':'')
+    +(removed.length?'Removing: '+removed.join(', ')+'\n':'')
+    +'\nThis changes every report produced from now on. Reports already printed are unaffected.')) return;
+  try{
+    await setDoc(tagsRef,{overnightCall:{label:'Overnight call',shifts:next}},{merge:true});
+    auditLog('reports.tag','Overnight-call list saved: '+(next.map(labelOf).join(', ')||'(empty)')
+      +(added.length?' · added '+added.join(', '):'')+(removed.length?' · removed '+removed.join(', '):''));
+    ocDraft=null; schedToast('Overnight-call list saved','ok');
+  }catch(e){ schedToast('Could not save: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); }
+};
+window.resetOvernightTag=function(){
+  if(reportsLockedRefuse()) return;
+  ocDraft=OVERNIGHT_SEED.slice(); renderReports();
+  schedToast('Set back to Call 16 · Call 24 · OB PM — press Save to store it','ok');
+};
+window.togCompPool=function(u){
+  if(reportsLockedRefuse()) return;
+  if(!compDraft){ compDraft={}; names.forEach(n=>{ compDraft[n]=inCompPool(n); }); }
+  compDraft[u]=!compDraft[u]; renderReports();
+};
+window.saveCompPool=async function(){
+  if(reportsLockedRefuse()) return;
+  if(!compDraft){ schedToast('Nothing changed','err'); return; }
+  const out={}, excluded=[];
+  names.forEach(u=>{ if(compDraft[u]===false){ out[u]=false; excluded.push(displayName(u)); } else out[u]=deleteField(); });
+  if(!confirm('Save who counts toward the comparison?\n\n'
+    +(excluded.length?'Left OUT of the group average ('+excluded.length+'): '+excluded.join(', ')
+                     :'Nobody is left out — every doctor with an FTE will count toward the group average.')
+    +'\n\nAnyone left out still gets a full report of their own. They simply do not affect anyone else’s numbers.')) return;
+  try{
+    await setDoc(compPoolRef,out,{merge:true});
+    auditLog('reports.pool','Comparison pool saved — '+(excluded.length?('excluded: '+excluded.join(', ')):'nobody excluded'));
+    compDraft=null; schedToast('Saved','ok');
+  }catch(e){ schedToast('Could not save: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); }
+};
+
+// ── Period ──
+let repPeriod='month';
+window.setRepPeriod=function(p){ repPeriod=p; renderReports(); };
+function repEl(id){ return document.getElementById(id); }
+function repVal(id,fallback){ const el=repEl(id); return el&&el.value!==''?el.value:fallback; }
+// Resolve the controls into a concrete [start,end] pair of Dates plus a human label.
+// Returns null (after a toast) if what is on screen cannot be made into a real range.
+function repRange(quiet){
+  const today=new Date();
+  const complain=m=>{ if(!quiet) schedToast(m,'err'); return null; };
+  const mk=(y,m,d)=>new Date(y,m,d);
+  if(repPeriod==='day'){
+    const v=repVal('rpDate',dKey(today)); const [y,m,d]=v.split('-').map(Number);
+    if(!y||!m||!d) return null;
+    const dt=mk(y,m-1,d);
+    return {start:dt,end:dt,label:dt.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})};
+  }
+  if(repPeriod==='month'){
+    const y=Number(repVal('rpYear',today.getFullYear())), m=Number(repVal('rpMonth',today.getMonth()+1));
+    return {start:mk(y,m-1,1),end:mk(y,m,0),label:MS[m-1]+' '+y};
+  }
+  if(repPeriod==='quarter'){
+    const y=Number(repVal('rpYear',today.getFullYear())), q=Number(repVal('rpQuarter',Math.floor(today.getMonth()/3)+1));
+    const m0=(q-1)*3;
+    return {start:mk(y,m0,1),end:mk(y,m0+3,0),label:'Q'+q+' '+y+' ('+MS[m0].slice(0,3)+'–'+MS[m0+2].slice(0,3)+')'};
+  }
+  if(repPeriod==='year'){
+    const y=Number(repVal('rpYear',today.getFullYear()));
+    return {start:mk(y,0,1),end:mk(y,11,31),label:String(y)};
+  }
+  const a=repVal('rpFrom',''), b=repVal('rpTo','');
+  if(!a||!b) return complain('Pick both dates for a custom range');
+  const [ay,am,ad]=a.split('-').map(Number), [by,bm,bd]=b.split('-').map(Number);
+  const s=mk(ay,am-1,ad), e=mk(by,bm-1,bd);
+  if(e<s) return complain('The end date is before the start date');
+  const f=d=>d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  return {start:s,end:e,label:f(s)+' – '+f(e)};
+}
+
+// ── Reading the schedule ──
+// Assignments live one document per month: dailysched/sched_YYYY-MM, days[DD][user] =
+// {day, call, off}. That model holds ONE day shift and ONE call shift per person per day
+// (defect 2 — a second day shift silently replaced the first, fixed by stage 3). The
+// report is therefore exact about what was SAVED, and says so; it cannot recover a shift
+// that was never written down.
+//
+// A month that fails to read is recorded, NOT swallowed. Quietly treating an unreadable
+// month as empty would print "3 overnight calls" for someone who did nine, and nothing on
+// the page would hint at it.
+async function collectRange(start,end,users){
+  const counts={}, dates={}, failed=[];
+  users.forEach(u=>{ counts[u]={}; dates[u]=[]; });
+  const on=overnightSet();
+  const cur=new Date(start.getFullYear(),start.getMonth(),1);
+  const last=new Date(end.getFullYear(),end.getMonth(),1);
+  while(cur<=last){
+    const ym=ymKey(cur);
+    let days=null;
+    try{ const snap=await getDoc(monthRef(ym)); days=(snap.exists()&&snap.data().days)||{}; }
+    catch(e){ failed.push(ym); days=null; }
+    if(days){
+      const nDays=new Date(cur.getFullYear(),cur.getMonth()+1,0).getDate();
+      for(let d=1;d<=nDays;d++){
+        const dt=new Date(cur.getFullYear(),cur.getMonth(),d);
+        if(dt<start||dt>end) continue;
+        const dayMap=days[pad(d)]||{};
+        for(const u of users){
+          const cell=dayMap[u]; if(!cell) continue;
+          for(const sid of [cell.day,cell.call]){
+            if(!sid) continue;
+            counts[u][sid]=(counts[u][sid]||0)+1;
+            if(on.has(sid)) dates[u].push({d:dt,sid});
+          }
+        }
+      }
+    }
+    cur.setMonth(cur.getMonth()+1);
+  }
+  users.forEach(u=>dates[u].sort((a,b)=>a.d-b.d));
+  return {counts,dates,failed};
+}
+
+// ── The maths, exactly as ruled in §29 ──
+// 1. the pool is everyone not excluded, who has a usable FTE
+// 2. a rate per 1.0 FTE is taken across the pool: pool total ÷ pool FTE
+// 3. a person's expectation is that rate × their own FTE
+// Never a flat mean. A 0.6 FTE is measured against 0.6 of the load.
+function buildModel(counts,users){
+  const on=overnightSet();
+  const totalAll=u=>Object.values(counts[u]||{}).reduce((a,b)=>a+b,0);
+  const totalCall=u=>Object.entries(counts[u]||{}).filter(([k])=>on.has(k)).reduce((a,[,v])=>a+v,0);
+  const pool=poolOf(users);
+  const poolFTE=pool.reduce((a,u)=>a+fteOf(u),0);
+  const rate=fn=>poolFTE>0?pool.reduce((a,u)=>a+fn(u),0)/poolFTE:null;
+  const rateShift=sid=>rate(u=>(counts[u]||{})[sid]||0);
+  const rateCall=rate(totalCall), rateAll=rate(totalAll);
+  // Standing is by overnight call per 1.0 FTE, so it is not just "who is busiest".
+  const ranked=[...pool].sort((a,b)=>(totalCall(b)/fteOf(b))-(totalCall(a)/fteOf(a)));
+  return {on,totalAll,totalCall,pool,poolFTE,rateShift,rateCall,rateAll,
+          rankOf:u=>ranked.indexOf(u)+1,
+          excluded:users.filter(u=>!poolEligible(u))};
+}
+
+// Lifted VERBATIM from the Vacation Auction admin page (DECISIONS §32) — copied, not
+// retyped and not approximated, so the two sites' paperwork is identical. The only edit
+// is the clearly-marked block at the end for classes the auction has no use for.
+const REPORT_CSS=`
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:24px;color:#0f172a}
+  h1{margin:0 0 4px 0;font-size:20px}
+  .stamp{color:#587690;font-size:12px;margin-bottom:16px}
+  .phase-badge{display:inline-block;background:#1d4ed8;color:#fff;font-size:15px;font-weight:800;letter-spacing:.02em;padding:4px 16px;border-radius:10px;margin-left:10px;vertical-align:middle}
+  .wk{margin-bottom:16px;break-inside:avoid}
+  .wk-head{font-weight:700;font-size:13px;background:#0f2744;color:#fff;padding:5px 10px;border-radius:6px 6px 0 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .wk-head .fte{margin-left:12px;font-weight:600;font-size:11px;background:rgba(255,255,255,.14);padding:2px 9px;border-radius:10px}
+  /* Data clusters to the LEFT — columns only as wide as their content (plus a
+     little breathing room) instead of being stretched across the full page. */
+  table{border-collapse:collapse;width:auto;min-width:50%;font-size:12px}
+  th,td{border:1px solid #e2e8f0;padding:6px 26px 6px 10px;text-align:left;white-space:nowrap}
+  th{background:#f8fafc;font-weight:600}
+  tbody tr:nth-child(even){background:#fafafa}
+  .chip{color:#fff;font-weight:700;font-size:10px;padding:2px 8px;border-radius:10px;white-space:nowrap}
+  .proj{font-weight:700;font-size:10px;padding:1px 7px;border-radius:10px;border:1.5px solid;background:transparent;white-space:nowrap}
+  .typetag{font-weight:600;font-size:11px;color:#0f2744;padding:1px 8px;border-radius:10px}
+  @media print { body { margin: 12mm } }
+  /* ─────────────────────────────────────────────────────────────────────────
+     Everything ABOVE this line is the Vacation Auction's stylesheet, unchanged.
+     Below: classes only the Daily Schedule's reports need. Added, never edited in.
+     ───────────────────────────────────────────────────────────────────────── */
+  .sec{font-weight:800;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#0f2744;margin:14px 0 6px}
+  .callrow td{background:#f5f3ff!important}
+  .method{font-size:11px;color:#587690;margin-top:7px;line-height:1.5;max-width:105ch}
+  .alert{background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:700;margin-bottom:14px}
+  .caveat{background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:8px;padding:9px 12px;font-size:11.5px;margin-bottom:14px;line-height:1.5}`;
+
+function repEsc(s){ return esc(s); }
+function shiftLabel(sid){ return ((catalog.shifts||{})[sid]?.label)||sid; }
+function diffChip(v,exp){
+  if(exp===null||exp===undefined) return '<span class="chip" style="background:#94a3b8">no comparison</span>';
+  const d=v-exp;
+  if(Math.abs(d)<0.5) return '<span class="chip" style="background:#64748b">as expected</span>';
+  return '<span class="chip" style="background:'+(d>0?'#b45309':'#0e7490')+'">'+(d>0?'+':'')+d.toFixed(1)+'</span>';
+}
+const n1=v=>(v===null||v===undefined)?'—':Number(v).toFixed(1);
+
+function personBlock(u,M,counts,dates){
+  const f=fteOf(u), did=counts[u]||{}, ids=Object.keys(did);
+  const callIds=ids.filter(i=>M.on.has(i)).sort((a,b)=>did[b]-did[a]);
+  const restIds=ids.filter(i=>!M.on.has(i)).sort((a,b)=>did[b]-did[a]);
+  const callTot=M.totalCall(u), allTot=M.totalAll(u);
+  // §36 — with no usable FTE there is no expectation. Show a dash, never a guess.
+  const exp=r=>(f!==null&&f>0&&r!==null)?r*f:null;
+  const expFor=sid=>exp(M.rateShift(sid)), expCall=exp(M.rateCall), expAll=exp(M.rateAll);
+  const fteTxt=f===null?'FTE not set':('FTE '+f);
+  const row=(sid,isCall)=>{
+    const v=did[sid], e=expFor(sid);
+    return `<tr class="${isCall?'callrow':''}"><td>${isCall?'🌙 ':''}<b>${repEsc(shiftLabel(sid))}</b></td>`
+      +`<td style="text-align:right"><b>${v}</b></td><td style="text-align:right">${n1(e)}</td><td>${diffChip(v,e)}</td></tr>`;
+  };
+  let h=`<div class="wk"><div class="wk-head">${repEsc(displayName(u))}`
+    +`<span class="fte">${repEsc(fteTxt)}</span>`
+    +`<span class="fte">${allTot} shift${allTot===1?'':'s'} · ${callTot} overnight call</span></div>`;
+
+  const why=whyNotInPool(u);
+  if(why) h+=`<div class="caveat"><b>${repEsc(displayName(u))} is not part of the group average</b> — ${repEsc(why)}. `
+    +`They are reported in full below${f!==null&&f>0?' and still measured against their own FTE':', but no expected figures can be shown'}, and they do not affect anyone else’s numbers.</div>`;
+
+  h+=`<div class="sec">Shifts worked — overnight call first</div>`
+    +`<table><thead><tr><th>Shift</th><th style="text-align:right">Did</th>`
+    +`<th style="text-align:right">Expected${f!==null&&f>0?' at FTE '+f:''}</th><th>vs expected</th></tr></thead><tbody>`
+    +(callIds.length?callIds.map(s=>row(s,true)).join('')
+      :`<tr class="callrow"><td colspan="4" style="color:#64748b">No overnight call in this period.</td></tr>`)
+    +`<tr><td><b>All overnight call</b></td><td style="text-align:right"><b>${callTot}</b></td>`
+    +`<td style="text-align:right">${n1(expCall)}</td><td>${diffChip(callTot,expCall)}</td></tr>`
+    +restIds.map(s=>row(s,false)).join('')
+    +`<tr><td><b>All shifts</b></td><td style="text-align:right"><b>${allTot}</b></td>`
+    +`<td style="text-align:right">${n1(expAll)}</td><td>${diffChip(allTot,expAll)}</td></tr>`
+    +`</tbody></table>`;
+
+  const cd=dates[u]||[];
+  h+=`<div class="sec">Every overnight call in this period — ${cd.length}</div>`
+    +`<table><thead><tr><th>#</th><th>Date</th><th>Shift</th></tr></thead><tbody>`
+    +(cd.length?cd.map((x,i)=>`<tr><td>${i+1}</td><td><b>${repEsc(x.d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}))}</b></td><td>🌙 ${repEsc(shiftLabel(x.sid))}</td></tr>`).join('')
+      :`<tr><td colspan="3" style="color:#64748b">None.</td></tr>`)
+    +`</tbody></table>`;
+
+  const perOwn=v=>(f!==null&&f>0)?(v/f).toFixed(1):'—';
+  h+=`<div class="sec">Compared with the group — adjusted for FTE</div>`
+    +`<table><thead><tr><th></th><th style="text-align:right">Did</th><th style="text-align:right">Expected</th>`
+    +`<th style="text-align:right">Per 1.0 FTE — them</th><th style="text-align:right">Per 1.0 FTE — group</th><th>Difference</th></tr></thead><tbody>`
+    +`<tr><td><b>Overnight call</b></td><td style="text-align:right"><b>${callTot}</b></td><td style="text-align:right">${n1(expCall)}</td>`
+    +`<td style="text-align:right">${perOwn(callTot)}</td><td style="text-align:right">${n1(M.rateCall)}</td><td>${diffChip(callTot,expCall)}</td></tr>`
+    +`<tr><td><b>All shifts</b></td><td style="text-align:right"><b>${allTot}</b></td><td style="text-align:right">${n1(expAll)}</td>`
+    +`<td style="text-align:right">${perOwn(allTot)}</td><td style="text-align:right">${n1(M.rateAll)}</td><td>${diffChip(allTot,expAll)}</td></tr>`
+    +`</tbody></table>`;
+
+  // §29 — the owner asked for the method to be stated IN the report, not assumed.
+  h+=`<div class="method"><b>How these numbers are worked out.</b> `
+    +(M.pool.length
+      ? `The group rate is taken <b>per 1.0 FTE</b> across the ${M.pool.length} doctor${M.pool.length===1?'':'s'} in the comparison pool `
+        +`(${M.poolFTE.toFixed(1)} FTE between them), and each doctor’s expected number is that rate multiplied by their own FTE — `
+        +`so a 0.6 FTE is measured against 0.6 of the load, never against a full-timer’s number. `
+      : `<b>No comparison could be worked out</b> — nobody in this report has both an FTE and a place in the pool, so there is no rate to compare against. `)
+    +(M.excluded.length
+      ? `<b>Left out of the pool (${M.excluded.length}):</b> `+M.excluded.map(x=>repEsc(displayName(x))+' — '+repEsc(whyNotInPool(x))).join('; ')+'. '
+      : `Nobody is left out of the pool. `)
+    +(why||!M.pool.length?'':`Standing: <b>${M.rankOf(u)} of ${M.pool.length}</b> in the pool by overnight call per 1.0 FTE.`)
+    +`</div>`;
+  return h+'</div>';
+}
+
+function openReportTab(title,badge,stampHtml,bodyHtml,autoPrint){
+  const w=window.open('','_blank');
+  if(!w){ schedToast('Pop-up blocked — allow pop-ups for this site','err'); return false; }
+  w.document.write(`<!doctype html><html><head><title>${title} — ${badge}</title><style>${REPORT_CSS}</style></head><body>`
+    +`<h1>${title}<span class="phase-badge">${repEsc(badge)}</span></h1><div class="stamp">${stampHtml}</div>${bodyHtml}</body></html>`);
+  w.document.close();
+  if(autoPrint) setTimeout(()=>{ try{ w.focus(); w.print(); }catch(_){} },350);
+  return true;
+}
+
+function reportSubjects(){
+  const batch=repEl('repBatch')&&repEl('repBatch').checked;
+  if(batch) return names.slice();
+  const u=repEl('repWho')&&repEl('repWho').value;
+  return u?[u]:[];
+}
+
+window.runReport=async function(format){
+  if(!names.length){ schedToast('No users on the roster yet','err'); return; }
+  const R=repRange(); if(!R) return;
+  const subjects=reportSubjects();
+  if(!subjects.length){ schedToast('Pick a doctor first','err'); return; }
+  if(!overnightIds().length && !confirm('No shifts are marked as overnight call, so every overnight-call figure will be zero.\n\nProduce the report anyway?')) return;
+  schedToast('Building the report…','ok');
+  let data;
+  try{ data=await collectRange(R.start,R.end,names); }
+  catch(e){ schedToast('Could not read the schedule: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); return; }
+  const {counts,dates,failed}=data;
+  const M=buildModel(counts,names);
+  if(format==='xlsx'){ await ensureXLSX(); reportToExcel(R,subjects,counts,dates,M,failed); return; }
+  // An unreadable month is stated at the top in red. It is never silently zero.
+  const alert=failed.length
+    ? `<div class="alert">⚠ ${failed.length} month${failed.length===1?'':'s'} could not be read (${repEsc(failed.join(', '))}). `
+      +`Every number below is INCOMPLETE — shifts worked in ${failed.length===1?'that month':'those months'} are missing. Do not rely on this report until it reads cleanly.</div>`
+    : '';
+  const caveat=`<div class="caveat"><b>What these counts are.</b> They are what is saved in the schedule for this period. `
+    +`The schedule currently stores one day shift and one call shift per person per day, so if someone worked a second day shift it was never recorded and cannot appear here. `
+    +`The admin call baseline is <b>not</b> included — it has no dates, so it cannot belong to a chosen period. Use the fairness view for that.</div>`;
+  const body=alert+caveat+subjects.map(u=>personBlock(u,M,counts,dates))
+    .join(subjects.length>1?'<div style="break-before:page;height:18px"></div>':'');
+  const who=subjects.length>1?('Every doctor ('+subjects.length+')'):displayName(subjects[0]);
+  const stamp=`${repEsc(who)} · produced ${repEsc(new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'}))} · `
+    +`overnight call = ${overnightIds().length} tagged shift${overnightIds().length===1?'':'s'}`
+    +`${overnightSaved()?'':' (the starting set — not yet saved)'} · <b>all comparisons FTE-adjusted; per diem, locums and anyone without an FTE are outside the pool</b>`;
+  openReportTab('Daily Schedule — Shift counts &amp; calls',R.label,stamp,body,format==='print');
+};
+
+// ── Fairness view — the ONE place the baseline appears (§37) ──
+window.runFairnessView=async function(){
+  if(!names.length){ schedToast('No users on the roster yet','err'); return; }
+  schedToast('Building the fairness view…','ok');
+  let counts;
+  try{ counts=await windowShiftCounts(curYM,11); }
+  catch(e){ schedToast('Could not read the schedule: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); return; }
+  const on=overnightSet();
+  const per={}; names.forEach(u=>per[u]={});
+  for(const k in counts){ const i=k.lastIndexOf('|'); const u=k.slice(0,i), s=k.slice(i+1); if(per[u]) per[u][s]=counts[k]; }
+  const callOf=u=>Object.entries(per[u]).filter(([s])=>on.has(s)).reduce((a,[,v])=>a+v,0);
+  const pool=poolOf(names), poolFTE=pool.reduce((a,u)=>a+fteOf(u),0);
+  const rate=poolFTE>0?pool.reduce((a,u)=>a+callOf(u),0)/poolFTE:null;
+  const asOf=(baselineData&&baselineData._asOf)||null;
+  let weight=1;
+  if(asOf){ const [ay,am]=asOf.split('-').map(Number); const [ey,em]=curYM.split('-').map(Number);
+    weight=Math.max(0,(12-((ey-ay)*12+(em-am)))/12); }
+  const rows=[...names].sort((a,b)=>callOf(b)-callOf(a)).map(u=>{
+    const f=fteOf(u), e=(f!==null&&f>0&&rate!==null)?rate*f:null, why=whyNotInPool(u);
+    return `<tr${why?' style="color:#92400e"':''}><td><b>${repEsc(displayName(u))}</b>${why?' <span class="chip" style="background:#b45309">not in pool</span>':''}</td>`
+      +`<td style="text-align:right">${f===null?'—':f}</td><td style="text-align:right"><b>${callOf(u).toFixed(1)}</b></td>`
+      +`<td style="text-align:right">${n1(e)}</td><td style="text-align:right">${(f!==null&&f>0)?(callOf(u)/f).toFixed(1):'—'}</td>`
+      +`<td>${diffChip(callOf(u),e)}</td></tr>`;
+  }).join('');
+  const body=`<div class="caveat"><b>This is not a dated report — it is what the fairness maths sees.</b> `
+    +`It covers the 11 months before ${repEsc(MS[Number(curYM.slice(5))-1]+' '+curYM.slice(0,4))} plus your entered call baseline, and it is the same number auto-populate uses when it decides who is due for call. `
+    +`Figures are fractional on purpose and they change as time passes, which is why this is kept separate from the reports on the Reports page.<br><br>`
+    +(asOf?`<b>Baseline:</b> entered ${repEsc(asOf)}, currently counted at <b>${Math.round(weight*100)}%</b> of its original value. It fades to nothing over twelve months as real schedule data replaces it.`
+          :`<b>Baseline:</b> no <i>_asOf</i> stamp is recorded, so it is being counted at full weight until an admin re-saves it.`)
+    +`</div>`
+    +`<div class="sec">Overnight call — rolling 12 months including baseline</div>`
+    +`<table><thead><tr><th>Doctor</th><th style="text-align:right">FTE</th><th style="text-align:right">Calls</th>`
+    +`<th style="text-align:right">Expected</th><th style="text-align:right">Per 1.0 FTE</th><th>Difference</th></tr></thead><tbody>${rows}</tbody></table>`
+    +`<div class="method"><b>How these numbers are worked out.</b> `
+    +(pool.length?`Rate per 1.0 FTE across the ${pool.length} doctor${pool.length===1?'':'s'} in the pool (${poolFTE.toFixed(1)} FTE between them) = <b>${n1(rate)}</b>. Each doctor’s expected figure is that rate times their own FTE. `
+                 :`No pool could be formed, so no expected figures are shown. `)
+    +`Per diem, locums and anyone without an FTE sit outside the pool and do not affect the rate.</div>`;
+  const stamp=`Rolling 12 months to ${repEsc(MS[Number(curYM.slice(5))-1]+' '+curYM.slice(0,4))} · produced `
+    +`${repEsc(new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'}))} · <b>includes the call baseline</b>`;
+  openReportTab('Daily Schedule — Call fairness','Rolling 12 months',stamp,body,false);
+};
+
+// The Excel library — same library and same version the Vacation Auction uses, so both
+// sites' spreadsheets are built by identical code (DECISIONS §32).
+//
+// Fetched ONLY when someone actually presses Excel, not at page load. The auction loads it
+// in a <script> tag; doing that here would give this page a network dependency it has
+// never had, and a CDN that cannot be reached logs a console error on every single load
+// for a feature most visits never touch. (The eligibility suite asserts zero console
+// errors, and it caught exactly that.) If the fetch fails, XLSX stays undefined and the
+// export falls back to CSV — the same fallback the auction has.
+const XLSX_SRC='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
+let _xlsxLoad=null;
+function ensureXLSX(){
+  if(typeof XLSX!=='undefined') return Promise.resolve(true);
+  if(!_xlsxLoad) _xlsxLoad=new Promise(res=>{
+    const s=document.createElement('script');
+    s.src=XLSX_SRC;
+    s.onload =()=>res(typeof XLSX!=='undefined');
+    s.onerror=()=>{ _xlsxLoad=null; res(false); };   // cleared, so a later click can retry
+    document.head.appendChild(s);
+    setTimeout(()=>res(typeof XLSX!=='undefined'),10000);
+  });
+  return _xlsxLoad;
+}
+
+// ── Excel ── same construction as the auction's exportUserSummary (DECISIONS §32):
+// title row, coloured scope row, timestamp, navy per-person banners, bordered cells,
+// auto-sized columns, and the identical CSV fallback if the library did not load.
+function _autoCols(rows,nCols,mins){
+  const w=new Array(nCols).fill(0);
+  rows.forEach(row=>{ if(!Array.isArray(row)) return; for(let c=0;c<nCols;c++){ const v=row[c]; const len=(v==null?'':String(v)).length; if(len>w[c]) w[c]=len; } });
+  return w.map((x,c)=>({wch: Math.min(80, Math.max((mins&&mins[c])||10, x+3))}));
+}
+function _bannerHeights(aoa,mergedRowSet,cols,rowHts){
+  const totalW=Math.max(20, cols.reduce((a,c)=>a+(c.wch||0),0)-2);
+  const perLine=Math.max(12, totalW*0.85);
+  mergedRowSet.forEach(r=>{ const txt=String((aoa[r]&&aoa[r][0])||''); const lines=Math.max(1,Math.ceil(txt.length/perLine)); rowHts[r]=Math.max(rowHts[r]||0, lines*16+8); });
+}
+function reportToExcel(R,subjects,counts,dates,M,failed){
+  const now=new Date(), stamp=now.toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
+  const fname='schedule-report-'+R.label.replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase()+'-'+now.toISOString().slice(0,10);
+  const cols=['Shift','Did','Expected','Per 1.0 FTE — them','Per 1.0 FTE — group','Difference'], nCols=cols.length;
+  if(typeof XLSX==='undefined'){
+    const esc2=v=>{ const s=String(v==null?'':v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+    const lines=['# Daily Schedule — Shift counts & calls — '+R.label+' — exported '+stamp];
+    if(failed.length) lines.push('# INCOMPLETE — these months could not be read: '+failed.join(' '));
+    lines.push(['Doctor','FTE','In pool','Shift','Overnight call','Did','Expected'].map(esc2).join(','));
+    subjects.forEach(u=>{ const f=fteOf(u), did=counts[u]||{}, why=whyNotInPool(u);
+      const exp=r=>(f!==null&&f>0&&r!==null)?(r*f).toFixed(1):'';
+      Object.keys(did).sort((a,b)=>(M.on.has(b)-M.on.has(a))||(did[b]-did[a])).forEach(sid=>{
+        lines.push([displayName(u),f===null?'':f,why?'no — '+why:'yes',shiftLabel(sid),M.on.has(sid)?'yes':'no',did[sid],exp(M.rateShift(sid))].map(esc2).join(','));
+      });
+    });
+    const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download=fname+'.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    schedToast('Excel library unavailable — exported CSV instead','err'); return;
+  }
+  const BORDER={top:{style:'thin',color:{rgb:'D7DEE6'}},bottom:{style:'thin',color:{rgb:'D7DEE6'}},left:{style:'thin',color:{rgb:'D7DEE6'}},right:{style:'thin',color:{rgb:'D7DEE6'}}};
+  const S_TITLE={font:{bold:true,sz:15,color:{rgb:'0F172A'}}};
+  const S_STAMP={font:{sz:10,color:{rgb:'587690'}}};
+  const S_SCOPE={fill:{fgColor:{rgb:'1D4ED8'}},font:{bold:true,sz:13,color:{rgb:'FFFFFF'}},alignment:{horizontal:'center',vertical:'center'}};
+  const S_ALERT={fill:{fgColor:{rgb:'FEE2E2'}},font:{bold:true,sz:10,color:{rgb:'991B1B'}},alignment:{vertical:'center',wrapText:true}};
+  const S_UHEAD={fill:{fgColor:{rgb:'0F2744'}},font:{bold:true,sz:11,color:{rgb:'FFFFFF'}},alignment:{vertical:'center',wrapText:true}};
+  const S_COLHEAD={fill:{fgColor:{rgb:'F1F5F9'}},font:{bold:true,sz:10,color:{rgb:'334155'}},border:BORDER};
+  const S_CELL={font:{sz:10,color:{rgb:'0F172A'}},border:BORDER};
+  const S_CALL={fill:{fgColor:{rgb:'F5F3FF'}},font:{bold:true,sz:10,color:{rgb:'5B21B6'}},border:BORDER};
+  const S_TOT={font:{bold:true,sz:10,color:{rgb:'0F172A'}},border:BORDER};
+  const S_DASH={font:{sz:10,color:{rgb:'94A3B8'}},border:BORDER};
+  const S_NOTE={font:{italic:true,sz:9,color:{rgb:'92400E'}},alignment:{wrapText:true}};
+  const aoa=[],styles=[],merges=[],rowHts=[];
+  const push=(cells,cellStyles,ht)=>{ aoa.push(cells); styles.push(cellStyles||[]); rowHts.push(ht||null); };
+  const span=r=>merges.push({s:{r,c:0},e:{r,c:nCols-1}});
+  push(['Daily Schedule — Shift counts & calls'],[S_TITLE],22); span(0);
+  push([R.label.toUpperCase()],[S_SCOPE],20); span(1);
+  push(['Exported '+stamp+' · '+subjects.length+' doctor'+(subjects.length===1?'':'s')
+    +' · overnight call = '+overnightIds().length+' tagged shift'+(overnightIds().length===1?'':'s')
+    +' · all comparisons FTE-adjusted, per diem/locums/no-FTE outside the pool · baseline NOT included'],[S_STAMP]); span(2);
+  if(failed.length){ push(['INCOMPLETE — these months could not be read: '+failed.join(', ')+'. Shifts worked in them are missing from every number below.'],[S_ALERT],28); span(aoa.length-1); }
+  push([]);
+  subjects.forEach(u=>{
+    const f=fteOf(u), did=counts[u]||{}, why=whyNotInPool(u);
+    const callTot=M.totalCall(u), allTot=M.totalAll(u);
+    const exp=r=>(f!==null&&f>0&&r!==null)?Number((r*f).toFixed(1)):'—';
+    const perOwn=v=>(f!==null&&f>0)?Number((v/f).toFixed(1)):'—';
+    const dchip=(v,e)=>(typeof e==='number')?Number((v-e).toFixed(1)):'—';
+    const r0=aoa.length, head=Array(nCols).fill('');
+    head[0]=displayName(u)+'   ·   '+(f===null?'FTE not set':'FTE '+f)+' · '+allTot+' shift'+(allTot===1?'':'s')+' · '+callTot+' overnight call';
+    push(head,Array(nCols).fill(S_UHEAD),18); span(r0);
+    if(why){ const nr=Array(nCols).fill(''); nr[0]='Not in the group average — '+why+'. Reported in full; does not affect anyone else’s numbers.'; push(nr,[S_NOTE],16); span(aoa.length-1); }
+    push(cols,cols.map(()=>S_COLHEAD));
+    const ids=Object.keys(did);
+    const callIds=ids.filter(i=>M.on.has(i)).sort((a,b)=>did[b]-did[a]);
+    const restIds=ids.filter(i=>!M.on.has(i)).sort((a,b)=>did[b]-did[a]);
+    const line=(sid,isCall)=>{ const e=exp(M.rateShift(sid)); const st=isCall?S_CALL:S_CELL;
+      push([(isCall?'🌙 ':'')+shiftLabel(sid),did[sid],e,perOwn(did[sid]),Number(n1(M.rateShift(sid)))||0,dchip(did[sid],e)],[st,st,st,st,st,st]); };
+    if(callIds.length) callIds.forEach(s=>line(s,true));
+    else { const nr=Array(nCols).fill(''); nr[0]='No overnight call in this period.'; push(nr,[S_DASH]); }
+    const ec=exp(M.rateCall);
+    push(['All overnight call',callTot,ec,perOwn(callTot),Number(n1(M.rateCall))||0,dchip(callTot,ec)],Array(nCols).fill(S_TOT));
+    restIds.forEach(s=>line(s,false));
+    const ea=exp(M.rateAll);
+    push(['All shifts',allTot,ea,perOwn(allTot),Number(n1(M.rateAll))||0,dchip(allTot,ea)],Array(nCols).fill(S_TOT));
+    const cd=dates[u]||[];
+    const r1=aoa.length, dh=Array(nCols).fill(''); dh[0]='Every overnight call in this period — '+cd.length;
+    push(dh,Array(nCols).fill(S_UHEAD),16); span(r1);
+    push(['#','Date','Shift','','',''],cols.map(()=>S_COLHEAD));
+    if(cd.length) cd.forEach((x,i)=>push([i+1,x.d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}),shiftLabel(x.sid),'','',''],[S_CELL,S_CELL,S_CELL,S_CELL,S_CELL,S_CELL]));
+    else { const nr=Array(nCols).fill(''); nr[0]='None.'; push(nr,[S_DASH]); }
+    push([]);
+  });
+  const mr=aoa.length, method=Array(nCols).fill('');
+  method[0]='How these numbers are worked out. '+(M.pool.length
+    ? 'The group rate is taken per 1.0 FTE across the '+M.pool.length+' doctor'+(M.pool.length===1?'':'s')+' in the pool ('+M.poolFTE.toFixed(1)+' FTE between them); each doctor’s expected number is that rate multiplied by their own FTE.'
+    : 'No comparison could be worked out — nobody in this report has both an FTE and a place in the pool.')
+    +(M.excluded.length?' Left out of the pool: '+M.excluded.map(x=>displayName(x)+' ('+whyNotInPool(x)+')').join('; ')+'.':' Nobody is left out of the pool.');
+  push(method,[S_NOTE],30); span(mr);
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  styles.forEach((rowSt,r)=>rowSt.forEach((s,c)=>{ if(!s) return; const addr=XLSX.utils.encode_cell({r,c}); if(!ws[addr]) ws[addr]={t:'s',v:''}; ws[addr].s=s; }));
+  ws['!merges']=merges;
+  { const _mr=new Set(); merges.forEach(m=>{ if(m.e.c>m.s.c) for(let r=m.s.r;r<=m.e.r;r++) _mr.add(r); });
+    ws['!cols']=_autoCols(aoa.filter((_,r)=>!_mr.has(r)), nCols, [26,9,11,20,21,12]);
+    _bannerHeights(aoa,_mr,ws['!cols'],rowHts); }
+  ws['!rows']=rowHts.map(h=>h?{hpt:h}:{});
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Report'); XLSX.writeFile(wb,fname+'.xlsx');
+  auditLog('reports.export','Excel report exported — '+R.label+' · '+subjects.length+' doctor'+(subjects.length===1?'':'s'));
+  schedToast('📊 Excel exported','ok');
+}
+
+// ── Panel render ──
+function renderReports(){
+  if(!document.getElementById('panel-reports')) return;
+  renderReportsLock();
+  const on=new Set(ocWorking());
+  const pick=document.getElementById('ocTagPick');
+  if(pick){
+    const list=shiftList();
+    pick.innerHTML = list.length
+      ? list.map(([id,s])=>`<span class="tp${on.has(id)?' on':''}" onclick="togOvernight('${esc(id)}')">${on.has(id)?'✓ ':''}${esc(s.label||id)}</span>`).join('')
+      : '<span style="font-size:11px;color:var(--t3)">No shifts in the catalog yet.</span>';
+  }
+  const st=document.getElementById('ocTagState');
+  if(st){
+    const dirty=ocDraft!==null && JSON.stringify([...ocDraft].sort())!==JSON.stringify([...overnightIds()].sort());
+    st.innerHTML = dirty
+      ? '<span style="color:#92400e;font-weight:700">Unsaved — press Save to store this.</span>'
+      : (overnightSaved()
+          ? '<span style="color:var(--t2)">Saved — '+on.size+' shift'+(on.size===1?'':'s')+' counted as overnight call.</span>'
+          : '<span style="color:#92400e;font-weight:700">Not saved yet.</span> <span style="color:var(--t2)">Reports are using your starting set — Call 16, Call 24, OB PM. Press Save to store it.</span>');
+  }
+  const cp=document.getElementById('compPoolList');
+  if(cp){
+    cp.innerHTML = names.length
+      ? names.map(u=>{ const inP=compWorking(u), f=fteOf(u);
+          const noFte=(f===null||f<=0);
+          return `<span class="tp${inP&&!noFte?' on':''}${noFte?' warn':''}" onclick="togCompPool('${esc(u)}')">`
+            +`${inP?'✓ ':'✕ '}${esc(displayName(u))}<span class="m">${noFte?'no FTE':esc(String(f))}</span></span>`;
+        }).join('')
+      : '<span style="font-size:11px;color:var(--t3)">No users yet.</span>';
+  }
+  const who=document.getElementById('repWho');
+  if(who){ const keep=who.value;
+    who.innerHTML=names.map(u=>`<option value="${esc(u)}">${esc(displayName(u))}</option>`).join('');
+    if(keep && names.includes(keep)) who.value=keep; }
+  ['day','month','quarter','year','range'].forEach(p=>{ const b=document.getElementById('rpP_'+p); if(b) b.className='btn btn-sm'+(repPeriod===p?' btn-primary':''); });
+  // Rebuild the period controls ONLY when the kind of period changes. renderAll() fires on
+  // every Firestore snapshot from a dozen listeners, and rebuilding these on each one would
+  // wipe a half-typed date and steal focus — the same shape as defect 12.
+  const ctl=document.getElementById('repPeriodCtl');
+  if(ctl && ctl.dataset.p!==repPeriod){
+    ctl.dataset.p=repPeriod;
+    const t=new Date(), yNow=t.getFullYear();
+    const years=[]; for(let y=yNow-3;y<=yNow+2;y++) years.push(y);
+    const ySel=id=>`<select class="sel" style="font-size:12px" id="${id}" onchange="renderReports()">${years.map(y=>`<option value="${y}"${y===yNow?' selected':''}>${y}</option>`).join('')}</select>`;
+    const cur={};
+    ['rpYear','rpMonth','rpQuarter','rpDate','rpFrom','rpTo'].forEach(id=>{ const e=document.getElementById(id); if(e) cur[id]=e.value; });
+    ctl.innerHTML =
+        repPeriod==='day'   ? `<input class="inp" type="date" id="rpDate" style="font-size:12px" value="${esc(cur.rpDate||dKey(t))}" onchange="renderReports()">`
+      : repPeriod==='month' ? `<select class="sel" style="font-size:12px" id="rpMonth" onchange="renderReports()">${MS.map((m,i)=>`<option value="${i+1}"${i===t.getMonth()?' selected':''}>${m}</option>`).join('')}</select>`+ySel('rpYear')
+      : repPeriod==='quarter'? `<select class="sel" style="font-size:12px" id="rpQuarter" onchange="renderReports()">${[1,2,3,4].map(q=>`<option value="${q}"${q===Math.floor(t.getMonth()/3)+1?' selected':''}>Q${q} (${MS[(q-1)*3].slice(0,3)}–${MS[(q-1)*3+2].slice(0,3)})</option>`).join('')}</select>`+ySel('rpYear')
+      : repPeriod==='year'  ? ySel('rpYear')
+      : `<input class="inp" type="date" id="rpFrom" style="font-size:12px" value="${esc(cur.rpFrom||dKey(new Date(t.getFullYear(),t.getMonth(),1)))}" onchange="renderReports()"> <span style="font-size:11px;color:var(--t2);font-weight:700">to</span> <input class="inp" type="date" id="rpTo" style="font-size:12px" value="${esc(cur.rpTo||dKey(t))}" onchange="renderReports()">`;
+    ['rpYear','rpMonth','rpQuarter'].forEach(id=>{ const e=document.getElementById(id); if(e&&cur[id]) e.value=cur[id]; });
+  }
+  const echo=document.getElementById('repPeriodEcho');
+  if(echo){ const R=(()=>{ try{ return repRange(true); }catch(_){ return null; } })();
+    echo.innerHTML = R ? 'Reporting on <b>'+esc(R.label)+'</b> — '+esc(dKey(R.start))+' to '+esc(dKey(R.end)) : 'Pick both dates.'; }
+}
+// The inline onclick= handlers above are outside this module's scope, so every function
+// they name must be on window (HANDOFF trap 1 — this has bitten twice already).
+window.renderReports=renderReports;
+
 // ── Boot (listeners wait for auth, matching the auction admin) ──
 setMonth(ymKey(new Date()));
 authReady.then(()=>{
@@ -2578,6 +3295,11 @@ authReady.then(()=>{
   onSnapshot(openRef,snap=>{ openShifts=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(openShifts.list))openShifts.list=[]; renderOpenAdmin(); });
   onSnapshot(totalsRef,snap=>{ totals=snap.exists()?snap.data():{}; });
   onSnapshot(callBaselineRef,snap=>{ baselineData=snap.exists()?snap.data():{}; renderBaseline(); });
+  // [51] Reports. Both are dailysched documents — this site's own. Absent is a valid state:
+  // no tags doc means reports use the owner's starting set, and no compPool doc means
+  // everybody counts. Neither is seeded automatically, so nothing is written on page load.
+  onSnapshot(tagsRef,snap=>{ tagsData=snap.exists()?snap.data():null; ocDraft=null; renderReports(); });
+  onSnapshot(compPoolRef,snap=>{ compPool=snap.exists()?snap.data():{}; compDraft=null; renderReports(); });
 });
 </script>
 </body>

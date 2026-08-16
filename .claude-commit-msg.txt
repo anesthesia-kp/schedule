@@ -1,40 +1,149 @@
-docs: correct the build-50 paperwork — it shipped while the docs still said "awaiting push"
+Build 51 (admin) — Reports: per-doctor shift counts, dated call list, FTE-adjusted comparison
 
-Build 50 / 26 was pushed as 8c43847 and verified live (versions.json read
-{"index":26,"admin":50} cache-busted). HANDOFF.md, NEXT-CHAT-START-PROMPT.md
-and TODO.md were all still describing it as filed-and-awaiting-push, and the
-start prompt additionally listed the live builds as 49 / 25 in its opening
-section while its own status table said 50 / 26 — internally contradictory,
-which is worse for a fresh session than being plainly out of date.
+Stage 9. Admin only. Staff page untouched, so staff stays 26.
+No firestore.rules change, so NO Firebase console step.
 
-CORRECTED
-  · all three files now state 50 / 26 LIVE, with the commit ref
-  · the start prompt's "What this is" section no longer contradicts its own
-    status table
-  · every build number in both documents is now framed as a snapshot that must
-    be re-verified against a cache-busted versions.json, with that instruction
-    placed at the TOP rather than buried in a later section
+WHAT IT DOES
 
-ADDED — two harness traps that cost real time on 16 Aug, now written down
-  · a fixture's versions.json must match the `var BUILD` of the bytes under
-    test, or the new stale-build gate reloads the page mid-run and wipes the
-    seeded fakes. It reads exactly like a page bug. Both harnesses now derive
-    the number from the file.
-  · the fake auth starts SIGNED OUT; hiding #authGate is not enough, and
-    without window.__signInNow() every grid renders header-only. This produced
-    8 failures against a page that was completely fine.
-  · and the general form: a red test caused by the harness is indistinguishable
-    from a red test caused by the code. Run the suite against the PREVIOUS
-    build before believing a new failure.
+  Per doctor, for a day / month / quarter / year / custom range:
 
-ADDED — the honesty record in the switching-sites section
-  This is the third instance of answering from stale in-session memory instead
-  of from disk: 269-already-live, the stale battery claim, and now build 50
-  being live while the docs said otherwise. The owner caught the last one, not
-  the process. Recorded as such, because the pattern is the point.
+  1. How many of each shift they did, with OVERNIGHT CALL AT THE TOP, each line
+     carrying what they were expected to do at their own FTE and the difference,
+     plus subtotals for all overnight call and for all shifts.
+  2. A dated list of every overnight call in the period — a list, not a count.
+  3. A comparison with the group, adjusted for FTE, with the method printed on
+     the page.
 
-HANDOFF.md also gained an index of all 34 owner rulings, grouped by area, with
-the four that overruled Claude flagged — script-verified that every ruling in
-DECISIONS.md appears exactly once and that the index invents none.
+  Producible for one doctor or for every doctor in one page-broken document.
+  Opens in its own tab, or prints, or exports to a styled .xlsx.
 
-No code change. No test change. No Firebase console step.
+THE OVERNIGHT-CALL TAG — the first admin-defined tag (DECISIONS §25, §27)
+
+  Seeded with the owner's own three: Call 16, Call 24, OB PM. NEVER derived, and
+  the test suite proves it behaviourally rather than by inspection: the fixture
+  catalog deliberately contains RCH-ICU B (19:30-07:30, crosses midnight) and
+  Eye Call (07:30-15:30, in the call family), and asserts that neither is ticked.
+
+  Nothing is written on page load. With no tag document saved, reports use the
+  owner's starting set and the page says plainly that it is not saved yet. This
+  avoids repeating defect 24 — a one-shot self-marking seeding migration that
+  makes later edits to the source constants have no effect.
+
+THE COMPARISON POOL (§35) — and why it is NOT on the Users page
+
+  §29 excludes per diem and locums from the group average and requires the report
+  to name who was excluded. Neither was answerable: there is no per-diem or locum
+  data anywhere on either page. Groups are stage 4 and not built.
+
+  So each person carries a "counts toward comparisons" flag, defaulting ON, with
+  only the exclusions stored — an untouched roster is entirely in the pool and a
+  new hire needs no write at all.
+
+  Ruling §35 as first written put that flag on the Users page. It is on the
+  REPORTS page instead, with the owner's approval: the Users panel is the one
+  place on this site that writes the LIVE Vacation Auction roster, and it opens
+  locked for exactly that reason. A schedule-only report setting must never be a
+  reason to unlock it.
+
+NO FTE MEANS NO GUESS (§36)
+
+  FTE is optional by design — "no default on this site, ever". A doctor with no
+  FTE gets their full report and dated call list, but no expected figure, and
+  their block says so in plain words. They do not enter the pool and do not
+  affect anyone else's rate. A blank FTE is never quietly treated as 1.0.
+
+THE CALL BASELINE IS KEPT OUT OF DATED REPORTS (§37)
+
+  dailysched/callBaseline is one undated lump per person per shift that decays
+  over twelve months. It cannot be apportioned to a chosen period, and it makes
+  the same August report give a different answer each month it is run.
+
+  Period reports are therefore pure schedule data and say so. A separate
+  "last 12 months — fairness view" is the one place the baseline appears, showing
+  exactly what auto-populate sees, stating the _asOf stamp and the weight
+  currently applied, and warning that it is not a dated report.
+
+AN UNREADABLE MONTH IS STATED, NEVER SILENTLY ZERO
+
+  A month that fails to read is collected and named in red at the top of the
+  report, which marks every number below it incomplete. Quietly treating it as
+  empty would print "3 overnight calls" for someone who did nine, with nothing
+  on the page to hint at it.
+
+EXCEL (§32)
+
+  Same library, same version and the same construction as the auction's
+  exportUserSummary — title row, coloured scope row, timestamp, navy per-person
+  banners, bordered and colour-coded cells, auto-sized columns, merged banner
+  rows with computed heights, and the identical CSV fallback when the library is
+  unavailable.
+
+  The library is fetched only when Excel is actually pressed, NOT in a script tag
+  at page load as the auction does it. The eligibility suite caught the first
+  cut: a script tag logs a console error on every page load when the CDN is
+  unreachable, and that suite asserts zero console errors. The assertion was not
+  loosened to accommodate the change; the page keeps the zero network
+  dependencies it had.
+
+REPORT_CSS is lifted from the auction admin page VERBATIM, including its internal
+comment. The schedule-only classes are appended below a marked divider rather
+than edited into the lifted block, and the suite asserts every auction line is
+present byte for byte.
+
+CARDINAL RULE — no schedule work may degrade the live Vacation Auction
+
+  · sched/isolation-test.mjs — 27/27 on 51, and 27/27 on 50. ZERO new write paths
+    to any vacations/* document. The two new documents are dailysched/tags and
+    dailysched/compPool, both this site's own.
+  · FTE independence — 5/5. dailysched/fteMap stays the schedule's own (§2).
+  · AUCTION battery, run on the owner's machine — 14 suites, 1074 assertions,
+    green. Same numbers as before this change.
+  · test-audit-fixes.mjs — 333/333. That is the auction suite that reaches into
+    this page and extracts saveSchedField, and it is where build 50 went red.
+
+GATES
+
+  · sched/build51-test.mjs — 88/88, three consecutive runs, both the settings and
+    the reports driven in a real browser against an in-memory Firestore that
+    records every write.
+  · Honesty check — the same suite against build 50 scores 14 pass / 66 fail.
+    A suite that passes on the pre-fix bytes proves nothing.
+  · sched/elig-test.mjs — 33/33 on these bytes, and 33/33 on build 50 as a
+    control, so 51 breaks nothing that 49 shipped.
+
+  The FTE arithmetic is pinned by a fixture built so that the correct method and
+  a flat mean give DIFFERENT answers: pool 1.5 FTE, 6 pool calls, rate 4.0 per
+  1.0 FTE. A flat mean over all four doctors would say 2.0. The suite asserts
+  4.0, so a flat mean cannot pass by accident.
+
+Bumped: var BUILD in admin/index.html AND versions.json -> {"index":26,"admin":51}
+
+DOCS
+
+  DECISIONS.md   rulings 35-41 added (41 total):
+                 35 the comparison pool is a per-person switch
+                 36 a doctor with no FTE is reported but never guessed at
+                 37 the baseline is out of period reports, in a fairness view
+                 38 estimated times are parked — every unconfirmed shift stays blank
+                 39 "4 to 6" is a real shift, added via the UI not in code
+                 40 no bulk demand editing
+                 41 only some shifts are requestable — it is a curated list
+  TODO.md        build 51, Q7/Q11/Q13/Q15 answered and moved, request types raised
+
+DESIGN — delivered, NOT built
+
+  design/REQUEST-TYPES.md + request-types-preview.html
+      The 27-entry Task list from the current system, modelled as five kinds
+      (work / avoid / off / absence / available) over admin-curated shift lists,
+      with [MAX]/[HIGH]/[LOW] as a sortable field rather than three text labels.
+      Admins create new request types themselves, with no build.
+  design/ASSIGNMENT-MODEL.md + assignment-model-preview.html
+      Stage 3. A list per person per day instead of two slots (§8). The preview
+      reproduces defect 2 live — approving a request silently deletes an existing
+      day shift. No data migration: one normaliser reads both shapes, and a cell
+      converts only when someone actually changes it.
+  design/RULES.md + rules-preview.html
+      Stage 5. Seven rule types, all pointing at tags rather than the retired
+      `kind`. Blocked on roles and groups, which do not exist on people — the
+      smallest slice that unblocks it is proposed, and the two questions inside
+      it are flagged for a ruling rather than assumed.

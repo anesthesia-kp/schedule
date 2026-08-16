@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Schedule — Request types (preview)</title>
+<style>
+:root{--bg:#f4f7fa;--s1:#fff;--s2:#f8fafc;--s3:#eef2f7;--b1:#e3e9f0;--b2:#cbd5e1;
+      --t1:#1e293b;--t2:#5b6b7c;--t3:#94a3b8;--blue:#2563eb;--green:#059669;--red:#dc2626;--amber:#b45309;--violet:#7c3aed}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;padding:16px 20px}
+.page-title{font-size:18px;font-weight:800}
+.page-sub{font-size:12px;color:var(--t2);margin-top:3px;max-width:100ch;line-height:1.55}
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:14px 16px;margin-top:12px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.card-title{font-size:12px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.btn{border:1px solid var(--b2);background:var(--s1);color:var(--t1);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer}
+.btn:hover{background:var(--s3)}
+.btn.on,.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn-sm{font-size:11.5px;padding:3px 9px;border-radius:6px}
+.btn-ghost{background:transparent;color:var(--t2)}
+.sel,.inp{border:1px solid var(--b2);border-radius:8px;padding:6px 9px;font-size:13px;background:var(--s1);color:var(--t1)}
+.lbl{font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fake{background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;border-radius:9px;padding:9px 13px;font-size:12.5px;font-weight:700;margin-top:12px;line-height:1.5}
+.owner{background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46;border-radius:9px;padding:9px 13px;font-size:12.5px;margin-top:12px;line-height:1.5}
+.tabs{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap}
+.lock{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-radius:10px;padding:9px 13px;margin-top:12px;font-size:13px;font-weight:700}
+.lock.locked{background:#f1f5f9;border:1px solid var(--b2);color:var(--t2)}
+.lock.open{background:#fffbeb;border:1px solid #fcd34d;color:#92400e}
+.pagelocked{opacity:.55;pointer-events:none}
+table{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:4px}
+th,td{border:1px solid var(--b1);padding:6px 9px;text-align:left;vertical-align:top}
+th{background:var(--s2);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--t2)}
+tbody tr:nth-child(even){background:var(--s2)}
+.k{font-weight:800;font-size:10px;padding:2px 8px;border-radius:10px;color:#fff;white-space:nowrap}
+.k-work{background:#0e7490}.k-avoid{background:#b45309}.k-off{background:#4f46e5}
+.k-absence{background:#64748b}.k-available{background:#059669}
+.str{font-weight:800;font-size:10px;padding:2px 7px;border-radius:6px;border:1.5px solid;white-space:nowrap}
+.str-max{color:#991b1b;border-color:#991b1b}.str-high{color:#b45309;border-color:#b45309}.str-low{color:#0e7490;border-color:#0e7490}
+.picker{position:relative;max-width:520px}
+.plist{border:1px solid var(--b2);border-radius:8px;margin-top:4px;max-height:290px;overflow:auto;background:#fff}
+.pitem{padding:6px 11px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.pitem:hover{background:#eff6ff}
+.pitem.sel{background:#dbeafe}
+.phead{padding:5px 11px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--t2);background:var(--s3);position:sticky;top:0}
+.means{background:#eff6ff;border:1px solid #bfdbfe;border-radius:9px;padding:10px 13px;font-size:13px;margin-top:10px;line-height:1.55;color:#1e3a8a}
+.warnbox{background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:9px;padding:9px 13px;font-size:12px;margin-top:10px;line-height:1.5}
+.tp{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--b2);background:var(--s1);border-radius:999px;padding:3px 11px 3px 9px;font-size:12px;font-weight:700;cursor:pointer;user-select:none}
+.tp.on{border-color:var(--violet);background:#f5f3ff;color:#5b21b6;box-shadow:0 0 0 2px rgba(124,58,237,.14)}
+.tagpick{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.hide{display:none}
+.mini{font-size:11px;color:var(--t2);line-height:1.5}
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.42);display:none;align-items:center;justify-content:center;z-index:50}
+.modal.on{display:flex}
+.mcard{background:#fff;border-radius:14px;padding:18px 20px;width:min(560px,92vw);max-height:88vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.fieldrow{display:flex;flex-direction:column;gap:4px;margin-top:11px}
+.empty{color:#991b1b;font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="page-title">Request types <span style="font-size:11px;font-weight:800;background:var(--s3);color:var(--t2);border-radius:999px;padding:2px 10px;vertical-align:middle;margin-left:6px">DESIGN PREVIEW — NOT THE APP</span></div>
+<div class="page-sub">A mockup. No database, no real data, nothing here writes anything. It exists so the shape can be argued with before it becomes code — the same way the shift editor and the Reports section were done.</div>
+
+<div class="owner"><b>The 27 entries below are the owner’s own list</b>, transcribed from screenshots of the current system and confirmed by him as complete. They are the one thing on this page that is not invented.</div>
+
+<div class="fake">⚠️ <b>EVERYTHING ELSE IS INVENTED</b> — the people, the dates, the shift lists behind each entry, the queue. None of it is real data. Which shifts actually belong in “Oakland call” or “Late shifts” is for the owner to set; here they are filled with plausible nonsense so the screen has something to draw.</div>
+
+<div class="tabs">
+  <button class="btn on" id="t_staff" onclick="tab('staff')">👤 What staff sees</button>
+  <button class="btn" id="t_admin" onclick="tab('admin')">⚙️ Request types — admin</button>
+  <button class="btn" id="t_lists" onclick="tab('lists')">🏷 Shift lists</button>
+  <button class="btn" id="t_queue" onclick="tab('queue')">📥 The queue</button>
+</div>
+
+<!-- ═══════════════ STAFF ═══════════════ -->
+<div id="p_staff">
+  <div class="card">
+    <div class="card-title">Make a request</div>
+    <div class="mini" style="margin-bottom:9px">The same picker they already use — type to search, or scroll. Grouped, because 27 abbreviations in one flat list is where a wrong pick hides.</div>
+    <div class="picker">
+      <input class="inp" id="q" style="width:100%" placeholder="Type to Search…" oninput="drawPicker()" onfocus="drawPicker()">
+      <div class="plist" id="plist"></div>
+    </div>
+    <div id="after"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ ADMIN ═══════════════ -->
+<div id="p_admin" class="hide">
+  <div class="card" style="background:#eff6ff;border-color:#bfdbfe">
+    <div class="mini" style="color:#1e3a8a">
+      <b>Reached from the Requests page</b> — a <b>⚙ Request types →</b> button at the top of the queue, exactly where the owner asked for it. It is its own page rather than a panel inside Requests because ruling §20 gives each page <b>one</b> master lock, and it puts Requests among the daily-work pages that open <b>unlocked</b>. Configuration must open <b>locked</b>. Both cannot be true on one page without a second per-section lock, which §20 rejects.
+    </div>
+  </div>
+  <div class="lock locked" id="lockbar"></div>
+  <div id="lockable" class="pagelocked">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="card-title" style="margin:0">Request types — <span id="typeCount"></span></div>
+        <div class="row">
+          <button class="btn btn-sm btn-primary" onclick="openEdit(null)">+ Add a request type</button>
+          <button class="btn btn-sm" onclick="dupSelected()">⧉ Duplicate selected</button>
+        </div>
+      </div>
+      <div class="mini" style="margin:6px 0 4px">
+        <b>Duplicate first, then edit</b> (§23) — these come in near-identical clusters, so copying <i>Req OAK Call</i> and changing one field beats filling a blank form. Deactivating hides an entry from staff without deleting the requests already made with it.
+      </div>
+      <table><thead><tr>
+        <th style="width:26px"></th><th>Shown to staff as</th><th>Kind</th><th>Points at</th><th>Strength</th><th>Span</th><th style="width:74px"></th>
+      </tr></thead><tbody id="typeRows"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ LISTS ═══════════════ -->
+<div id="p_lists" class="hide">
+  <div class="card">
+    <div class="card-title">Shift lists — what the “work” and “avoid” entries point at</div>
+    <div class="mini" style="line-height:1.6">
+      <b>Only some shifts can be requested at all</b> — owner, 16 Aug: <i>“Not all shifts can be requested, that’s why i want just these.”</i> So these lists are <b>set by an admin</b>, never worked out by the app. Same control and same rule as the Overnight-call tag, which shipped in build 51.<br><br>
+      A list of <b>one</b> shift is still a list — that is what lets <i>PACU MD</i> and <i>Req OAK Call</i> use one mechanism instead of two.
+    </div>
+    <div id="listBlocks"></div>
+    <div class="warnbox">
+      <b>A list can legitimately be empty, and that has to be visible.</b> The Oakland / Richmond and AM / PM entries cannot be filled in until stage 1 sets sites and times on shifts — and times are currently blank everywhere by ruling §38. An entry pointing at an empty list must <b>say so</b>, on both the admin page and the staff picker, rather than quietly matching nothing. That is the failure mode this design is most worried about.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ QUEUE ═══════════════ -->
+<div id="p_queue" class="hide">
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div class="card-title" style="margin:0">Requests — invented sample queue</div>
+      <div class="row">
+        <span class="lbl">Sort</span>
+        <select class="sel" style="font-size:12px" id="qsort" onchange="drawQueue()">
+          <option value="strength">Strength — strongest first</option>
+          <option value="date">Date</option>
+          <option value="kind">Kind</option>
+        </select>
+        <span class="lbl">Kind</span>
+        <select class="sel" style="font-size:12px" id="qkind" onchange="drawQueue()">
+          <option value="">All</option><option value="work">Work</option><option value="avoid">Avoid</option>
+          <option value="off">Off</option><option value="absence">Absence</option><option value="available">Available</option>
+        </select>
+      </div>
+    </div>
+    <div class="mini" style="margin:6px 0 2px">This is what the bracket buys you. With <code>[MAX]</code> buried in a text label the queue cannot be sorted by how badly someone wants it; as a field it can.</div>
+    <table><thead><tr><th>Who</th><th>Asked for</th><th>Which means</th><th>When</th><th>Strength</th><th style="width:150px"></th></tr></thead><tbody id="queueRows"></tbody></table>
+    <div class="warnbox">
+      <b>Defect 1 is still open and this makes it bigger.</b> Approving from a queue writes the assignment with <b>no</b> eligibility, capacity, vacation or collision check — the hand-editing path checks, this path does not. Going from 4 request types to 27 multiplies the ways into that gap. Stage 6 closes it. Until then a <i>work</i> approval should carry a warning at the point of the click, which is what the amber note on each row stands in for.
+    </div>
+  </div>
+</div>
+
+<!-- edit modal -->
+<div class="modal" id="modal"><div class="mcard">
+  <div style="font-weight:800;font-size:15px" id="mTitle">Add a request type</div>
+  <div class="mini" style="margin-top:3px">Whatever you put here is what staff will see in their picker.</div>
+  <div class="fieldrow"><span class="lbl">Shown to staff as</span><input class="inp" id="mLabel" placeholder="e.g. Req OAK Call"></div>
+  <div class="fieldrow"><span class="lbl">Kind — what it does</span>
+    <select class="sel" id="mKind" onchange="mKindChanged()">
+      <option value="work">Work — give me this</option>
+      <option value="avoid">Avoid — don’t give me this</option>
+      <option value="off">Off — I want the day off</option>
+      <option value="absence">Absence — I’m not available, and here’s why</option>
+      <option value="available">Available — I’m free and willing</option>
+    </select>
+    <span class="mini" id="mKindHelp"></span>
+  </div>
+  <div class="fieldrow" id="mTargetRow"><span class="lbl">Which shifts it points at</span>
+    <select class="sel" id="mTarget"></select>
+    <span class="mini">Only lists an admin has made. If the right one doesn’t exist yet, make it on the Shift lists page first.</span>
+  </div>
+  <div class="fieldrow"><span class="lbl">Strength</span>
+    <select class="sel" id="mStrength">
+      <option value="">None — no bracket shown</option>
+      <option value="max">[MAX]</option><option value="high">[HIGH]</option><option value="low">[LOW]</option>
+    </select>
+    <span class="mini">Sorts the admin’s queue and prints on the request. It decides nothing on its own — nothing is ever blocked (§4), and nothing is ever placed silently (§21).</span>
+  </div>
+  <div class="fieldrow"><span class="lbl">Covers</span>
+    <select class="sel" id="mSpan"><option value="day">A single day</option><option value="weekend">A whole weekend</option><option value="range">A date range</option></select>
+  </div>
+  <div class="means" id="mPreview" style="margin-top:13px"></div>
+  <div class="row" style="margin-top:15px;justify-content:flex-end">
+    <button class="btn" onclick="closeEdit()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveEdit()">Save</button>
+  </div>
+</div></div>
+
+<script>
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ── INVENTED shift lists. Which shifts really belong in each is the owner's to set. ──
+const LISTS={
+  oakCall:   {label:'Oakland call',    shifts:['Call 16','Call 24','OB PM']},
+  oakCallAM: {label:'Oakland call AM', shifts:['Call 12 AM']},
+  oakCallPM: {label:'Oakland call PM', shifts:['Call 12 PM','OB PM']},
+  rchCall:   {label:'Richmond call',   shifts:['RCH-ICU A','RCH-ICU B']},
+  overnight: {label:'Overnight call',  shifts:['Call 16','Call 24','OB PM'], shipped:true},
+  late:      {label:'Late shifts',     shifts:[]},
+  oakAM:     {label:'Oakland AM',      shifts:[]},
+  oakPM:     {label:'Oakland PM',      shifts:[]},
+  mdSatD:    {label:'MD Sat D',        shifts:['MD Sat D']},
+  pacuMD:    {label:'PACU MD',         shifts:['PACU MD']},
+  cvpm:      {label:'CVpm',            shifts:['CVpm']},
+  de:        {label:'DE',              shifts:['DE']},
+  r8md:      {label:'RCH 8hr MD only', shifts:['R8:MD']},
+  admin:     {label:'Admin',           shifts:['Admin']},
+  adminAM:   {label:'Admin AM',        shifts:['Admin AM']},
+  adminPM:   {label:'Admin PM',        shifts:['Admin PM']},
+};
+// The catalog a list can draw from — INVENTED subset, for the tick-list demo only.
+const CATALOG=['Call 16','Call 24','OB PM','Call 12 AM','Call 12 PM','Eye Call','RCH-ICU A','RCH-ICU B',
+  'MD Sat D','PACU MD','CVpm','DE','R8:MD','Admin','Admin AM','Admin PM','D10','D','4 to 6','4 to 8','Ev'];
+
+// ── The owner's 27, mapped onto the model ──
+let TYPES=[
+ {id:1, label:'MD Sat D',                   kind:'work',  target:'mdSatD',    strength:'',     span:'day', group:'Work something'},
+ {id:2, label:'PACU MD',                    kind:'work',  target:'pacuMD',    strength:'',     span:'day', group:'Work something'},
+ {id:3, label:'CVpm',                       kind:'work',  target:'cvpm',      strength:'',     span:'day', group:'Work something'},
+ {id:4, label:'DE',                         kind:'work',  target:'de',        strength:'',     span:'day', group:'Work something'},
+ {id:5, label:'RCH, 8hr, MD only (R8:MD)',  kind:'work',  target:'r8md',      strength:'',     span:'day', group:'Work something'},
+ {id:6, label:'Admin',                      kind:'work',  target:'admin',     strength:'',     span:'day', group:'Work something'},
+ {id:7, label:'Admin AM',                   kind:'work',  target:'adminAM',   strength:'',     span:'day', group:'Work something'},
+ {id:8, label:'Admin PM',                   kind:'work',  target:'adminPM',   strength:'',     span:'day', group:'Work something'},
+ {id:9, label:'Req OAK Call',               kind:'work',  target:'oakCall',   strength:'',     span:'day', group:'Work something'},
+ {id:10,label:'Req OAK Call AM',            kind:'work',  target:'oakCallAM', strength:'',     span:'day', group:'Work something'},
+ {id:11,label:'Req OAK Call PM',            kind:'work',  target:'oakCallPM', strength:'',     span:'day', group:'Work something'},
+ {id:12,label:'Req RCH Call',               kind:'work',  target:'rchCall',   strength:'',     span:'day', group:'Work something'},
+ {id:13,label:'No Call',                    kind:'avoid', target:'overnight', strength:'',     span:'day', group:'Avoid something'},
+ {id:14,label:'No OAK AM',                  kind:'avoid', target:'oakAM',     strength:'',     span:'day', group:'Avoid something'},
+ {id:15,label:'No OAK PM',                  kind:'avoid', target:'oakPM',     strength:'',     span:'day', group:'Avoid something'},
+ {id:16,label:'No Late [MAX]',              kind:'avoid', target:'late',      strength:'max',  span:'day', group:'Avoid something'},
+ {id:17,label:'No Late [HIGH]',             kind:'avoid', target:'late',      strength:'high', span:'day', group:'Avoid something'},
+ {id:18,label:'No Late [LOW]',              kind:'avoid', target:'late',      strength:'low',  span:'day', group:'Avoid something'},
+ {id:19,label:'CV-Day Off',                 kind:'off',   target:'',          strength:'',     span:'day', group:'Time off'},
+ {id:20,label:'Day Off [MAX]',              kind:'off',   target:'',          strength:'max',  span:'day', group:'Time off'},
+ {id:21,label:'Day Off [HIGH]',             kind:'off',   target:'',          strength:'high', span:'day', group:'Time off'},
+ {id:22,label:'Day Off [LOW]',              kind:'off',   target:'',          strength:'low',  span:'day', group:'Time off'},
+ {id:23,label:'Weekend Off',                kind:'off',   target:'',          strength:'',     span:'weekend', group:'Time off'},
+ {id:24,label:'Use PTO if off',             kind:'off',   target:'',          strength:'',     span:'day', group:'Time off', modifier:true},
+ {id:25,label:'Ed Leave',                   kind:'absence',target:'',         strength:'',     span:'range', group:'Time off'},
+ {id:26,label:'Jury Duty (JD)',             kind:'absence',target:'',         strength:'',     span:'range', group:'Time off'},
+ {id:27,label:'AVAILABLE',                  kind:'available',target:'',       strength:'',     span:'day', group:'Availability'},
+];
+const GROUPS=['Work something','Avoid something','Time off','Availability'];
+const KINDHELP={
+  work:'Asks to be GIVEN a shift from a list you choose.',
+  avoid:'Asks NOT to be given anything from a list you choose.',
+  off:'Asks for the day off entirely. Points at no shifts.',
+  absence:'Records a reason they are unavailable — leave, jury duty. Not a preference.',
+  available:'The only entry that widens what can be given to them rather than narrowing it. Never counted against them in a fairness balance.',
+};
+const kindChip=k=>`<span class="k k-${k}">${k}</span>`;
+const strChip=s=>s?`<span class="str str-${s}">[${s.toUpperCase()}]</span>`:'<span class="mini">—</span>';
+const listOf=id=>LISTS[id];
+function targetText(t){
+  if(!t.target) return '<span class="mini">—</span>';
+  const L=listOf(t.target); if(!L) return '<span class="empty">missing list</span>';
+  if(!L.shifts.length) return `<b>${esc(L.label)}</b> <span class="empty">— empty, matches nothing yet</span>`;
+  return `<b>${esc(L.label)}</b> <span class="mini">(${L.shifts.length}: ${esc(L.shifts.join(', '))})</span>`;
+}
+
+// ── tabs ──
+function tab(w){
+  ['staff','admin','lists','queue'].forEach(x=>{
+    document.getElementById('p_'+x).className = x===w?'':'hide';
+    document.getElementById('t_'+x).className = 'btn'+(x===w?' on':'');
+  });
+  if(w==='admin') drawTypes(); if(w==='lists') drawLists(); if(w==='queue') drawQueue();
+}
+
+// ── staff picker ──
+let picked=null;
+function drawPicker(){
+  const q=(document.getElementById('q').value||'').toLowerCase();
+  let h='';
+  GROUPS.forEach(g=>{
+    const rows=TYPES.filter(t=>t.group===g && t.label.toLowerCase().includes(q));
+    if(!rows.length) return;
+    h+=`<div class="phead">${esc(g)}</div>`;
+    rows.forEach(t=>{
+      const L=t.target?listOf(t.target):null;
+      const warn=(t.target&&L&&!L.shifts.length)?' <span class="empty" style="font-size:10.5px">· not set up yet</span>':'';
+      h+=`<div class="pitem${picked&&picked.id===t.id?' sel':''}" onclick="pick(${t.id})">${kindChip(t.kind)}<span>${esc(t.label)}</span>${warn}</div>`;
+    });
+  });
+  document.getElementById('plist').innerHTML=h||'<div class="pitem mini">Nothing matches.</div>';
+}
+window.pick=id=>{ picked=TYPES.find(t=>t.id===id); drawPicker(); drawAfter(); };
+function meansSentence(t,dateTxt){
+  const L=t.target?listOf(t.target):null;
+  const when=t.span==='weekend'?'that whole weekend':(t.span==='range'?'over that date range':'on '+dateTxt);
+  const names=L?(L.shifts.length?L.label.toLowerCase():null):null;
+  if(t.kind==='work')  return names?`You are asking <b>to be given</b> any shift in <b>${esc(L.label)}</b> ${when}.`:`You are asking to be given <b>${esc(L?L.label:'—')}</b> ${when} — but <b class="empty">that list is empty</b>, so this cannot match anything yet.`;
+  if(t.kind==='avoid') return names?`You are asking <b>not to be given</b> any shift in <b>${esc(L.label)}</b> ${when}.`:`You are asking not to be given <b>${esc(L?L.label:'—')}</b> ${when} — but <b class="empty">that list is empty</b>, so this cannot match anything yet.`;
+  if(t.kind==='off')   return `You are asking to be <b>off</b> ${when}.`;
+  if(t.kind==='absence') return `You are recording that you are <b>unavailable</b> ${when}.`;
+  return `You are telling the schedulers you are <b>free and willing to work</b> ${when}.`;
+}
+function drawAfter(){
+  const el=document.getElementById('after');
+  if(!picked){ el.innerHTML=''; return; }
+  const t=picked, dateTxt='Friday 4 September 2026';
+  const dateCtl = t.span==='weekend'
+      ? `<span class="lbl">Weekend of</span><input class="inp" type="date" value="2026-09-05" style="font-size:12px">`
+      : t.span==='range'
+      ? `<span class="lbl">From</span><input class="inp" type="date" value="2026-09-04" style="font-size:12px"><span class="lbl">to</span><input class="inp" type="date" value="2026-09-11" style="font-size:12px">`
+      : `<span class="lbl">Date</span><input class="inp" type="date" value="2026-09-04" style="font-size:12px">`;
+  el.innerHTML=`
+    <div class="row" style="margin-top:12px">${dateCtl}
+      ${t.strength?`<span style="width:1px;height:20px;background:var(--b2)"></span><span class="lbl">Strength</span>${strChip(t.strength)}`:''}
+    </div>
+    ${t.kind==='off'?`<label class="row" style="margin-top:9px;font-size:12.5px;font-weight:700;color:var(--t2);cursor:pointer">
+        <input type="checkbox"${t.modifier?' checked':''}> Use PTO if I get this day off</label>
+      <div class="mini" style="margin-top:3px"><b>“Use PTO if off” is a modifier, not a request of its own</b> — on its own it asks for nothing, and could not be approved or denied on its own terms. It still appears in the picker where the group expects it; picking it ticks this box.</div>`:''}
+    <div class="row" style="margin-top:9px"><input class="inp" placeholder="Note (optional)" style="flex:1;min-width:220px"></div>
+    <div class="means">${meansSentence(t,dateTxt)}</div>
+    <div class="mini" style="margin-top:6px">Ruling §3 — every change says exactly what it is about to do, and a picker of 27 abbreviations is precisely where a wrong pick hides.</div>
+    <div class="row" style="margin-top:11px"><button class="btn btn-primary" onclick="alert('Preview only — nothing is submitted.')">Submit request</button></div>`;
+}
+
+// ── admin ──
+let locked=true, selId=null;
+function drawTypes(){
+  const bar=document.getElementById('lockbar');
+  bar.className='lock '+(locked?'locked':'open');
+  bar.innerHTML=locked
+    ? '🔒 <b>This page is locked</b> — request types decide what everyone can ask for. Working the queue itself never needs unlocking.<span style="flex:1"></span><button class="btn btn-sm" onclick="locked=false;drawTypes()">Unlock</button>'
+    : '🔓 <b>Unlocked.</b> Changes here change the picker for every user.<span style="flex:1"></span><button class="btn btn-sm btn-primary" onclick="locked=true;drawTypes()">Lock</button>';
+  document.getElementById('lockable').className=locked?'pagelocked':'';
+  document.getElementById('typeCount').textContent=TYPES.length+' entries';
+  document.getElementById('typeRows').innerHTML=TYPES.map(t=>`<tr>
+    <td><input type="radio" name="tsel" ${selId===t.id?'checked':''} onchange="selId=${t.id}"></td>
+    <td><b>${esc(t.label)}</b>${t.modifier?' <span class="mini">(modifier)</span>':''}</td>
+    <td>${kindChip(t.kind)}</td><td>${targetText(t)}</td>
+    <td>${strChip(t.strength)}</td><td class="mini">${t.span}</td>
+    <td><button class="btn btn-sm" onclick="openEdit(${t.id})">Edit</button></td></tr>`).join('');
+}
+window.dupSelected=()=>{
+  if(locked) return alert('Unlock the page first.');
+  const t=TYPES.find(x=>x.id===selId);
+  if(!t) return alert('Pick a row to duplicate first.\n\nDuplicate-then-edit is the priority route (§23) — these entries come in near-identical clusters.');
+  openEdit(null,{...t,label:t.label+' (copy)'});
+};
+let editing=null;
+window.openEdit=(id,seed)=>{
+  if(locked) return alert('Unlock the page first.');
+  editing = id?TYPES.find(t=>t.id===id):null;
+  const t = seed||editing||{label:'',kind:'work',target:'',strength:'',span:'day'};
+  document.getElementById('mTitle').textContent = editing?'Edit request type':'Add a request type';
+  document.getElementById('mLabel').value=t.label;
+  document.getElementById('mKind').value=t.kind;
+  document.getElementById('mTarget').innerHTML=Object.entries(LISTS)
+    .map(([k,v])=>`<option value="${k}"${t.target===k?' selected':''}>${esc(v.label)}${v.shifts.length?'':' — EMPTY'}</option>`).join('');
+  document.getElementById('mStrength').value=t.strength||'';
+  document.getElementById('mSpan').value=t.span;
+  document.getElementById('modal').className='modal on';
+  mKindChanged();
+};
+window.closeEdit=()=>{ document.getElementById('modal').className='modal'; };
+window.mKindChanged=()=>{
+  const k=document.getElementById('mKind').value;
+  document.getElementById('mKindHelp').textContent=KINDHELP[k];
+  document.getElementById('mTargetRow').className='fieldrow'+((k==='work'||k==='avoid')?'':' hide');
+  const t={label:document.getElementById('mLabel').value||'(unnamed)',kind:k,
+    target:(k==='work'||k==='avoid')?document.getElementById('mTarget').value:'',
+    strength:document.getElementById('mStrength').value,span:document.getElementById('mSpan').value};
+  document.getElementById('mPreview').innerHTML='<b>Staff will see:</b> “'+esc(t.label)+'”.<br>'+meansSentence(t,'the date they pick');
+};
+['mLabel','mTarget','mStrength','mSpan'].forEach(id=>document.addEventListener('input',e=>{ if(e.target.id===id) mKindChanged(); }));
+window.saveEdit=()=>{
+  const k=document.getElementById('mKind').value;
+  const t={id:editing?editing.id:Date.now(),label:document.getElementById('mLabel').value.trim()||'(unnamed)',kind:k,
+    target:(k==='work'||k==='avoid')?document.getElementById('mTarget').value:'',
+    strength:document.getElementById('mStrength').value,span:document.getElementById('mSpan').value,
+    group:k==='work'?'Work something':k==='avoid'?'Avoid something':k==='available'?'Availability':'Time off'};
+  if(!confirm('Save “'+t.label+'”?\n\nEvery user will see this in their request picker from now on.\nRequests already made are not changed.')) return;
+  if(editing) TYPES=TYPES.map(x=>x.id===t.id?t:x); else TYPES.push(t);
+  closeEdit(); drawTypes(); drawPicker();
+};
+
+// ── shift lists ──
+function drawLists(){
+  document.getElementById('listBlocks').innerHTML=Object.entries(LISTS).map(([k,L])=>`
+    <div style="margin-top:13px;padding-top:11px;border-top:1px solid var(--b1)">
+      <div style="font-weight:800;font-size:13px">${esc(L.label)}
+        ${L.shipped?'<span class="k k-available" style="margin-left:6px">in the app now</span>':''}
+        ${L.shifts.length?'':'<span class="k" style="background:#991b1b;margin-left:6px">empty</span>'}</div>
+      <div class="tagpick">${CATALOG.map(s=>`<span class="tp${L.shifts.includes(s)?' on':''}" onclick="togList('${k}','${s.replace(/'/g,"\\'")}')">${L.shifts.includes(s)?'✓ ':''}${esc(s)}</span>`).join('')}</div>
+    </div>`).join('');
+}
+window.togList=(k,s)=>{ const a=LISTS[k].shifts, i=a.indexOf(s); i>=0?a.splice(i,1):a.push(s); drawLists(); drawPicker(); };
+
+// ── queue (invented) ──
+const QUEUE=[
+ {who:'Dr. Alan Reyes',      typeId:20, date:'Fri 4 Sep 2026'},
+ {who:'Dr. Chen Lindqvist',  typeId:9,  date:'Sat 12 Sep 2026'},
+ {who:'Dr. Farah Nakamura',  typeId:16, date:'Mon 7 Sep 2026'},
+ {who:'Dr. Dana Baptiste',   typeId:13, date:'Wed 9 Sep 2026'},
+ {who:'Dr. Bea Okafor',      typeId:22, date:'Thu 10 Sep 2026'},
+ {who:'Dr. Eli Moreau',      typeId:26, date:'14–18 Sep 2026'},
+ {who:'Dr. Farah Nakamura',  typeId:27, date:'Sun 6 Sep 2026'},
+ {who:'Dr. Alan Reyes',      typeId:23, date:'weekend of 5 Sep 2026'},
+];
+const RANK={max:3,high:2,low:1,'':0};
+function drawQueue(){
+  const sort=document.getElementById('qsort').value, kf=document.getElementById('qkind').value;
+  let rows=QUEUE.map(r=>({...r,t:TYPES.find(x=>x.id===r.typeId)})).filter(r=>r.t).filter(r=>!kf||r.t.kind===kf);
+  if(sort==='strength') rows.sort((a,b)=>RANK[b.t.strength]-RANK[a.t.strength]);
+  if(sort==='kind')     rows.sort((a,b)=>a.t.kind.localeCompare(b.t.kind));
+  document.getElementById('queueRows').innerHTML=rows.map(r=>`<tr>
+    <td><b>${esc(r.who)}</b></td>
+    <td>${kindChip(r.t.kind)} ${esc(r.t.label)}</td>
+    <td class="mini">${meansSentence(r.t,r.date).replace(/<b>|<\/b>/g,'')}</td>
+    <td class="mini">${esc(r.date)}</td>
+    <td>${strChip(r.t.strength)}</td>
+    <td><button class="btn btn-sm btn-primary" onclick="alert('Preview only.')">Approve</button>
+        <button class="btn btn-sm" onclick="alert('Preview only.')">Deny</button>
+        ${r.t.kind==='work'?'<div class="mini" style="color:#92400e;margin-top:3px">⚠ no checks yet</div>':''}</td></tr>`).join('')
+    ||'<tr><td colspan="6" class="mini">Nothing matches that filter.</td></tr>';
+}
+
+drawPicker(); drawTypes(); drawLists(); drawQueue();
+</script>
+</body>
+</html>

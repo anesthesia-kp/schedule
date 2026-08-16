@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Schedule — Rules &amp; conflicts (preview)</title>
+<style>
+:root{--bg:#f4f7fa;--s1:#fff;--s2:#f8fafc;--s3:#eef2f7;--b1:#e3e9f0;--b2:#cbd5e1;
+      --t1:#1e293b;--t2:#5b6b7c;--t3:#94a3b8;--blue:#2563eb;--green:#059669;--red:#dc2626;--amber:#b45309;--violet:#7c3aed}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;padding:16px 20px}
+.page-title{font-size:18px;font-weight:800}
+.page-sub{font-size:12px;color:var(--t2);margin-top:3px;max-width:100ch;line-height:1.55}
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:14px 16px;margin-top:12px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.card-title{font-size:12px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.btn{border:1px solid var(--b2);background:var(--s1);color:var(--t1);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer}
+.btn:hover{background:var(--s3)}
+.btn-primary,.btn.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn-sm{font-size:11.5px;padding:3px 9px;border-radius:6px}
+.sel,.inp{border:1px solid var(--b2);border-radius:8px;padding:6px 9px;font-size:13px;background:var(--s1);color:var(--t1)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lbl{font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em}
+.fake{background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;border-radius:9px;padding:9px 13px;font-size:12.5px;font-weight:700;margin-top:12px;line-height:1.5}
+.needs{background:#eef2ff;border:1px solid #a5b4fc;color:#3730a3;border-radius:9px;padding:10px 13px;font-size:12.5px;margin-top:12px;line-height:1.6}
+.tabs{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap}
+.hide{display:none}
+table{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:6px}
+th,td{border:1px solid var(--b1);padding:6px 9px;text-align:left;vertical-align:top}
+th{background:var(--s2);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--t2)}
+tbody tr:nth-child(even){background:var(--s2)}
+.sev{font-weight:800;font-size:10px;padding:2px 8px;border-radius:10px;color:#fff;white-space:nowrap}
+.sev-serious{background:#b91c1c}.sev-warn{background:#b45309}.sev-note{background:#64748b}
+.who{font-weight:800;font-size:10px;padding:2px 8px;border-radius:10px;background:#e0e7ff;color:#3730a3;white-space:nowrap}
+.means{background:#eff6ff;border:1px solid #bfdbfe;border-radius:9px;padding:10px 13px;font-size:13px;margin-top:10px;line-height:1.55;color:#1e3a8a}
+.dead{background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:9px;padding:9px 13px;font-size:12px;margin-top:10px;line-height:1.5}
+.okbox{background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46;border-radius:9px;padding:9px 13px;font-size:12px;margin-top:10px;line-height:1.5}
+.mini{font-size:11.5px;color:var(--t2);line-height:1.55}
+.tp{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--b2);background:var(--s1);border-radius:999px;padding:3px 11px 3px 9px;font-size:12px;font-weight:700;cursor:pointer;user-select:none}
+.tp.on{border-color:var(--violet);background:#f5f3ff;color:#5b21b6;box-shadow:0 0 0 2px rgba(124,58,237,.14)}
+.tagpick{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.fieldrow{display:flex;flex-direction:column;gap:4px;margin-top:11px}
+.pill{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:10px;background:#f1f5f9;color:var(--t2)}
+</style>
+</head>
+<body>
+
+<div class="page-title">Stage 5 — rules &amp; the conflict report <span style="font-size:11px;font-weight:800;background:var(--s3);color:var(--t2);border-radius:999px;padding:2px 10px;vertical-align:middle;margin-left:6px">DESIGN PREVIEW — NOT THE APP</span></div>
+<div class="page-sub">A mockup with no database behind it. Rules point at <b>tags</b>, never at <code>kind</code> — ruling §25 retired that, and <i>Eye Call</i> is why: a shift can be called “call”, run 07:30–15:30, and belong to no overnight-call tag at all.</div>
+
+<div class="needs">
+  <b>⚠️ This stage is blocked, and on something that needs your decision rather than my guess.</b><br>
+  Ruling §10 says a rule targets <b>everyone · a role · a group · a combination · named individuals</b>. <b>People have no roles and no groups in the app</b> — a person’s record holds name, username, login e-mail, KP e-mail and FTE, and nothing else. (<code>role</code> exists, but it is on <i>shifts</i>, and defect 23 records that it is never compared to a person.)<br>
+  So a slice of stage 4 has to come first. The <b>Who</b> tab below proposes the smallest version of it. Everything there is a <b>proposal</b>, not a settled design.
+</div>
+
+<div class="fake">⚠️ <b>Every person, group, rule and conflict below is invented.</b> The rule <i>types</i> are the proposal; the instances are made up so the screen has something to draw. The one real thing is the <b>Overnight call</b> tag, which shipped in build 51 with your three shifts in it.</div>
+
+<div class="tabs">
+  <button class="btn on" id="t_rules" onclick="tab('rules')">📏 Rules</button>
+  <button class="btn" id="t_new" onclick="tab('new')">➕ Write a rule</button>
+  <button class="btn" id="t_conf" onclick="tab('conf')">⚠️ Conflict report</button>
+  <button class="btn" id="t_who" onclick="tab('who')">👥 Who — the stage 4 slice</button>
+</div>
+
+<!-- ══════ RULES ══════ -->
+<div id="p_rules">
+  <div class="card">
+    <div class="card-title">Rules — <span id="ruleCount"></span></div>
+    <div class="mini" style="margin-bottom:8px"><b>Rule types are code; rule instances are data</b> — your line, §11. Seven types are proposed below. You make as many instances as you like, for anyone, with any numbers, without a build. A genuinely new <i>kind</i> of constraint is a build.</div>
+    <table><thead><tr><th>Rule</th><th>Applies to</th><th>Severity</th><th>Status</th></tr></thead><tbody id="ruleRows"></tbody></table>
+    <div class="dead">
+      <b>A rule that cannot match anything says so.</b> Three of the seven above are greyed out because the data they need is missing — times are blank everywhere by ruling §38, and sites are not on shifts yet. A quiet <i>zero violations</i> from a rule that never ran is worse than no rule at all. That is the same trap the Reports section was designed against in build 51, where an unreadable month is stated in red rather than counted as zero.
+    </div>
+  </div>
+</div>
+
+<!-- ══════ NEW RULE ══════ -->
+<div id="p_new" class="hide">
+  <div class="card">
+    <div class="card-title">Write a rule</div>
+    <div class="fieldrow"><span class="lbl">Type</span>
+      <select class="sel" id="rType" onchange="drawNew()"></select>
+      <span class="mini" id="rTypeHelp"></span></div>
+    <div id="rParams"></div>
+    <div class="fieldrow"><span class="lbl">Applies to</span>
+      <select class="sel" id="rWho" onchange="drawNew()">
+        <option value="all">Everyone</option>
+        <option value="role:MD">Role — MD</option>
+        <option value="role:CRNA">Role — CRNA</option>
+        <option value="group:pedi">Group — Pediatric</option>
+        <option value="group:ob">Group — Obstetric</option>
+        <option value="group:callTaking">Group — Call-taking</option>
+        <option value="named">Named individuals…</option>
+      </select>
+      <span class="mini">Roles and groups do not exist in the app yet — see the <b>Who</b> tab.</span></div>
+    <div class="fieldrow"><span class="lbl">Severity</span>
+      <select class="sel" id="rSev" onchange="drawNew()">
+        <option value="serious">Serious — a deliberate yes at the moment of the change</option>
+        <option value="warn" selected>Warn — named in the ordinary confirmation</option>
+        <option value="note">Note — listed in the report, not raised</option>
+      </select></div>
+    <div class="means" id="rPreview"></div>
+    <div class="okbox">
+      <b>Severity is not a veto.</b> §4 has no exceptions: <i>“Safety checks warn and let you override. Nothing is hard-blocked.”</i> Severity decides how loud the confirmation is and where the row sits in the report. Every override is recorded with who, when, and which rule — because a tool that fights you at 6am gets worked around.
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn btn-primary" onclick="alert('Preview only — nothing is saved.')">Save rule</button></div>
+  </div>
+</div>
+
+<!-- ══════ CONFLICTS ══════ -->
+<div id="p_conf" class="hide">
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div class="card-title" style="margin:0">Conflicts — September 2026 <span class="pill" id="confCount"></span></div>
+      <div class="row"><span class="lbl">Show</span>
+        <select class="sel" style="font-size:12px" id="cSev" onchange="drawConf()">
+          <option value="">All severities</option><option value="serious">Serious</option>
+          <option value="warn">Warn</option><option value="note">Note</option></select></div>
+    </div>
+    <table><thead><tr><th>Who</th><th>When</th><th>Rule</th><th>What specifically</th><th>Severity</th><th></th></tr></thead><tbody id="confRows"></tbody></table>
+    <div class="okbox"><b>It never fixes anything by itself.</b> §21’s principle generalises — the app suggests, a person accepts. Nothing is placed, moved or removed silently, here or anywhere.</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Overrides accepted</div>
+    <div class="mini" style="margin-bottom:6px">Not a list of failures — a record of decisions, with who made them and when.</div>
+    <table><thead><tr><th>Who</th><th>When</th><th>Rule they went past</th><th>Accepted by</th></tr></thead><tbody id="ovRows"></tbody></table>
+  </div>
+  <div class="card" style="background:var(--s2)">
+    <div class="card-title" style="margin-bottom:6px">Publishing with conflicts standing</div>
+    <div class="mini">Allowed — §4. The publish confirmation names how many are outstanding and how many were deliberately overridden, so nobody publishes a month without being told. It is a report, not a gate.</div>
+  </div>
+</div>
+
+<!-- ══════ WHO ══════ -->
+<div id="p_who" class="hide">
+  <div class="card">
+    <div class="card-title">The smallest slice of stage 4 that rules need</div>
+    <div class="mini" style="line-height:1.65">
+      Two things on a person, no more. <b>Role is single-choice</b> — §10 calls MD vs CRNA <i>primary</i>. <b>Groups are named sets of people, and a person may be in any number</b> — pediatric, obstetric, admin, call/non-call, per diem, locums, <i>“and probably more.”</i> Admin-created, not a fixed list in code, not a tree.<br><br>
+      <b>It is the same control you already have twice.</b> Tags are named sets of shifts (shipped in 51); request targets are named sets of shifts; groups are named sets of people. One tick-list, three jobs.
+    </div>
+    <div id="groupBlocks"></div>
+    <div class="dead">
+      <b>Two things here need your ruling, not my guess (§22).</b><br>
+      1. The current dropdown offers <b>Both (MD &amp; CRNA)</b>. Is that a third role, or a person who is in two groups? Defect 21 already flags that the hardcoded three-option list collides with the groups model.<br>
+      2. <b>“Counts toward fairness” lives on the group</b> per §26 — <i>“set on the group, not hard-coded.”</i> Build 51 shipped that switch <b>per person</b> as an interim (§35), which already records that it moves onto the group when stage 4 lands, with the per-person value becoming an override rather than a second source of truth. Confirm that is still what you want before it moves.
+    </div>
+  </div>
+</div>
+
+<script>
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TAGS={overnight:'Overnight call',late:'Late shifts',pedi:'Pediatric shifts',icu:'ICU shifts'};
+const TAG_READY={overnight:true,late:false,pedi:false,icu:false};   // late/pedi/icu have no times yet
+const PEOPLE=['Dr. Alan Reyes','Dr. Bea Okafor','Dr. Chen Lindqvist','Dr. Dana Baptiste','Dr. Eli Moreau','Dr. Farah Nakamura'];
+const GROUPS={
+  pedi:{label:'Pediatric', members:['Dr. Chen Lindqvist','Dr. Eli Moreau'], fairness:true},
+  ob:{label:'Obstetric', members:['Dr. Alan Reyes','Dr. Farah Nakamura'], fairness:true},
+  callTaking:{label:'Call-taking', members:['Dr. Alan Reyes','Dr. Chen Lindqvist','Dr. Dana Baptiste','Dr. Farah Nakamura'], fairness:true},
+  perDiem:{label:'Per diem', members:['Dr. Bea Okafor'], fairness:false},
+  locum:{label:'Locum', members:['Dr. Eli Moreau'], fairness:false},
+};
+const TYPES={
+  rest:    {label:'Minimum rest between shifts', help:'Catches back-to-back shifts with too little gap. Needs times on shifts.',
+            params:[{k:'hours',t:'number',lbl:'Hours of rest',v:10}], needs:'times'},
+  cooldown:{label:'Post-tag cooldown', help:'After a shift in one tag, avoid another tag for N days. This is what a post-call rule is.',
+            params:[{k:'after',t:'tag',lbl:'After a shift in',v:'overnight'},{k:'days',t:'number',lbl:'For how many days',v:1},{k:'avoid',t:'tag',lbl:'Avoid',v:'overnight'}], needs:null},
+  notmore: {label:'Not more than N of a tag', help:'Caps how much of something a person does in a stretch. §21 deferred per-person caps until the Rules section existed — this is that moment, and it is your call.',
+            params:[{k:'n',t:'number',lbl:'At most',v:2},{k:'tag',t:'tag',lbl:'Of tag',v:'overnight'},{k:'per',t:'per',lbl:'Per',v:'week'}], needs:null},
+  nottog:  {label:'Not together', help:'Two shifts that may not be held on the same day. This is the approved-pairs list from §7 — times filter automatically, then you tick what survives.',
+            params:[{k:'a',t:'text',lbl:'Shift',v:'Call 24'},{k:'b',t:'text',lbl:'…with',v:'D10'}], needs:'times'},
+  vac:     {label:'Not on approved vacation', help:'A shift landing on a week the Vacation Auction approved. Read-only against the auction — never written to.', params:[], needs:null},
+  site:    {label:'One site per day', help:'§18 — a person is at one site for a whole day, never both. Universal rather than an instance, and not a timing question: no gap makes Oakland and Richmond work.', params:[], needs:'sites'},
+  fair:    {label:'Fairness balance', help:'Balances a tag across a population, FTE-adjusted. Reuses build 51’s arithmetic unchanged — a rate per 1.0 FTE across the pool, times each person’s own FTE, per diem and locums outside it (§29). Two implementations of that would eventually disagree.',
+            params:[{k:'tag',t:'tag',lbl:'Balance',v:'overnight'},{k:'tol',t:'number',lbl:'Tolerance ±',v:1}], needs:null},
+};
+const RULES=[
+ {type:'cooldown',who:'group:callTaking',sev:'serious',p:{after:'overnight',days:1,avoid:'overnight'}},
+ {type:'rest',    who:'all',             sev:'serious',p:{hours:10}},
+ {type:'fair',    who:'group:callTaking',sev:'warn',   p:{tag:'overnight',tol:1}},
+ {type:'vac',     who:'all',             sev:'serious',p:{}},
+ {type:'notmore', who:'role:MD',         sev:'warn',   p:{n:2,tag:'overnight',per:'week'}},
+ {type:'site',    who:'all',             sev:'warn',   p:{}},
+ {type:'nottog',  who:'all',             sev:'note',   p:{a:'Call 24',b:'D10'}},
+];
+const whoLabel=w=>w==='all'?'Everyone':w.startsWith('role:')?'Role — '+w.slice(5):w.startsWith('group:')?'Group — '+(GROUPS[w.slice(6)]?.label||w.slice(6)):'Named individuals';
+// "nobody in Everyone" reads like a machine wrote it. These give the sentence a subject
+// that scans in English, which is the whole point of showing the rule in plain words.
+const nobodyIn=w=>w==='all'?'<b>nobody</b>':`nobody in <b>${esc(whoLabel(w))}</b>`;
+const everyoneIn=w=>w==='all'?'<b>Everyone</b>':`Everyone in <b>${esc(whoLabel(w))}</b>`;
+const sevChip=s=>`<span class="sev sev-${s}">${s}</span>`;
+const BLOCKED={times:'no shift has a time set (§38 — every estimate was left blank)',sites:'sites are not on shifts yet (stage 1)'};
+
+function ruleText(t,p,who){
+  const g=k=>TAGS[p[k]]||p[k];
+  const w=whoLabel(who).replace('Everyone','everyone').replace('Role — ','MDs/CRNAs: ').replace('Group — ','the ');
+  switch(t){
+    case 'rest':    return `${everyoneIn(who)} gets at least <b>${p.hours} hours</b> between the end of one shift and the start of the next.`;
+    case 'cooldown':return `After a shift in <b>${esc(g('after'))}</b>, ${nobodyIn(who)} takes another <b>${esc(g('avoid'))}</b> for <b>${p.days} day${p.days==1?'':'s'}</b>.`;
+    case 'notmore': return `${nobodyIn(who).replace('nobody','Nobody')} does more than <b>${p.n}</b> of <b>${esc(g('tag'))}</b> per <b>${esc(p.per)}</b>.`;
+    case 'nottog':  return `<b>${esc(p.a)}</b> and <b>${esc(p.b)}</b> are not held on the same day${who==='all'?'':' by <b>'+esc(whoLabel(who))+'</b>'}.`;
+    case 'vac':     return `${nobodyIn(who).replace('nobody','Nobody')} is given a shift on a week the Vacation Auction has approved for them.`;
+    case 'site':    return `${nobodyIn(who).replace('nobody','Nobody')} works two sites on one day.`;
+    case 'fair':    return `<b>${esc(g('tag'))}</b> is balanced across <b>${who==='all'?'everyone':esc(whoLabel(who))}</b> to within <b>±${p.tol}</b>, adjusted for FTE, with per diem and locums outside the pool.`;
+  }
+}
+function blockedBy(r){
+  const T=TYPES[r.type];
+  if(T.needs) return BLOCKED[T.needs];
+  const tagParams=(T.params||[]).filter(x=>x.t==='tag').map(x=>r.p[x.k]);
+  const dead=tagParams.filter(t=>!TAG_READY[t]);
+  return dead.length?('the tag “'+(TAGS[dead[0]]||dead[0])+'” has no shifts with times yet'):null;
+}
+function drawRules(){
+  document.getElementById('ruleCount').textContent=RULES.length+' rules';
+  document.getElementById('ruleRows').innerHTML=RULES.map(r=>{
+    const b=blockedBy(r);
+    return `<tr${b?' style="opacity:.62"':''}>
+      <td>${ruleText(r.type,r.p,r.who)}<div class="mini" style="margin-top:2px">${esc(TYPES[r.type].label)}</div></td>
+      <td><span class="who">${esc(whoLabel(r.who))}</span></td>
+      <td>${sevChip(r.sev)}</td>
+      <td>${b?`<b style="color:#92400e">Not checking anything</b><div class="mini">${esc(b)}</div>`:'<b style="color:#065f46">Active</b>'}</td></tr>`;
+  }).join('');
+}
+
+// ── new rule ──
+function drawNew(){
+  const sel=document.getElementById('rType');
+  if(!sel.options.length) sel.innerHTML=Object.entries(TYPES).map(([k,v])=>`<option value="${k}">${esc(v.label)}</option>`).join('');
+  const t=sel.value||Object.keys(TYPES)[0];
+  document.getElementById('rTypeHelp').textContent=TYPES[t].help;
+  const cur={};
+  const host=document.getElementById('rParams');
+  const prev={}; (TYPES[t].params||[]).forEach(pd=>{ const e=document.getElementById('rp_'+pd.k); prev[pd.k]=e?e.value:pd.v; });
+  host.innerHTML=(TYPES[t].params||[]).map(pd=>{
+    const v=prev[pd.k]!==undefined?prev[pd.k]:pd.v;
+    if(pd.t==='tag') return `<div class="fieldrow"><span class="lbl">${esc(pd.lbl)}</span><select class="sel" id="rp_${pd.k}" onchange="drawNew()">${Object.entries(TAGS).map(([k,l])=>`<option value="${k}"${v===k?' selected':''}>${esc(l)}${TAG_READY[k]?'':' — no times yet'}</option>`).join('')}</select></div>`;
+    if(pd.t==='per') return `<div class="fieldrow"><span class="lbl">${esc(pd.lbl)}</span><select class="sel" id="rp_${pd.k}" onchange="drawNew()">${['week','month','quarter','year'].map(x=>`<option${v===x?' selected':''}>${x}</option>`).join('')}</select></div>`;
+    return `<div class="fieldrow"><span class="lbl">${esc(pd.lbl)}</span><input class="inp" id="rp_${pd.k}" type="${pd.t==='number'?'number':'text'}" value="${esc(v)}" oninput="drawNew()" style="max-width:220px"></div>`;
+  }).join('')||'<div class="mini" style="margin-top:10px">This type has no settings — it either applies or it does not.</div>';
+  (TYPES[t].params||[]).forEach(pd=>{ const e=document.getElementById('rp_'+pd.k); cur[pd.k]=e?e.value:pd.v; });
+  const who=document.getElementById('rWho').value, sev=document.getElementById('rSev').value;
+  const fake={type:t,p:cur,who,sev};
+  const b=blockedBy(fake);
+  document.getElementById('rPreview').innerHTML='<b>In plain words:</b><br>'+ruleText(t,cur,who)
+    +`<div style="margin-top:7px">${sevChip(sev)} ${sev==='serious'?'— a confirmation that names this rule and needs a deliberate yes.':sev==='warn'?'— named in the ordinary confirmation.':'— listed in the report, not raised at the moment of the change.'}</div>`
+    +(b?`<div style="margin-top:7px;color:#92400e"><b>This rule would not check anything yet:</b> ${esc(b)}. It can be saved — it will simply say so on the Rules page until the data arrives.</div>`:'');
+}
+
+// ── conflicts (invented) ──
+const CONF=[
+ {who:'Dr. Alan Reyes', when:'Fri 4 – Sat 5 Sep', rule:'Post-tag cooldown', sev:'serious', what:'Took Call 24 on Friday and Call 16 on Saturday. The rule asks for 1 day clear after Overnight call.'},
+ {who:'Dr. Dana Baptiste', when:'Wed 9 Sep', rule:'Not on approved vacation', sev:'serious', what:'Given Call 24 on a week the Vacation Auction approved for her.'},
+ {who:'Dr. Farah Nakamura', when:'week of 7 Sep', rule:'Not more than 2 Overnight call per week', sev:'warn', what:'3 overnight calls that week — Mon, Thu, Sat.'},
+ {who:'Dr. Chen Lindqvist', when:'September', rule:'Fairness balance — Overnight call', sev:'warn', what:'6 calls at 0.8 FTE = 7.5 per 1.0 FTE. The pool runs at 4.9. Outside the ±1 tolerance.'},
+ {who:'Dr. Eli Moreau', when:'Tue 15 Sep', rule:'One site per day', sev:'warn', what:'Oakland in the morning and Richmond in the afternoon. §18 — one site for the whole day.'},
+ {who:'Dr. Alan Reyes', when:'Mon 21 Sep', rule:'Not together — Call 24 with D10', sev:'note', what:'Holds both. Not an approved pairing.'},
+];
+const OVR=[
+ {who:'Dr. Bea Okafor', when:'Thu 10 Sep', rule:'Minimum rest between shifts (10h)', by:'you, 16 Aug 09:14'},
+ {who:'Dr. Farah Nakamura', when:'Sat 12 Sep', rule:'Post-tag cooldown after Overnight call', by:'you, 16 Aug 09:22'},
+];
+const SEVRANK={serious:3,warn:2,note:1};
+function drawConf(){
+  const f=document.getElementById('cSev').value;
+  const rows=CONF.filter(c=>!f||c.sev===f).sort((a,b)=>SEVRANK[b.sev]-SEVRANK[a.sev]);
+  document.getElementById('confCount').textContent=CONF.length+' standing';
+  document.getElementById('confRows').innerHTML=rows.map(c=>`<tr>
+    <td><b>${esc(c.who)}</b></td><td class="mini">${esc(c.when)}</td><td>${esc(c.rule)}</td>
+    <td class="mini">${esc(c.what)}</td><td>${sevChip(c.sev)}</td>
+    <td><button class="btn btn-sm" onclick="alert('Preview only — this would jump to that day cell.')">Go to it</button></td></tr>`).join('')
+    ||'<tr><td colspan="6" class="mini">Nothing at that severity.</td></tr>';
+  document.getElementById('ovRows').innerHTML=OVR.map(o=>`<tr><td><b>${esc(o.who)}</b></td><td class="mini">${esc(o.when)}</td><td>${esc(o.rule)}</td><td class="mini">${esc(o.by)}</td></tr>`).join('');
+}
+
+// ── who ──
+function drawWho(){
+  document.getElementById('groupBlocks').innerHTML=`
+    <div style="margin-top:14px;padding-top:11px;border-top:1px solid var(--b1)">
+      <div style="font-weight:800;font-size:13px">Primary role <span class="pill">single choice</span></div>
+      <table><thead><tr><th>Person</th><th>Role</th><th>FTE</th></tr></thead><tbody>${
+        PEOPLE.map((p,i)=>`<tr><td><b>${esc(p)}</b></td><td><select class="sel" style="font-size:12px"><option${i%3?'':' selected'}>MD</option><option${i%3?' selected':''}>CRNA</option><option>Both (MD &amp; CRNA)</option></select></td><td class="mini">invented</td></tr>`).join('')
+      }</tbody></table>
+    </div>`
+    + Object.entries(GROUPS).map(([k,g])=>`
+    <div style="margin-top:14px;padding-top:11px;border-top:1px solid var(--b1)">
+      <div style="font-weight:800;font-size:13px">${esc(g.label)}
+        <span class="pill" style="background:${g.fairness?'#ecfdf5':'#fef2f2'};color:${g.fairness?'#065f46':'#991b1b'}">${g.fairness?'counts toward fairness':'OUT of the fairness pool'}</span></div>
+      <div class="tagpick">${PEOPLE.map(p=>`<span class="tp${g.members.includes(p)?' on':''}" onclick="togMember('${k}','${p.replace(/'/g,"\\'")}')">${g.members.includes(p)?'✓ ':''}${esc(p)}</span>`).join('')}</div>
+    </div>`).join('');
+}
+window.togMember=(k,p)=>{ const a=GROUPS[k].members, i=a.indexOf(p); i>=0?a.splice(i,1):a.push(p); drawWho(); };
+
+function tab(w){
+  ['rules','new','conf','who'].forEach(x=>{
+    document.getElementById('p_'+x).className = x===w?'':'hide';
+    document.getElementById('t_'+x).className = 'btn'+(x===w?' on':'');
+  });
+  if(w==='new') drawNew(); if(w==='who') drawWho();
+}
+drawRules(); drawNew(); drawConf(); drawWho();
+</script>
+</body>
+</html>

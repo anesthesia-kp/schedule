@@ -16,8 +16,31 @@ reference.
 
 | page | live | in working tree | state |
 |---|---|---|---|
-| admin | **50** | 50 | **PUSHED and live 16 Aug**, commit `8c43847` |
+| admin | **50** | **51** | 51 FILED, byte-verified, **NOT pushed** — awaiting the auction battery |
 | staff | **26** | 26 | **PUSHED and live 16 Aug**, commit `8c43847` |
+
+**Build 51 (admin only)** — the **Reports** section, stage 9. Per doctor, for any period:
+shift counts with overnight call first, every overnight call listed by date, and an
+FTE-adjusted comparison with the method printed on the page (DECISIONS §28/§29). Carries
+the first admin-defined tag — **Overnight call**, seeded with the owner's `Call 16`,
+`Call 24`, `OB PM` and never derived (§27) — the comparison-pool switch (§35), the no-FTE
+handling (§36), the baseline split into a separate fairness view (§37), and a styled Excel
+export built the same way as the auction's `exportUserSummary` (§32).
+Staff page untouched, so staff stays 26. No rules change → no Firebase console step.
+
+Gates, all executed 16 Aug: `sched/build51-test.mjs` **88/88** ×3 in a real browser ·
+honesty `--pre` vs build 50 = **14 pass / 66 fail** · `sched/isolation-test.mjs` **27/27**
+on 51 and 27/27 on 50 → **zero new auction writes** · FTE independence **5/5** ·
+`sched/elig-test.mjs` **33/33** on 51 and 33/33 on 50 as a control.
+**Still owed before push: the auction battery** (`node run-all.mjs`) — build 50 turned it
+red on a schedule-only change, so it runs after every one.
+
+*Worth recording:* the eligibility suite caught the first cut of this build. The Excel
+library was loaded in a `<script>` tag exactly as the auction loads it, which made the page
+log a console error on every load when the CDN was unreachable — and that suite asserts
+zero console errors. The assertion was NOT loosened to fit the change; the library is now
+fetched only when Excel is actually pressed, so the page keeps the zero network
+dependencies it had.
 
 **Build 50 / 26** — the small-fix batch (DECISIONS §33): stale-build gate ported from
 auction 268 · Quick View month-boundary fix · a staff error surface (the page had none) ·
@@ -40,12 +63,8 @@ removed from both pages.
 
 | # | question | why it matters | asked |
 |---|---|---|---|
-| Q7 | Is **bulk demand editing** wanted? | Bulk demand *replaces* whatever each shift had — the most destructive bulk operation on the page. Needs a sharper confirmation than bulk times/location. | 15 Aug |
 | Q8 | **Suggestion 3** — phone-first staff view, notifications, Quick View fix. No verdict given; absorbed as stage 8 and deliberately movable. | If the group starts using the site before the foundations land, this is the stage to pull forward. Nothing in it depends on the rest. | 15 Aug |
 | Q10 | **ANSWERED 15 Aug** — *"Richmond shifts generally say RCH or R at the start."* Applied: 9 Richmond, 82 Oakland, none blank. Residual: 2 rows marked CHECK ME (`NICU9+` starts with N; `SMOB Uro` matches neither), and 7 of the 9 Richmond shifts rest purely on the R-start rule with the abbreviation undecoded. | Ruling 18 makes site a property of a person's whole DAY. | 15 Aug |
-| Q11 | **Is `4 to 6` (15:30–17:30) a shift that needs adding?** The owner gave times for it, but it is not among the 91. | Small, but it is a real instruction with nothing to attach to. | 15 Aug |
-| Q15 | **Four call-family times are SUSPECT, not merely estimated**: `C2PA`, `C2AP`, `Call 8`, `PCV Call`. | Each was guessed on the assumption that a call-family shift runs evening/overnight. `Eye Call` turned out to be 07:30–15:30, which disproves the reasoning behind all four. Worth answering before the rest of the estimates. | 16 Aug |
-| Q13 | **Are the 68 ESTIMATED times acceptable?** See `shift-times.xlsx` — amber rows, each with the reasoning. Four are flagged SUSPECT (Q15). | The owner said "make your best guess… I can edit later." Estimated times stay provisional in the UI until accepted. | 15 Aug |
 
 ### Answered
 
@@ -61,7 +80,50 @@ removed from both pages.
 | Q6 | Lock scope | **Everything, add and remove included**, and **one master switch per page** with config pages locked / daily-work pages unlocked by default, no auto-relock — DECISIONS §20. |
 | Q14 | Should `Pedi PM` be 13:30–17:30? | **Yes** — owner, 16 Aug. With that, **no shift remains on the blanket PM rule**; it is retired (DECISIONS §17). |
 | Q12 | Do the PM shifts really run 16 hours? | **Admin is an exception** — nothing admin past 17:30; Admin AM 07:30–11:30, Admin PM 13:30–17:30, D pm 11:30–15:30, CVpm 13:30–17:30. Residual → Q14 (`Pedi PM`). |
-| Q9 | Bulk entry priority | **Duplicate-an-existing first**, then paste-a-list, then bulk demand — DECISIONS §23. |
+| Q7 | Bulk demand editing? | **No** — owner, 16 Aug. Dropped from stage 1. DECISIONS §40. |
+| Q11 | Is `4 to 6` a shift? | **Yes** — *"add 4-6 as a shift in the weekday daytime category."* 15:30–17:30, catalog 91 → 92. Add it in the Shift Catalog UI, not in code — the seeding migration is one-shot (defect 24) and §11 says data changes need no build. DECISIONS §39. |
+| Q13 | Accept the 68 estimated times? | **No — leave them blank.** Owner, 16 Aug: *"leave remaining times blank for now."* The estimates are parked, not loaded. DECISIONS §38. |
+| Q15 | The four SUSPECT call times | **Leave blank** — owner, 16 Aug. Same ruling as Q13. DECISIONS §38. |
+| Q9 | Bulk entry priority | **Duplicate-an-existing first**, then paste-a-list. ~~then bulk demand~~ — bulk demand was later declined outright (Q7 / DECISIONS §40). DECISIONS §23. |
+
+---
+
+## Request types — the QGenda list the owner wants (raised 16 Aug)
+
+The owner sent screenshots of the current system's **Task** dropdown — the list a person
+picks from when submitting a request — and asked for it. **27 entries**, confirmed by him
+as the complete list:
+
+*Work something specific:* MD Sat D · PACU MD · CVpm · DE · RCH, 8hr, MD only (R8:MD) ·
+Admin · Admin AM · Admin PM · Req OAK Call · Req OAK Call AM · Req OAK Call PM · Req RCH Call
+*Avoid something:* No Call · No OAK AM · No OAK PM · No Late [MAX] · No Late [HIGH] · No Late [LOW]
+*Time off:* CV-Day Off · Day Off [MAX] · Day Off [HIGH] · Day Off [LOW] · Weekend Off ·
+Use PTO if off · Ed Leave · Jury Duty (JD)
+*Availability:* AVAILABLE
+
+Today the staff page offers **four** types — `shift`, `dayoff`, `nocall`, `other`.
+
+Design in `design/REQUEST-TYPES.md` + `design/request-types-preview.html`. **Not built.**
+Two structural points are the whole design, and both were raised before any of it was built:
+
+1. **`[MAX]` / `[HIGH]` / `[LOW]` is a strength, not a name.** Listing the same request
+   three times buries the priority inside a text label, so a queue can never be sorted by
+   it and every future priority-bearing type triples the list.
+2. **The list is a deliberate SUBSET of the catalog, not a view of it.** Owner, 16 Aug:
+   *"Not all shifts can be requested, that's why i want just these."* Claude had proposed
+   generating the work-something entries from the 91-shift catalog; **wrong** — a person
+   may not request most shifts, and offering them all would invite requests that can never
+   be granted. Which shifts are requestable is an **admin-curated list**, managed exactly
+   like the Overnight-call tag: the app never works it out, the admin sets it. Same shape
+   as §27, and §11 is still satisfied because the list is data, not code.
+
+**Depends on:** the overnight-call tag (shipped, 51) for *No Call*; a **late** tag for
+*No Late*; and **site on shifts** (stage 1, Q10) for the OAK / RCH entries.
+**Makes defect 1 worse until stage 6:** approving a request writes an assignment with no
+eligibility, capacity, vacation or collision check. More request types means more ways to
+walk into that.
+**Open:** the screenshots show **Limits** and **Balances** tabs — how many of each request
+type a person may make per period. Not specified, deliberately not invented (§22).
 
 ---
 
@@ -73,7 +135,7 @@ working.
 | # | stage | size | state |
 |---|---|---|---|
 | 0 | **Test battery** — grow the schedule suite to vacation standard | medium | started: isolation + eligibility suites exist |
-| 1 | **Shift definition** — times, location, demand rules, preview, holiday calendar, per-page lock, group edit, bulk entry (duplicate first), **tag membership** | large | **designed + previewed, not built** |
+| 1 | **Shift definition** — times, location, demand rules, preview, holiday calendar, per-page lock, group edit, bulk entry (duplicate first — **no bulk demand**, §40), **tag membership** | large | **designed + previewed, not built.** The Overnight-call tag SHIPPED in 51 as its first slice. |
 | 2 | **Coverage board** — uncovered shifts, `filled / needed` | small | not started |
 | 3 | **Assignment model** — list not slots; explicit add/remove | large | not started |
 | 4 | **People** — roles + admin-defined groups, each with a "counts toward fairness" switch (§26) | small | not started |
@@ -81,7 +143,7 @@ working.
 | 6 | **Safety check + uniform confirmations** | medium | not started — *was* going to be first; moved back because it consumes 1–5 |
 | 7 | **Draft / publish + per-person change feed** | large | not started |
 | 8 | **Staff phone view, notifications, Quick View fix** | medium | not started — movable, see Q8 |
-| 9 | **Reports (admin only)** — per-doctor shift counts with call first, dated call list, comparison to the group. Needs the overnight-call tag (§27), which is a minimal slice of stage 1. | medium | **designed + previewed, not built** |
+| 9 | **Reports (admin only)** — per-doctor shift counts with call first, dated call list, comparison to the group. | medium | **BUILT — admin 51**, filed and gated, awaiting the auction battery and a push. |
 
 ---
 

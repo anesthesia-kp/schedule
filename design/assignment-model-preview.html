@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Schedule — Assignment model (preview)</title>
+<style>
+:root{--bg:#f4f7fa;--s1:#fff;--s2:#f8fafc;--s3:#eef2f7;--b1:#e3e9f0;--b2:#cbd5e1;
+      --t1:#1e293b;--t2:#5b6b7c;--t3:#94a3b8;--blue:#2563eb;--green:#059669;--red:#dc2626;--amber:#b45309;--violet:#7c3aed}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;padding:16px 20px}
+.page-title{font-size:18px;font-weight:800}
+.page-sub{font-size:12px;color:var(--t2);margin-top:3px;max-width:100ch;line-height:1.55}
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:14px 16px;margin-top:12px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.card-title{font-size:12px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.btn{border:1px solid var(--b2);background:var(--s1);color:var(--t1);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer}
+.btn:hover{background:var(--s3)}
+.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn-danger{background:#fef2f2;border-color:#fca5a5;color:#991b1b}
+.btn-sm{font-size:11.5px;padding:3px 9px;border-radius:6px}
+.sel,.inp{border:1px solid var(--b2);border-radius:8px;padding:6px 9px;font-size:13px;background:var(--s1);color:var(--t1)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lbl{font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em}
+.fake{background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;border-radius:9px;padding:9px 13px;font-size:12.5px;font-weight:700;margin-top:12px;line-height:1.5}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+@media(max-width:880px){.split{grid-template-columns:1fr}}
+.pane{border:1px solid var(--b1);border-radius:12px;overflow:hidden;background:#fff}
+.pane-h{padding:8px 13px;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+.pane-h.bad{background:#fef2f2;color:#991b1b;border-bottom:1px solid #fca5a5}
+.pane-h.good{background:#ecfdf5;color:#065f46;border-bottom:1px solid #6ee7b7}
+.pane-b{padding:13px}
+.slot{display:flex;align-items:center;gap:9px;padding:7px 10px;border:1px solid var(--b1);border-radius:8px;margin-top:6px;background:var(--s2);font-size:13px}
+.slot .t{font-family:'SF Mono',Consolas,monospace;font-size:11px;color:var(--t2)}
+.slot .via{font-size:10.5px;color:var(--t3)}
+.gone{background:#fef2f2;border-color:#fca5a5;color:#991b1b;text-decoration:line-through}
+.empty{color:var(--t3);font-style:italic;font-size:12.5px;padding:7px 2px}
+.json{font-family:'SF Mono',Consolas,monospace;font-size:11px;background:#0f2744;color:#e2e8f0;border-radius:8px;padding:10px 12px;margin-top:9px;overflow-x:auto;white-space:pre;line-height:1.5}
+.json .k{color:#7dd3fc}.json .s{color:#bef264}.json .n{color:#fca5a5}
+.warnbox{background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:9px;padding:9px 13px;font-size:12px;margin-top:10px;line-height:1.5}
+.okbox{background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46;border-radius:9px;padding:9px 13px;font-size:12px;margin-top:10px;line-height:1.5}
+.log{font-size:11.5px;line-height:1.6;margin-top:8px;max-height:150px;overflow:auto}
+.log div{padding:2px 0;border-bottom:1px dotted var(--b1)}
+.mini{font-size:11.5px;color:var(--t2);line-height:1.5}
+.tabs{display:flex;gap:6px;margin-top:14px;flex-wrap:wrap}
+.btn.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.hide{display:none}
+table{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:6px}
+th,td{border:1px solid var(--b1);padding:6px 9px;text-align:left}
+th{background:var(--s2);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--t2)}
+</style>
+</head>
+<body>
+
+<div class="page-title">Stage 3 — the assignment model <span style="font-size:11px;font-weight:800;background:var(--s3);color:var(--t2);border-radius:999px;padding:2px 10px;vertical-align:middle;margin-left:6px">DESIGN PREVIEW — NOT THE APP</span></div>
+<div class="page-sub">A mockup, with no database behind it. The left-hand side reproduces what the live code does today, faithfully — including the bug. The right-hand side is the proposal.</div>
+
+<div class="fake">⚠️ <b>The doctor and the dates are invented.</b> The behaviour on the left is not: it is what <code>decideReq</code> does at line ~1393 of the admin page today, transcribed rather than imagined.</div>
+
+<div class="tabs">
+  <button class="btn on" id="t_bug" onclick="tab('bug')">🐛 Defect 2, live</button>
+  <button class="btn" id="t_cell" onclick="tab('cell')">📝 The new day cell</button>
+  <button class="btn" id="t_mig" onclick="tab('mig')">🔀 Reading both shapes</button>
+</div>
+
+<!-- ══════ THE BUG ══════ -->
+<div id="p_bug">
+  <div class="card">
+    <div class="card-title">Dr. Alan Reyes already holds D10 on Friday 4 September. Now approve his request for Call 24.</div>
+    <div class="row">
+      <button class="btn btn-primary" onclick="approve()">Approve the Call 24 request</button>
+      <button class="btn" onclick="resetBug()">Reset</button>
+    </div>
+    <div class="split">
+      <div class="pane">
+        <div class="pane-h bad">Today — two slots and a flag</div>
+        <div class="pane-b">
+          <div id="oldSlots"></div>
+          <div class="json" id="oldJson"></div>
+          <div id="oldMsg"></div>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="pane-h good">Proposed — a list</div>
+        <div class="pane-b">
+          <div id="newSlots"></div>
+          <div class="json" id="newJson"></div>
+          <div id="newMsg"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px;background:var(--s2)">
+      <div class="card-title" style="margin-bottom:6px">The line that does it</div>
+      <div class="json">patch = { ...cur, <span class="n">day:null, call:null</span>, off:false, [kind]: r.shiftId }</div>
+      <div class="mini" style="margin-top:8px">It clears <b>both</b> slots and sets one. If he already held a day shift it is gone — no warning, no record, and nothing in the audit log naming what was taken away. The same shape appears in the swap apply and in auto-populate. This is why <b>a person cannot hold two day shifts</b>: the second one deletes the first.</div>
+      <div class="mini" style="margin-top:6px">Owner, 15 Aug (§8): <i>“People can definitely have 2 daytime shifts. No shift can ever just be replaced.”</i></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="card-title" style="margin-bottom:6px">Audit log</div>
+      <div class="split" style="margin-top:0">
+        <div><div class="lbl">Today</div><div class="log" id="oldLog"></div></div>
+        <div><div class="lbl">Proposed</div><div class="log" id="newLog"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ THE CELL ══════ -->
+<div id="p_cell" class="hide">
+  <div class="card">
+    <div class="card-title">Dr. Alan Reyes — Friday 4 September 2026</div>
+    <div id="cellList"></div>
+    <div class="row" style="margin-top:10px">
+      <select class="sel" id="addSel" style="font-size:12.5px;min-width:260px"></select>
+      <button class="btn btn-primary btn-sm" onclick="addShift()">+ Add this shift</button>
+      <span style="width:1px;height:20px;background:var(--b2)"></span>
+      <label class="row" style="font-size:12.5px;font-weight:700;color:var(--t2);cursor:pointer">
+        <input type="checkbox" id="offBox" onchange="toggleOff()"> Off this day</label>
+    </div>
+    <div id="cellWarn"></div>
+    <div class="mini" style="margin-top:11px">
+      <b>Three operations, and none of them is “replace”.</b> <code>addShift</code> appends and never removes. <code>removeShift</code> removes the shift you named and nothing else. <code>setOff</code> touches the flag and no shifts. Replacing is remove-then-add, said out loud in one confirmation, rather than an implicit consequence of a dropdown changing value (§3, §8).
+    </div>
+    <div class="warnbox">
+      <b>Nothing is ever blocked</b> (§4). Try adding <b>Call 24</b> and then <b>Call 16</b> — they overlap, so it warns and lets you do it, and records the override with who, when and which rule. Try <b>RCH-ICU A</b> alongside an Oakland shift: §18 makes site a property of the whole day, so that is not a timing question and no gap fixes it — the warning says so in different words.
+    </div>
+    <div class="card" style="background:var(--s2)"><div class="card-title" style="margin-bottom:6px">What gets stored</div><div class="json" id="cellJson"></div></div>
+    <div class="card"><div class="card-title" style="margin-bottom:6px">Audit log</div><div class="log" id="cellLog"></div></div>
+  </div>
+</div>
+
+<!-- ══════ MIGRATION ══════ -->
+<div id="p_mig" class="hide">
+  <div class="card">
+    <div class="card-title">There is no migration</div>
+    <div class="mini" style="line-height:1.65">
+      No mass rewrite, no one-shot self-marking migration, and no moment where the app is half converted. <b>Defect 24 is the standing warning</b> — the v2 catalog seeding marked itself done, so editing the source constants afterwards has no effect on a database that was already seeded. That pattern is not repeated here.<br><br>
+      Instead: <b>one normaliser, used by every reader.</b> Old months keep working for ever, unread and unrewritten. A cell converts the first time somebody actually changes it, in the same write that changes it.
+    </div>
+    <div class="json" style="margin-top:11px">shiftsOf(cell):
+   if cell.a exists  →  <span class="s">that is the truth</span>
+   otherwise         →  build it from [cell.day, cell.call], skipping blanks</div>
+    <div class="okbox">
+      <b>One rule, absolute:</b> if <code>a</code> is present, <code>day</code> and <code>call</code> are <b>ignored</b> — never merged, never a fallback. Two sources for one answer is how the eligibility grid nearly went wrong (§19).
+    </div>
+    <div class="card-title" style="margin-top:16px">Try it — every reader sees the same list either way</div>
+    <table><thead><tr><th>What is stored</th><th style="width:34%">Era</th><th style="width:30%"><code>shiftsOf(cell)</code></th></tr></thead>
+    <tbody id="migRows"></tbody></table>
+    <div class="warnbox" style="margin-top:12px">
+      <b>Roughly twenty read sites</b> across the two pages go through this one function — the grid, both Stats modes, <code>windowShiftCounts</code>, auto-populate, the conflict checker, request and swap approval, open-shift claims, the staff Quick View and personal calendar, and the Reports collector added in build 51. Routing all of them in a single build is the work; the data itself is never touched.
+    </div>
+  </div>
+</div>
+
+<script>
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// INVENTED catalog subset, with times, so overlap warnings have something to reason about.
+const SH={
+  D10:      {label:'D10',       t:'07:30–17:30', s:960, e:1050, site:'Oakland'},
+  D:        {label:'D',         t:'07:30–15:30', s:450, e:930,  site:'Oakland'},
+  CALL24:   {label:'Call 24',   t:'07:30–07:30', s:450, e:1890, site:'Oakland'},
+  CALL16:   {label:'Call 16',   t:'15:30–07:30', s:930, e:1890, site:'Oakland'},
+  ADMIN_AM: {label:'Admin AM',  t:'07:30–11:30', s:450, e:690,  site:'Oakland'},
+  ADMIN_PM: {label:'Admin PM',  t:'13:30–17:30', s:810, e:1050, site:'Oakland'},
+  RCHA:     {label:'RCH-ICU A', t:'07:30–19:30', s:450, e:1170, site:'Richmond'},
+};
+SH.D10.s=450;
+const T=id=>SH[id]||{label:id,t:'',s:0,e:0,site:''};
+const jkey=(k,v,bad)=>`<span class="k">${k}</span>: <span class="${bad?'n':'s'}">${v}</span>`;
+
+// ══════ TAB 1 — the bug ══════
+let oldCell, newCell, oldLog, newLog;
+function resetBug(){
+  oldCell={day:'D10',call:null,off:false};
+  newCell={a:[{s:'D10',via:'manual'}],off:false};
+  oldLog=['<b>cell.save</b> — Set Dr. Alan Reyes on Fri 4 Sep: D10'];
+  newLog=['<b>cell.add</b> — Added D10 to Dr. Alan Reyes on Fri 4 Sep (manually)'];
+  drawBug(false);
+}
+window.approve=()=>{
+  // Faithful reproduction of decideReq's patch, line ~1393.
+  const lost=oldCell.day;
+  oldCell={...oldCell, day:null, call:null, off:false, call:'CALL24'};
+  oldCell.day=null; oldCell.call='CALL24';
+  oldLog.push('<b>request.decide</b> — Approved shift request from Dr. Alan Reyes (2026-09-04)');
+  newCell.a.push({s:'CALL24',via:'request'});
+  newLog.push('<b>request.decide</b> — Approved shift request from Dr. Alan Reyes (2026-09-04)');
+  newLog.push('<b>cell.add</b> — Added <b>Call 24</b> to Dr. Alan Reyes on Fri 4 Sep (from a request). He now holds D10 and Call 24.');
+  drawBug(true, lost);
+};
+function drawBug(done, lost){
+  const oS=document.getElementById('oldSlots');
+  oS.innerHTML = (oldCell.day?`<div class="slot"><b>${esc(T(oldCell.day).label)}</b><span class="t">${T(oldCell.day).t}</span></div>`:'')
+    + (done&&lost&&!oldCell.day?`<div class="slot gone"><b>${esc(T(lost).label)}</b><span class="t">${T(lost).t}</span><span style="flex:1"></span><span class="via">silently deleted</span></div>`:'')
+    + (oldCell.call?`<div class="slot"><b>${esc(T(oldCell.call).label)}</b><span class="t">${T(oldCell.call).t}</span></div>`:'')
+    || '<div class="empty">nothing</div>';
+  document.getElementById('oldJson').innerHTML='{ '+jkey('day',oldCell.day?`'${oldCell.day}'`:'null',done&&!oldCell.day)+', '+jkey('call',oldCell.call?`'${oldCell.call}'`:'null')+', '+jkey('off','false')+' }';
+  document.getElementById('oldMsg').innerHTML = done
+    ? `<div class="warnbox" style="background:#fef2f2;border-color:#fca5a5;color:#991b1b"><b>D10 is gone.</b> Nobody chose that. He was told his Call 24 request was approved; he was not told he had been taken off D10, and the audit log does not mention it either. Whoever is covering D10 on Friday now — nobody is.</div>`
+    : '';
+  const nS=document.getElementById('newSlots');
+  nS.innerHTML=newCell.a.map(x=>`<div class="slot"><b>${esc(T(x.s).label)}</b><span class="t">${T(x.s).t}</span><span style="flex:1"></span><span class="via">via ${esc(x.via)}</span></div>`).join('')||'<div class="empty">nothing</div>';
+  document.getElementById('newJson').innerHTML='{ <span class="k">a</span>: [ '+newCell.a.map(x=>`{ ${jkey('s',`'${x.s}'`)}, ${jkey('via',`'${x.via}'`)} }`).join(', ')+' ], '+jkey('off','false')+' }';
+  document.getElementById('newMsg').innerHTML = done
+    ? `<div class="okbox"><b>He holds both.</b> Adding appends; it never removes. If the two were incompatible he would have been warned at the moment of approval and the override recorded — but the decision would still be a person's, not a side effect (§4).</div>`
+    : '';
+  document.getElementById('oldLog').innerHTML=oldLog.map(l=>`<div>${l}</div>`).join('');
+  document.getElementById('newLog').innerHTML=newLog.map(l=>`<div>${l}</div>`).join('');
+}
+
+// ══════ TAB 2 — the cell ══════
+let cell={a:[{s:'D10',via:'manual',by:'you'}],off:false}, cellLog=['<b>cell.add</b> — Added D10 (manually)'];
+function overlaps(a,b){ return T(a).s < T(b).e && T(b).s < T(a).e; }
+function conflictWith(id){
+  const out=[];
+  for(const x of cell.a){
+    if(T(x.s).site && T(id).site && T(x.s).site!==T(id).site)
+      out.push({kind:'site', msg:`<b>${esc(T(id).label)}</b> is at ${esc(T(id).site)} and <b>${esc(T(x.s).label)}</b> is at ${esc(T(x.s).site)}. A person is at <b>one site for a whole day</b> (§18) — this is not a timing question and no gap between them makes it work.`});
+    else if(overlaps(id,x.s))
+      out.push({kind:'time', msg:`<b>${esc(T(id).label)}</b> (${T(id).t}) overlaps <b>${esc(T(x.s).label)}</b> (${T(x.s).t}).`});
+  }
+  if(cell.off) out.push({kind:'off', msg:`He is marked <b>off</b> this day. Adding a shift does not clear that flag by itself — you would be leaving him both off and assigned.`});
+  return out;
+}
+function drawCell(){
+  document.getElementById('cellList').innerHTML = cell.a.length
+    ? cell.a.map((x,i)=>`<div class="slot"><b>${esc(T(x.s).label)}</b><span class="t">${T(x.s).t}</span>
+        <span class="via">${esc(T(x.s).site)} · added by ${esc(x.by||'you')}, ${esc(x.via)}</span>
+        <span style="flex:1"></span>
+        <button class="btn btn-sm btn-danger" onclick="removeShift(${i})">Remove</button></div>`).join('')
+    : '<div class="empty">No shifts on this day.</div>';
+  // Capture the selection BEFORE rebuilding the options, and put it back afterwards.
+  // Rebuilding a <select> resets it to the first option, so reading .value after the
+  // rebuild describes whatever happens to be at the top rather than what was chosen.
+  const sel0=document.getElementById('addSel').value;
+  const held=new Set(cell.a.map(x=>x.s));
+  document.getElementById('addSel').innerHTML=Object.entries(SH).filter(([id])=>!held.has(id))
+    .map(([id,s])=>`<option value="${id}">${esc(s.label)} — ${s.t} · ${esc(s.site)}</option>`).join('')
+    || '<option value="">— he already holds everything in this sample —</option>';
+  if(sel0 && !held.has(sel0) && SH[sel0]) document.getElementById('addSel').value=sel0;
+  document.getElementById('offBox').checked=cell.off;
+  document.getElementById('cellJson').innerHTML='{ <span class="k">a</span>: [\n'
+    + cell.a.map(x=>`    { ${jkey('s',`'${x.s}'`)}, ${jkey('by',`'${x.by||'you'}'`)}, ${jkey('via',`'${x.via}'`)} }`).join(',\n')
+    + '\n  ], '+jkey('off',String(cell.off))+' }';
+  document.getElementById('cellLog').innerHTML=cellLog.map(l=>`<div>${l}</div>`).join('');
+  const w=document.getElementById('cellWarn');
+  const sel=document.getElementById('addSel').value;
+  const c=sel?conflictWith(sel):[];
+  w.innerHTML=c.length?`<div class="warnbox"><b>Adding ${esc(T(sel).label)} would warn:</b><br>${c.map(x=>'· '+x.msg).join('<br>')}<br><br>You would still be able to do it — nothing is ever blocked (§4) — and the override would be recorded with who, when and which rule.</div>`:'';
+}
+window.addShift=()=>{
+  const id=document.getElementById('addSel').value; if(!id) return;
+  const c=conflictWith(id);
+  const msg='Add '+T(id).label+' ('+T(id).t+') to Dr. Alan Reyes on Friday 4 September?\n\n'
+    + (c.length?'⚠ '+c.map(x=>x.msg.replace(/<[^>]+>/g,'')).join('\n⚠ ')+'\n\nYou can do this anyway — nothing is blocked. The override will be recorded.\n\n':'')
+    + 'Nothing already on this day will be removed.';
+  if(!confirm(msg)) return;
+  cell.a.push({s:id,via:'manual',by:'you'});
+  cellLog.push('<b>cell.add</b> — Added <b>'+esc(T(id).label)+'</b>'+(c.length?' <span style="color:#92400e">(override: '+esc(c.map(x=>x.kind).join(', '))+')</span>':''));
+  drawCell();
+};
+window.removeShift=i=>{
+  const x=cell.a[i];
+  if(!confirm('Take '+T(x.s).label+' off Dr. Alan Reyes on Friday 4 September?\n\nOnly this shift is removed. Anything else on this day stays.')) return;
+  cell.a.splice(i,1);
+  cellLog.push('<b>cell.remove</b> — Removed <b>'+esc(T(x.s).label)+'</b>');
+  drawCell();
+};
+window.toggleOff=()=>{
+  const want=document.getElementById('offBox').checked;
+  if(want&&cell.a.length){
+    if(!confirm('Mark Dr. Alan Reyes off on Friday 4 September?\n\nHe still holds '+cell.a.map(x=>T(x.s).label).join(' and ')+'. Marking him off does NOT remove those — remove them yourself if that is what you mean.')){ document.getElementById('offBox').checked=false; return; }
+  }
+  cell.off=want;
+  cellLog.push('<b>cell.off</b> — '+(want?'Marked off':'Cleared the off flag')+' (no shifts touched)');
+  drawCell();
+};
+document.addEventListener('change',e=>{ if(e.target.id==='addSel') drawCell(); });
+
+// ══════ TAB 3 — migration ══════
+const MIG=[
+  {j:"{ day:'D10', call:null, off:false }",          era:'written before stage 3'},
+  {j:"{ day:'D10', call:'CALL24', off:false }",      era:'written before stage 3'},
+  {j:"{ day:null, call:null, off:true }",            era:'written before stage 3'},
+  {j:"{ a:[{s:'D10'},{s:'D'}], off:false }",         era:'written after — two day shifts, finally possible'},
+  {j:"{ a:[], off:true }",                           era:'written after'},
+  {j:"{ a:[{s:'D'}], day:'D10', off:false }",        era:'half-converted — a is the truth, day is ignored'},
+];
+function shiftsOf(c){ return c.a ? c.a.map(x=>x.s) : [c.day,c.call].filter(Boolean); }
+document.getElementById('migRows').innerHTML=MIG.map(r=>{
+  const c=eval('('+r.j.replace(/(\w+):/g,'"$1":').replace(/'/g,'"')+')');
+  const out=shiftsOf(c);
+  return `<tr><td><code style="font-size:11.5px">${esc(r.j)}</code></td><td class="mini">${esc(r.era)}</td>
+    <td><b>[${out.map(x=>esc(T(x).label)).join(', ')||'—'}]</b></td></tr>`;
+}).join('');
+
+function tab(w){
+  ['bug','cell','mig'].forEach(x=>{
+    document.getElementById('p_'+x).className = x===w?'':'hide';
+    document.getElementById('t_'+x).className = 'btn'+(x===w?' on':'');
+  });
+}
+resetBug(); drawCell();
+</script>
+</body>
+</html>

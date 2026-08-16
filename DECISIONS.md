@@ -457,3 +457,141 @@ recall it.
 
 **Unchanged:** the auction takes absolute priority, and a Firestore rules change is an
 auction deploy whichever site it serves.
+
+## 35 · The comparison pool — a per-person switch on Users — 16 Aug 2026
+
+§26 excludes per diem and locums from the fairness pools, and §29 requires the report to
+name who was excluded. **Neither can be answered from the data that exists**: a person's
+record holds name, username, login e-mail, KP e-mail and FTE, and nothing else. There is
+no per diem or locum flag anywhere on either page (`grep` on both, 16 Aug: zero hits).
+`role` exists but sits on *shifts*, not people, and is decorative (defect 23). Groups are
+stage 4 and not built.
+
+Offered the choice between adding a per-person switch now, shipping Reports without the
+comparison, or building stage 4 first, the owner chose **the per-person switch**.
+
+**Ruling:** each person carries a *counts toward comparisons* flag on the Users page,
+**defaulting to ON**. The admin unticks per diem and locums. Stored as the schedule's own
+data; admin-editable per §11, with no code change needed to alter it later.
+
+This is a thin slice of stage 4, in the same way the Overnight-call tag is a thin slice of
+stage 1. **When stage 4 lands, the switch moves onto the group** (§26 says which pools a
+group is excluded from is set on the group) and the per-person flag becomes the override,
+not the source. Written down here so the later session migrates it rather than finding two
+competing answers.
+
+## 36 · A doctor with no FTE — reported, but never guessed — 16 Aug 2026
+
+FTE is deliberately optional: `getSchedFTE` returns undefined and the code says *"no
+default on this site, ever"* (§2 territory). The Users page already counts how many are
+blank, so this is a live condition, not a hypothetical.
+
+Offered the choice between excluding them from the rate, treating blank as 1.0, or
+refusing to run the report at all, the owner chose **exclude from the rate, still report
+them**. Claude argued against treating blank as 1.0 — it would measure a half-timer
+against a full load and never say so, which is §22.
+
+**Ruling:** a doctor with no FTE recorded gets their **full report** — shift counts and
+the dated overnight-call list — but **no expected figure**, and their block states plainly
+that no FTE is set so no expectation can be worked out. They do **not** enter the pool and
+do **not** influence anyone else's rate. Nothing is assumed in either direction.
+
+## 37 · The call baseline — out of period reports, in a rolling-12-month view — 16 Aug 2026
+
+`dailysched/callBaseline` holds admin-entered call from before the site existed: one lump
+per person per shift, **no dates**, one `_asOf` stamp, and a weight of
+`(12 − months elapsed) ÷ 12` so it decays to zero across a year.
+
+The owner first chose to include it in report totals. Claude pushed back once, on two
+grounds not covered by the original framing:
+
+1. **It cannot be apportioned to a period.** Nothing records which of the lump fell in
+   August 2026, or in Q3, or in any chosen range. Adding it to a one-month report puts all
+   prior call inside 31 days, and re-running that same August report months later gives a
+   different number each time.
+2. **It is fractional and time-dependent by design.** The decay is correct for fairness,
+   where a starting handicap should wash out. It is wrong for a document someone prints and
+   hands to a colleague, which has to be reproducible.
+
+The owner then chose the **two-view** answer.
+
+**Ruling:**
+
+- **Period reports** — day / month / quarter / year / custom range — are **pure schedule
+  data**. The baseline never enters their totals. The report says so on the page.
+- **A separate "last 12 months — fairness view"** shows exactly what auto-populate and the
+  fairness maths see: baseline included, decayed, fractional — and states that on the page,
+  including the `_asOf` stamp and the weight currently applied.
+
+Two views with different jobs, each honest about which it is. Neither is allowed to be
+mistaken for the other.
+
+**Not the owner's words.** Rulings 35, 36 and 37 were settled by the owner selecting from
+written options, not by dictation. Recorded that way on purpose — see §22. No quotation
+marks appear above because there is nothing to quote.
+
+## 38 · Estimated times are parked — every unconfirmed shift stays BLANK — 16 Aug 2026
+
+Owner, 16 Aug, on Q13 and Q15: *"q15 - leave all these blank for now. q13 - leave
+remaining times blank for now."*
+
+Claude estimated times for 68 of the 91 shifts and flagged 4 of them SUSPECT after
+`Eye Call` disproved the reasoning behind them (§17). **None of the estimates go into the
+app.** A shift whose time the owner has not stated stays empty.
+
+This is the same answer §17 already gave — *"no default times in code. Every shift is blank
+until an admin sets it"* — now extended to Claude's spreadsheet: an estimate is not a
+setting, and a blank is not a gap to be helpfully filled. A blank time warns against every
+pairing rather than being treated as compatible, which is the safe direction.
+
+`design/shift-times.xlsx` stays as a **worksheet for the owner**, not as an import.
+The CONFIRMED rows are his own words and remain usable; the ESTIMATED and SUSPECT rows are
+Claude's and are now explicitly not to be loaded. Cf. §22.
+
+## 39 · `4 to 6` is a real shift — add it — 16 Aug 2026
+
+Owner, 16 Aug, on Q11: *"add 4-6 as a shift in the weekday daytime category."*
+
+Times are already confirmed in §17: **15:30–17:30.** Catalog size goes 91 → 92.
+
+**How it gets added matters.** The v2 catalog seeding is one-shot and self-marking
+(`_v2Seeded`), so editing the source constants has no effect on a database that has already
+been seeded — that is defect 24, and it applies here. Adding this shift is therefore either
+a few clicks in the Shift Catalog UI or a new one-shot migration in code.
+
+**The UI is the right route**, and §11 is the reason: *"when something changes, I don't have
+to go into code."* A shift is data. Claude does not write to production Firebase.
+
+## 40 · No bulk demand editing — 16 Aug 2026
+
+Owner, 16 Aug, on Q7: *"No."*
+
+Bulk demand would have **replaced** whatever demand rules each selected shift already had —
+the most destructive bulk operation on the page, and the one needing the sharpest
+confirmation. It is not wanted. Bulk times and bulk location stay (§13); bulk demand is
+dropped from stage 1 and from the §23 ordering, where it was third and last anyway.
+
+## 41 · Only some shifts are requestable — it is a curated list — 16 Aug 2026
+
+> *"Not all shifts can be requested, that's why i want just these."*
+
+Shown the 27-entry Task list from the current system, Claude proposed generating the
+"request to work X" entries from the 91-shift catalog, reasoning from §11 that a
+hand-maintained list means a build every time it changes. **Overruled, and rightly.**
+
+A person may not request most shifts. Offering all 91 would invite requests that can never
+be granted, and put the refusal at the end of the process instead of the start.
+
+**Ruling: requestable shifts are an admin-curated list**, seeded with the entries the owner
+already uses. The app never derives it from the catalog, from `kind`, from a family, or
+from eligibility. This is the **same shape as §27** — overnight call is a list the admin
+sets, and so is this — and it is the second instance of the tag model in §25.
+
+§11 is not violated: the list is **data, editable in the admin UI**, so changing it never
+needs a build. What §11 forbids is a value baked into code, not a value chosen by a human.
+
+**Note on §35.** The comparison-pool switch shipped in build 51 on the **Reports** page
+rather than the Users page as §35's wording said. The wording was Claude's, not the
+owner's; the owner approved the move on 16 Aug. Reason: the Users page is the one page that
+writes the LIVE auction roster and opens locked for that reason, and a schedule-only report
+setting must never be a reason to unlock it.
