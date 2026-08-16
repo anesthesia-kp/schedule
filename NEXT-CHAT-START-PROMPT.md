@@ -4,8 +4,10 @@
 the foundations, and designed the Reports section. Read fully before touching anything.
 
 Companion to the Vacation Auction's own `NEXT-CHAT-START-PROMPT.md`, which governs that
-site. **Keep the two sites in SEPARATE chat sessions** — see `HANDOFF.md` for why, and for
-the one case that legitimately crosses over (a Firestore rules change).
+site. **Both sites are worked in ONE chat, moving between them** — owner decision 16 Aug,
+after trying it for a day; see `HANDOFF.md`. That works *because* the sites are
+deliberately convergent, and because the repos hold the memory rather than the chat.
+It does not soften the priority rule below by one inch.
 
 ---
 
@@ -37,8 +39,10 @@ the auction session, not this one. Full detail in `HANDOFF.md`.
 3. **The owner does every git push.** Claude files to the working tree and byte-verifies;
    the owner commits and pushes in GitHub Desktop. Never deploy, never write to
    production Firebase.
-4. **Read `DECISIONS.md` before proposing anything.** **29 owner rulings** are recorded
-   there, several of which overrule Claude's own recommendation. Do not re-litigate them.
+4. **Read `DECISIONS.md` before proposing anything.** **34 owner rulings** are recorded
+   there, four of which overrule Claude's own recommendation (§1, §28, §34, and the
+   phase-gate proposal under §1). Do not re-litigate them. `HANDOFF.md` carries a
+   one-line index of all 34 if you need the map before the detail.
 
 ---
 
@@ -66,23 +70,26 @@ The demo banner came off on 16 Aug, but it is not in real use yet.
 
 | page | live | working tree |
 |---|---|---|
-| admin | 48 | **49 — filed, awaiting push** |
-| staff | 24 | **25 — filed, awaiting push** |
+| admin | 49 — live | **50 filed, green, awaiting push** |
+| staff | 25 — live | **26 filed, green, awaiting push** |
 
 **Build 49 / 25** — Shift Eligibility readability rebuild + demo banner removed from both
 pages. No rules change, so **no Firebase console step**.
 
-**Build 50 / 26 — WRITTEN, NOT GREEN, NOT IN THE REPO.** Six approved small fixes
+**Build 50 / 26 — GREEN and FILED, awaiting the owner's push.** Six approved small fixes
 (stale-build gate ported from auction 268 · Quick View month-boundary bug · a staff error
-surface, the page has none · Users-page lock · missing audit entries · sticky name
-column). Its harness is mostly passing but the staff sign-in step is flaky under test —
-the page itself is fine, the harness is not. **Finish the harness before filing any of
-it.** Details in `HANDOFF.md`.
+surface, the page had none at all · Users-page lock · missing audit entries · sticky name
+column), plus the correction to the false `// vacations — READ-ONLY` comment.
+Full detail and the gate results in `HANDOFF.md`.
 
-Gates: `sched/elig-test.mjs` **33/33** executed in a real browser · honesty `--pre`
-against the build-48 fixture fails 9, none vacuous · `tests-schedule-isolation.mjs`
-9 failures on 48 and 9 on 49, i.e. **zero new writes to the auction** ·
-FTE-independence 5/5.
+**Before anything else: check whether it is live.** Fetch `versions.json` cache-busted.
+If it reads `{"index":26,"admin":50}` the owner has pushed; if it still reads 49/25 he has
+not. Do not answer this from memory — a previous session was wrong about exactly this.
+
+Gates, executed 16 Aug: `sched/build50-test.mjs` **37/37** ×3 · honesty `--pre` vs 49/25
+**11 pass / 26 fail** · `sched/elig-test.mjs` **33/33** on 50 and 33/33 on 49 as a control ·
+`sched/isolation-test.mjs` **27/27**, zero new auction write paths · the auction battery
+**14 suites / 1074 assertions, green**.
 
 ---
 
@@ -161,7 +168,7 @@ it and overwrite his edits.
 
 In the sibling `tests` repo:
 
-* `tests-schedule-isolation.mjs` — the cardinal rule, plus FTE independence. Static
+* `sched/isolation-test.mjs` — the cardinal rule, plus FTE independence. Static
   analysis over both pages with a comment/string/regex-aware parser and a **canary that
   ABORTS on parser desync** rather than passing vacuously. Mutation-tested: injecting one
   fake `setDoc(userListRef, …)` into the staff page turns it red at the right line.
@@ -169,6 +176,19 @@ In the sibling `tests` repo:
   against an in-memory Firestore that records every write. 33 assertions.
   `window.__denyPath` simulates a rules rejection (**sticky**, because `mergeFields`
   retries on failure and a one-shot denial is silently absorbed).
+* `sched/build50-test.mjs` — the build-50 batch, 37 assertions, both pages driven live.
+* `sched/run-all.mjs` — runs all three. The browser suites skip cleanly on the owner's
+  machine (no chromium there); run them from a cloud session with `PW_CHROMIUM` set.
+* **Then run `tests/run-all.mjs` too — the AUCTION battery — after every schedule change.**
+  On 16 Aug a schedule-only change turned it red: `test-audit-fixes.mjs` is an auction suite
+  that extracts and executes the schedule page's `saveSchedField`. This is not theoretical.
+
+**Two harness traps already paid for:** `versions.json` in a fixture must match the
+`var BUILD` of the bytes under test, or the stale-build gate reloads the tab mid-run and
+wipes the seeded fakes (both harnesses now read the number out of the file). And the fake
+auth starts **signed out**, so a test must call `window.__signInNow()` — hiding the auth
+gate is not enough, and without it every grid renders header-only and dozens of assertions
+fail for no real reason.
 
 Fixtures: pre-49 admin md5 `7b1a4822a2d1eb66e20a4e22b1e9a9b9`, staff
 `9ff369118eebd8b12c253dcb25893d42`. Reconstruct with
@@ -200,6 +220,14 @@ Not yet designed. Per-page locks (§20) mean the Users page at least opens locke
 helps but does not close it.
 
 ---
+
+## SWITCHING BETWEEN THE TWO SITES
+
+Both sites are worked from one chat, a day or a session at a time. **On every switch,
+re-ground from disk before doing anything** — read that site's start prompt and `TODO.md`,
+verify its live `versions.json` cache-busted, check `git status`. The failure mode is not
+mixing the sites up; it is answering from stale in-chat memory. See `HANDOFF.md` for the
+worked example of why that matters.
 
 ## First moves for the new session
 

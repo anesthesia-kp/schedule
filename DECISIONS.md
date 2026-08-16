@@ -397,3 +397,63 @@ they get no pool ranking (which would be meaningless).
 Worked example from the preview: pool of 4 = 3.8 FTE, 24 overnight calls → 6.3 per 1.0
 FTE. A 0.8 FTE doctor is expected to do 5.1. The old flat mean over all six would have
 said 4.7 — a materially different bar.
+
+## 30 · Roster-write mitigation — the per-page lock is the answer — 16 Aug 2026
+
+The Users panel keeps full write access to the auction roster (§1). A phase gate was ruled
+out (§1). Offered the choice between naming the live auction consequence in the
+confirmation, a soft delete, both, or relying on the per-page lock, the owner chose:
+
+> **"Leave it — the per-page lock is enough."**
+
+**Accepted, with the hazard restated so it is never mistaken for closed:** an unlocked
+Users page still removes a physician from the LIVE auction roster in one click, and still
+rebuilds `vacations/emailToUser` on a login-e-mail save. The lock makes that two
+deliberate actions instead of one. It does not make it recoverable.
+
+**Caveat flagged 16 Aug: the per-page lock is designed, not built.** Until it ships there
+is no mitigation at all. The Users-page lock is therefore pulled forward into the small-fix
+build rather than waiting for stage 1.
+
+## 31 · Quick View bug now, phone view and notifications later — 16 Aug 2026
+
+Suggestion 3 (stage 8) is split. The **Quick View month-boundary bug is fixed now** — it
+makes the staff page look broken on first load. The phone-first view and e-mail
+notifications stay at stage 8.
+
+## 32 · Report Excel matches the auction — 16 Aug 2026
+
+Fully styled: title row, coloured scope row, timestamp, navy block headers, colour-coded
+cells, auto-sized columns — the same construction as `exportUserSummary`. Roughly half the
+effort of the reports section; the owner judged it worth it.
+
+## 33 · Build order, 16 Aug — small independent fixes first
+
+Before stage 1 or stage 9: the batch of small, self-contained defect fixes that carry no
+data-model risk.
+
+## 34 · One chat for both sites — 16 Aug 2026
+
+> *"I changed my mind. It seems to be working for us to move back and forth like this."*
+
+Claude had recommended separate chat sessions, reasoning from context budget and
+mis-filing risk. **Withdrawn** — a day of evidence contradicted it: the auction's context
+is what made the schedule work good (REPORT_CSS reused verbatim, the stale-build gate
+ported from auction 268, the holiday computation reused), the cardinal rule was enforced
+*better* for holding both systems at once, and the predicted mis-filing never occurred.
+
+The sites are deliberately convergent — same visual language, same confirmation style,
+same discipline. Splitting the sessions would work against that.
+
+Safe because the **repos hold the memory, not the chat**. Revisit only when the schedule
+reaches the auction's scale.
+
+**How the switching works:** a day or a session at a time — *"today is all scheduling,
+tomorrow could be vacation"*. On every switch, **re-ground from disk before working**:
+that site's start prompt and TODO, its live `versions.json` cache-busted, its `git status`.
+The failure mode is not mixing the sites up; it is answering from stale in-chat memory.
+On 16 Aug the handoff claimed the vacation battery had 8 reds — it had none. Run it, don't
+recall it.
+
+**Unchanged:** the auction takes absolute priority, and a Firestore rules change is an
+auction deploy whichever site it serves.

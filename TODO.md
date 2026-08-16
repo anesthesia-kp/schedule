@@ -16,17 +16,23 @@ reference.
 
 | page | live | in working tree | state |
 |---|---|---|---|
-| admin | 48 | **49** | filed, byte-verified, **awaiting owner push** |
-| staff | 24 | **25** | filed, byte-verified, **awaiting owner push** |
+| admin | 49 | **50** | filed, byte-verified, green, **awaiting owner push** |
+| staff | 25 | **26** | filed, byte-verified, green, **awaiting owner push** |
 
-**Build 49 / 25** — Shift Eligibility readability rebuild (family bands, vertical labels,
-pinned header + person column, per-person and per-shift counts, filters, colour-block
-cells with optimistic paint and rollback, band bulk actions) **+ demo banner removed from
-both pages**.
-Gates: `sched/elig-test.mjs` **33/33** executed in a browser · honesty `--pre` vs the
-build-48 fixture fails 9, none vacuous · `tests-schedule-isolation.mjs` 9 failures on 48
-and 9 on 49 (zero new auction writes) · FTE-independence 5/5.
+**Build 50 / 26** — the small-fix batch (DECISIONS §33): stale-build gate ported from
+auction 268 · Quick View month-boundary fix · a staff error surface (the page had none) ·
+the Users-page lock · six missing audit entries · sticky name column on the Schedule Grid ·
+the false `// vacations — READ-ONLY` comment corrected.
+Closes defects **11, 14, 19, 30** and the `saveSchedField` audit gap under
+"Owed mitigation".
+Gates: `sched/build50-test.mjs` **37/37** ×3 · honesty `--pre` vs 49/25 = 11 pass / 26 fail ·
+`sched/elig-test.mjs` **33/33** on 50 (and 33/33 on 49 as a control) ·
+`sched/isolation-test.mjs` **27/27**, zero new auction writes · FTE-independence 5/5 ·
+auction battery **14 suites / 1074 assertions, green**.
 No Firebase console step — rules unchanged.
+
+**Build 49 / 25** — LIVE since 16 Aug. Shift Eligibility readability rebuild + demo banner
+removed from both pages.
 
 ---
 
@@ -91,12 +97,21 @@ auction runs all year). Still owed, approach not yet agreed:
 - **Login-e-mail save** rebuilds `vacations/emailToUser` with a full non-merge `setDoc`
   (`syncEmailToUserFromLogin`, ~1460). A duplicate address is dropped from the map and
   that person cannot bid. Needs a before/after diff in the confirmation at minimum.
-- **`saveSchedField` writes no audit entry** — an admin can change anyone's Google login
-  address with no trace. Fix with the above.
+- ~~**`saveSchedField` writes no audit entry**~~ **FIXED in admin 50** — all four field
+  saves (name, login e-mail, KP e-mail, FTE) are audited, as are `postOpen`, `removeOpen`
+  and the Users-page unlock itself. The *before/after diff in the confirmation* for the
+  `emailToUser` rebuild is still owed.
+- **The Users page now opens LOCKED** (admin 50, DECISIONS §20/§30). That is the agreed
+  mitigation, and it is a real reduction in accident surface — but it does not make the two
+  dangerous operations *recoverable*, which is still owed.
 
 ---
 
-## Known defects — found 15 Aug, none yet fixed
+## Known defects — found 15 Aug
+
+**Fixed in build 50 / 26:** 11 (Quick View month boundary), 14 (silent staff write
+failures), 19 (sticky name column), 30 (stale-build gate). Left in place below, struck
+through, so the record of what was found stays intact.
 
 Verified by reading build 48 unless noted.
 
@@ -138,7 +153,7 @@ Verified by reading build 48 unless noted.
 
 ### UI / UX
 
-11. **Quick View breaks outside the current month.** It always shows 7 days from today,
+11. ~~**Quick View breaks outside the current month.**~~ **FIXED in staff 26.** It always shows 7 days from today,
     but assignment data only loads for the *browsed* month — so paging away turns the
     whole view into the literal text "view month", and a week straddling a month boundary
     is half blank even on first load. → stage 8.
@@ -146,7 +161,8 @@ Verified by reading build 48 unless noted.
     destroying unsaved typing in the Users grid and the baseline grid.
 13. **Year-mode Stats has no in-flight guard** — concurrent snapshots during a cold load
     fire multiple parallel 12-document reads.
-14. **Staff write failures are silent.** Every action handler (`submitRequest`,
+14. ~~**Staff write failures are silent.**~~ **FIXED in staff 26** — a toast, plain-language
+    messages per Firestore error code, and a handled-rejection guard. Every action handler (`submitRequest`,
     `submitSwap`, `applyOpen`, all four accept/decline) lacks a try/catch: a rejected
     transaction shows the user nothing at all.
 15. **No withdraw.** Once submitted, a request or swap can only be resolved by an admin.
@@ -155,7 +171,7 @@ Verified by reading build 48 unless noted.
     personal calendar are hardcoded to 7 equal columns with no small-screen override.
 18. **Shift Families drag-and-drop is HTML5-only** — no touch fallback, so regrouping is
     impossible on a tablet.
-19. **Schedule Grid's name column is not sticky** (unlike the eligibility grid's), so it
+19. ~~**Schedule Grid's name column is not sticky**~~ **FIXED in admin 50.** (unlike the eligibility grid's), so it
     scrolls out of view at 31 columns.
 
 ### Hardcoding — violates DECISIONS §11
@@ -174,7 +190,9 @@ Verified by reading build 48 unless noted.
 
 ### Stale-build gate — the auction fixed this in 268; the schedule never got it
 
-30. **A tab can be stranded on an old build, permanently.** Both pages check
+30. ~~**A tab can be stranded on an old build, permanently.**~~ **FIXED in 50 / 26** —
+    cache-busted `?v=` reload via `location.replace()`, plus a refocus re-check throttled
+    to 60s. The auction's `requiredBuilds` ratchet was NOT ported; that is still open. Both pages check
     `versions.json` and then call a bare `location.reload()` (admin ~line 22, staff the
     same), guarded by a once-per-version `sessionStorage` key (`vrl-<page>`). If the CDN
     serves the cached old page, the reload changes nothing — and because the guard has

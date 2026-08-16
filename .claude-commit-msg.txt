@@ -1,45 +1,92 @@
-schedule admin 49 / staff 25 — eligibility rebuild, banner off, foundations + reports designed
+Build 50 / 26 — small-fix batch: stale-build gate, Quick View, staff error surface, Users lock, audit trail, sticky column
 
-Shift Eligibility was one column per shift in catalog order, families interleaved,
-~4,000px wide with nothing to hold your place across the roster. Rebuilt:
+Six independent fixes the owner approved on 16 Aug (DECISIONS §33), plus one
+comment correction. No Firestore rules change, so NO Firebase console step.
 
-  · contiguous colour-banded families, bulk allow/disallow moved into each band
-    (replacing one dropdown per row)
-  · vertical shift labels — 25px per column instead of ~70px
-  · person column and both header rows pinned; row striping; hover crosshair
-  · per-person and per-shift eligibility counts
-  · filters: family · day/call · find-a-shift · find-a-person · hide shifts nobody can do
-  · colour-block cells with a tick rather than bare checkboxes, painted optimistically
-    and rolled back with a plain-language toast if the write is refused
+WHAT CHANGED
 
-Presentation only. The write paths are unchanged in kind: dotted "user.shiftId" keys
-into dailysched/eligibility via mergeFields, so a change never disturbs eligibility for
-a shift it did not name.
+1. Stale-build gate — ported from Vacation Auction build 268 (both pages)
+   Both pages checked versions.json and then called a bare location.reload().
+   If a CDN edge still held the old page, the reload changed nothing — and the
+   once-per-version sessionStorage guard had already recorded that version as
+   "seen", so the tab never tried again and was stranded on the old build until
+   the cache expired or the user hard-refreshed.
+   Now: location.replace() to a ?v=<latest> URL, so the edge must re-fetch, and
+   the stale page is not left in back history. Plus a re-check when the tab is
+   refocused (visibilitychange + focus), throttled to once a minute — an idle
+   tab used to sit on the old build until its next 5-minute tick, which is
+   exactly when someone returns to it and starts clicking.
+   Closes defect 30. The auction's requiredBuilds ratchet was NOT ported.
 
-Demo banner removed from both pages (staff 25).
+2. Quick View month boundary (staff 26)
+   The next-7-days strip always showed 7 days from today, but assignment data
+   was only loaded for the *browsed* month. Paging away turned the whole strip
+   into the literal text "view month", and a week straddling a month boundary
+   was half blank even on first load. It now subscribes to every month the
+   window touches and resolves each day from the right one. The "view month"
+   placeholder is gone. Closes defect 11.
 
-DOCS (new)
-  NEXT-CHAT-START-PROMPT.md  session start prompt; leads with the rule that the live
-                             Vacation Auction takes absolute priority over this site
-  HANDOFF.md                 current state, what the two sites share, why they belong in
-                             separate chat sessions, and the traps a fresh session hits
-  DECISIONS.md               29 owner rulings — several overruling Claude. Do not re-litigate
-  TODO.md                    open questions, 9-stage roadmap, 30 evidence-anchored defects
-  SCHEDULE-FOUNDATIONS-SPEC.md  shifts, compatibility, people/rules, assignment model
-  design/                    4 mockups + shift-times.xlsx (proposed times for all 91
-                             shifts, flagged confirmed-by-owner vs estimated-by-Claude)
+3. Staff error surface (staff 26)
+   The staff page had NO way to report a failure — 25 silent catch blocks. A
+   rejected transaction showed the user nothing at all; the action simply did
+   not happen. Added a toast, plain-language messages per Firestore error code
+   (permission-denied / unavailable / deadline-exceeded / other), a transaction
+   wrapper that reports before rethrowing, and an unhandledrejection guard so a
+   handled failure does not also spray the console. Closes defect 14.
 
-GATES (all executed, not asserted)
-  sched/elig-test.mjs            33/33 driving the real admin page in headless Chromium
-                                 against an in-memory Firestore that records every write
-  honesty --pre vs build 48      9 failures, none vacuous
-  tests-schedule-isolation.mjs   9 failures on 48 and 9 on 49 — ZERO new writes to the
-                                 Vacation Auction. Mutation-tested; aborts on parser desync
-  FTE independence               5/5 — the two sites keep separate FTE, pinned by test
-  shift-editor harness           52/52
-  reports harness                36/36
+4. Users page lock (admin 50) — DECISIONS §20 and §30
+   The Users panel writes to the LIVE Vacation Auction's roster: userList,
+   usernames, loginEmails, emails, emailToUser. That access stays (owner ruling
+   §1) but it no longer sits one stray click away.
+   The page opens LOCKED on every load. The lock is in memory, so it re-locks on
+   reload rather than remembering an unlock. Unlocking goes through a confirm
+   that names the auction consequences in plain words, and the unlock itself is
+   written to the audit log. The refusal guard sits at the top of all eight
+   mutating handlers, not on the buttons — calling a handler directly while
+   locked writes nothing and says so.
 
-No Firebase console step — firestore.rules unchanged.
+5. The writes that used to leave no trace (admin 50)
+   postOpen, removeOpen (which now captures what it removed before the
+   transaction), and all four per-user field saves — name, login e-mail, KP
+   e-mail, FTE — wrote with no audit entry at all. An admin could change
+   anyone's Google login address and nothing recorded it. All six are audited
+   now, as is the Users-page unlock.
 
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01J8KrjL25w16iZ553P2WhPH
+6. Sticky name column on the Schedule Grid (admin 50)
+   At ~31 columns the name scrolled out of view and you lost track of whose row
+   you were reading. The eligibility grid already did this; the schedule grid
+   now matches. Closes defect 19.
+
+7. A comment that was not true (admin 50)
+   The Users section carried "// vacations — READ-ONLY: roster, admin list,
+   approved vacation weeks" while writing 25 auction documents. Replaced with an
+   accurate description. The isolation test now fails if that claim reappears
+   while the writes are still there.
+
+CARDINAL RULE — no schedule work may degrade the live Vacation Auction
+
+  · tests/sched/isolation-test.mjs — 27/27. Zero new write paths to any
+    vacations/* document. Auction writes still occur only in the six sanctioned
+    Users-panel handlers (owner ruling §1).
+  · FTE independence — 5/5. dailysched/fteMap stays the schedule's own (§2).
+  · tests/run-all.mjs (the AUCTION battery) — 14 suites, 1074 assertions, green.
+    Same numbers as before this change.
+
+  Worth recording: this change turned the auction battery RED before it was
+  fixed. test-audit-fixes.mjs is an auction suite that extracts and executes the
+  schedule page's saveSchedField; the new lock guard was not in its scope, so the
+  suite crashed. Nothing in production was affected, but it is a live example of
+  the two sites touching — the auction battery gets run after every schedule
+  change, not just the ones that look shared.
+
+GATES
+
+  · tests/sched/build50-test.mjs — 37/37, three consecutive runs, both pages
+    driven in a real browser against an in-memory Firestore that records every
+    write.
+  · Honesty check — the same suite against build 49/25 scores 11 pass / 26 fail.
+    A suite that passes on the pre-fix bytes proves nothing.
+  · tests/sched/elig-test.mjs — 33/33 against these bytes, and 33/33 against 49
+    as a control, so build 50 breaks nothing that 49 shipped.
+
+Bumped: var BUILD in both pages AND versions.json → {"index":26,"admin":50}.

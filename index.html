@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 25;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 26;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -24,10 +24,34 @@
         var seen=sessionStorage.getItem('vrl-'+PAGE);
         if(typeof latest==='number' && latest!==BUILD && String(seen)!==String(latest)){
           sessionStorage.setItem('vrl-'+PAGE, latest);
-          location.reload();
+          // [50/26] CACHE-BUSTED reload. A bare location.reload() re-requests the same
+          // URL, so a CDN edge still holding the old page serves it again — and because
+          // the once-per-version guard above has already recorded this version as seen,
+          // the tab never tries again and is stranded on the old build for good. Adding
+          // ?v=<latest> changes the URL, so the edge must fetch. replace() rather than
+          // assign() so the stale page does not sit in the back history.
+          // (Ported from Vacation Auction build 268, which fixed exactly this.)
+          try{
+            var u=new URL(location.href);
+            u.searchParams.set('v', String(latest));
+            location.replace(u.toString());
+          }catch(e){ location.reload(); }
         }
       }).catch(function(){});
     }
+    // [50/26] Re-check when the tab comes back to the front, throttled to once a minute.
+    // Without this an idle tab keeps the old build until its next 5-minute tick, which
+    // is exactly when someone returns to it and starts clicking.
+    var _lastChk=0;
+    function chkThrottled(){
+      var now=Date.now();
+      if(now-_lastChk<60000) return;
+      _lastChk=now; chk();
+    }
+    try{
+      document.addEventListener('visibilitychange',function(){ if(!document.hidden) chkThrottled(); });
+      window.addEventListener('focus',chkThrottled);
+    }catch(e){}
     setInterval(chk, 5*60*1000); chk();
   })();
 </script>
@@ -403,6 +427,12 @@ let names=[], usernamesData={}, passcodesData={}, vAdmin={}, vPhases={};
 let loginEmailsData={}; // {INITIALS: "their-google-email"} — shared doc mapping Google accounts to accounts
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, monthData={days:{}};
 let me=null, curYM=null, unsubMonth=null;
+// [26] Quick View shows the next 7 days FROM TODAY, but assignments were only ever
+// loaded for the month being BROWSED — so paging away turned the whole view into the
+// words "view month", and a week straddling a month end was half blank even on first
+// load. These hold the month(s) the next-7-days window actually touches, subscribed
+// independently of curYM.
+let qvData={}, qvUnsubs=[], qvKeys='';
 
 // ── Navigation ──
 window.nav=function(id,el){
@@ -449,15 +479,51 @@ async function sha256(t){ const b=await crypto.subtle.digest('SHA-256',new TextE
 // mutate runs on the FRESH list and may return null to abort (e.g. a guard no longer
 // holds) — abort writes nothing. Firestore retries mutate automatically on conflict,
 // so it must be free of outside side effects; do logging AFTER this resolves.
-async function txUpdateList(ref, mutate){
-  await runTransaction(db, async (tx)=>{
-    const snap=await tx.get(ref);
-    const cur=(snap.exists()&&Array.isArray(snap.data().list))?snap.data().list:[];
-    const next=mutate(cur);
-    if(next===null||next===undefined) return;   // guard failed on fresh data — no-op
-    tx.set(ref,{list:next},{merge:true});
-  });
+// [26] The staff page had NO way to show an error — 25 catch blocks that swallowed, and
+// no toast, banner or status line anywhere. So a rejected write (offline, a rules denial,
+// a transaction that lost its race) produced complete silence: the form simply sat there
+// and the user assumed it had worked. This is the one mutating path on the page, so
+// surfacing it here covers every action at once.
+function schedToast(msg,type){
+  let t=document.getElementById('_schedToast');
+  if(!t){ t=document.createElement('div'); t.id='_schedToast'; t.setAttribute('role','status');
+    t.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:100000;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.18);transition:opacity .3s;max-width:92vw;text-align:center';
+    document.body.appendChild(t); }
+  t.textContent=msg;
+  t.style.background=type==='err'?'#fde8e8':'#e6f6ec';
+  t.style.color=type==='err'?'#b42318':'#087443';
+  t.style.border='1px solid '+(type==='err'?'#f3b4b4':'#a6e0bd');
+  t.style.opacity='1';
+  clearTimeout(t._h); t._h=setTimeout(()=>{ t.style.opacity='0'; },3200);
 }
+function _writeFailMsg(e){
+  const c=e&&e.code;
+  if(c==='permission-denied') return 'You are not allowed to make that change. Ask an admin.';
+  if(c==='unavailable'||c==='deadline-exceeded') return 'No connection — that did not save. Try again.';
+  return 'That did not save. Please try again.';
+}
+async function txUpdateList(ref, mutate){
+  try{
+    await runTransaction(db, async (tx)=>{
+      const snap=await tx.get(ref);
+      const cur=(snap.exists()&&Array.isArray(snap.data().list))?snap.data().list:[];
+      const next=mutate(cur);
+      if(next===null||next===undefined) return;   // guard failed on fresh data — no-op
+      tx.set(ref,{list:next},{merge:true});
+    });
+  }catch(e){
+    console.warn('txUpdateList failed',e&&e.code,e);
+    schedToast(_writeFailMsg(e),'err');
+    // Re-thrown so the caller ABORTS instead of running on to print "submitted" over a
+    // write that never landed. Marked so the handler below can keep the console clean.
+    const err=new Error('write-failed'); err.__handled=true; err.cause=e; throw err;
+  }
+}
+// The callers deliberately have no try/catch — aborting is the correct behaviour and the
+// user has already been told. This stops the resulting rejection becoming console noise.
+window.addEventListener('unhandledrejection',function(ev){
+  if(ev&&ev.reason&&ev.reason.__handled) ev.preventDefault();
+});
 
 // ── Approved vacation weeks from the auction → {user|date: true} ──
 // A week approved in ANY completed phase, or decided live in the current
@@ -489,6 +555,7 @@ function vacationDays(){
 // ── Month navigation ──
 function setMonth(ym){
   curYM=ym;
+  syncQuickViewMonths();   // [26] independent of the month being browsed
   if(unsubMonth) unsubMonth();
   monthData={days:{}};
   unsubMonth=onSnapshot(monthRef(ym),snap=>{ monthData=snap.exists()?snap.data():{days:{}}; if(!monthData.days)monthData.days={}; renderAll(); });
@@ -522,7 +589,35 @@ function highlightDay(dd){
   cells.forEach(el=>{ el.classList.add('day-flash'); setTimeout(()=>el.classList.remove('day-flash'),1600); });
 }
 
-function cellOf(u,dk){ const dd=monthData.days?.[dk.slice(8)]||{}; return dd[u]||{}; }
+// [26] Month-aware: a date inside the browsed month reads the live monthData; a date
+// outside it (Quick View crossing a month end) reads the quick-view subscriptions.
+// Every caller of cellHtml therefore works across a boundary with no special case.
+function cellOf(u,dk){
+  const ym=dk.slice(0,7);
+  const src = (ym===curYM) ? monthData : (qvData[ym]||{days:{}});
+  const dd = src.days?.[dk.slice(8)] || {};
+  return dd[u]||{};
+}
+// The months the next 7 days from today fall in — one, or two across a boundary.
+function qvMonths(){
+  const set=new Set();
+  for(let i=0;i<7;i++){ const d=new Date(); d.setDate(d.getDate()+i); set.add(dKey(d).slice(0,7)); }
+  return [...set];
+}
+function syncQuickViewMonths(){
+  const months=qvMonths(), key=months.join(',');
+  if(key===qvKeys) return;                 // nothing to change — avoids resubscribing on every render
+  qvKeys=key;
+  qvUnsubs.forEach(u=>{ try{u();}catch(e){} });
+  qvUnsubs=[]; qvData={};
+  months.forEach(ym=>{
+    qvUnsubs.push(onSnapshot(monthRef(ym),snap=>{
+      qvData[ym]=snap.exists()?snap.data():{days:{}};
+      if(!qvData[ym].days) qvData[ym].days={};
+      renderAll();
+    }));
+  });
+}
 // Colored chip per assignment — colors come from the shift catalog (QGenda-style).
 function chip(id){
   const s=catalog.shifts?.[id]||{}; const bg=s.color||(s.kind==='call'?'#ede9fe':'#fef9c3');
@@ -586,9 +681,10 @@ function renderQuickView(vac){
     const d=new Date(); d.setDate(d.getDate()+i);
     const dk=dKey(d);
     // quick view may span outside the visible month — only same-month cells have data loaded
-    const inMonth=dk.slice(0,7)===curYM;
+    // [26] No "view month" placeholder any more — the data for these days is always
+    // loaded, whichever month is being browsed.
     h+='<div class="d'+(i===0?' today':'')+'" style="min-height:60px"><div class="dn">'+DS[d.getDay()]+' '+d.getDate()+'</div>'
-      +(inMonth?cellHtml(me,dk,vac):(vac[me+'|'+dk]?'<span style="display:inline-block;background:#bbf7d0;color:#065f46;border-radius:4px;padding:0 4px;font-weight:800">VAC</span>':'<span style="color:var(--t3);font-size:10px">view month</span>'))+'</div>';
+      +cellHtml(me,dk,vac)+'</div>';
   }
   el.innerHTML=h;
 }

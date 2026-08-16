@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 49;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 50;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -19,10 +19,34 @@
         var seen=sessionStorage.getItem('vrl-'+PAGE);
         if(typeof latest==='number' && latest!==BUILD && String(seen)!==String(latest)){
           sessionStorage.setItem('vrl-'+PAGE, latest);
-          location.reload();
+          // [50/26] CACHE-BUSTED reload. A bare location.reload() re-requests the same
+          // URL, so a CDN edge still holding the old page serves it again — and because
+          // the once-per-version guard above has already recorded this version as seen,
+          // the tab never tries again and is stranded on the old build for good. Adding
+          // ?v=<latest> changes the URL, so the edge must fetch. replace() rather than
+          // assign() so the stale page does not sit in the back history.
+          // (Ported from Vacation Auction build 268, which fixed exactly this.)
+          try{
+            var u=new URL(location.href);
+            u.searchParams.set('v', String(latest));
+            location.replace(u.toString());
+          }catch(e){ location.reload(); }
         }
       }).catch(function(){});
     }
+    // [50/26] Re-check when the tab comes back to the front, throttled to once a minute.
+    // Without this an idle tab keeps the old build until its next 5-minute tick, which
+    // is exactly when someone returns to it and starts clicking.
+    var _lastChk=0;
+    function chkThrottled(){
+      var now=Date.now();
+      if(now-_lastChk<60000) return;
+      _lastChk=now; chk();
+    }
+    try{
+      document.addEventListener('visibilitychange',function(){ if(!document.hidden) chkThrottled(); });
+      window.addEventListener('focus',chkThrottled);
+    }catch(e){}
     setInterval(chk, 5*60*1000); chk();
   })();
 </script>
@@ -102,6 +126,20 @@ table.grid td.cell:hover{outline:2px solid var(--blue)}
 table.grid .wkend{background:var(--s3)}
 table.grid .stick1{position:sticky;left:0;z-index:2;background:var(--s1);border-right:2px solid var(--b2)}
 table.grid th.stick1{background:var(--s2);z-index:3}
+
+/* ── Per-page lock [build 50] ─────────────────────────────────────────────────
+   Owner rulings: the unlock is the master switch for batch editing (§20), and the
+   per-page lock IS the agreed mitigation for the Users panel reaching the live
+   Vacation Auction roster (§30). Config pages open locked. A page stays open until
+   it is locked again or the page is reloaded — no timeout, no relock on navigation.
+   NOTE: this is a client-side guard. The handlers refuse too (defence in depth), but
+   server enforcement in firestore.rules is still owed — see TODO. */
+.lockbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-radius:10px;
+  padding:9px 13px;margin-bottom:12px;font-size:13px;font-weight:700}
+.lockbar.locked{background:#f1f5f9;border:1px solid var(--b2);color:var(--t2)}
+.lockbar.open{background:#fffbeb;border:1px solid #fcd34d;color:#92400e}
+.lockbar .who{font-weight:600;font-size:11.5px;opacity:.85}
+.pagelocked{opacity:.55;pointer-events:none}
 
 /* ── Shift Eligibility grid [build 49] ──────────────────────────────────────
    The old grid was one column per shift in catalog `order`, families interleaved,
@@ -321,6 +359,8 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
   <div class="panel" id="panel-users">
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Users</div>
     <div class="page-sub" style="margin-bottom:12px">Shared with the Vacation Auction — adding or removing a user here changes their roster too.</div>
+    <div id="usersLockBar"></div>
+    <div id="usersLockable">
     <div class="card">
       <div class="card-title">🔐 Admin Access (Google sign-in)</div>
       <div class="page-sub" style="margin-bottom:10px">Google accounts allowed to open this admin page and make admin decisions — this controls the <strong>Daily Schedule only</strong>. Vacation Auction admins are a separate list, managed on the auction admin site's own Admin Access panel. Every admin here is equal; any admin may grant or revoke any other. The list can never be emptied.</div>
@@ -355,6 +395,7 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
       <div class="page-sub" style="margin:8px 0 10px">FTE here is this site's own value — totally separate from the Vacation Auction's FTE, with no copying or syncing between them. The same person can have a different FTE on each site. New users start blank here until you set one.</div>
       <div style="overflow-x:auto"><table class="grid" id="usersGrid" style="width:100%"></table></div>
     </div>
+  </div>
   </div>
 
   <!-- ELIGIBILITY -->
@@ -577,7 +618,12 @@ const callBaselineRef = doc(db,"dailysched","callBaseline"); // {user:{shiftId:n
 const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);
 const schedFteRef = doc(db,"dailysched","fteMap"); // THIS SITE's own FTE per user — totally separate from the Vacation Auction's FTE doc; the same person can carry a different number on each site. Never read from or written to the auction's fteMap — no seeding, no syncing, no fallback to it.
 const auditRef    = doc(db,"dailysched","auditLog"); // {log:[{id,ts,admin,action,detail}]} — who changed what, when
-// vacations — READ-ONLY: roster, admin list, approved vacation weeks
+// vacations — the VACATION AUCTION's collection. Read-only here with ONE sanctioned
+// exception: the Users panel writes the shared roster (owner ruling — see the schedule
+// repo's DECISIONS.md §1). Nothing else on this site may write a vacations/* document.
+// Firestore rules CANNOT enforce that — one project, one signed-in identity, so the
+// server cannot tell which page a write came from — so the guarantee is this code plus
+// tests/sched/isolation-test.mjs. Run it before changing anything here.
 const userListRef   = doc(db,"vacations","userList");
 const usernamesRef  = doc(db,"vacations","usernames");
 const emailsRef      = doc(db,"vacations","emails"); // SECONDARY e-mail — shared with the Vacation Auction (same roster, same contact info)
@@ -927,12 +973,14 @@ function renderGrid(){
   document.getElementById('monthLabel').textContent=MS[m-1]+' '+y;
   const nDays=new Date(y,m,0).getDate();
   const vac=vacationDays();
-  let head='<tr><th style="text-align:left">User</th>';
+  let head='<tr><th class="stick1" style="text-align:left">User</th>';
   for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); head+='<th data-day="'+pad(d)+'" class="'+((wd===0||wd===6)?'wkend':'')+'">'+d+'<br>'+DS[wd]+'</th>'; }
   head+='</tr>';
   let rows='';
   for(const u of names){
-    rows+='<tr><td style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>';
+    // [50] Sticky, like the eligibility grid's. At 31 day columns the name scrolled out
+    // of view and you lost track of whose row you were editing.
+    rows+='<tr><td class="stick1" style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>';
     for(let d=1;d<=nDays;d++){
       const dd=pad(d), dk=curYM+'-'+dd, wd=new Date(y,m-1,d).getDay();
       const c=cellOf(u,dd); const bits=[];
@@ -1407,6 +1455,9 @@ window.postOpen=async function(){
   // [H-10] Append inside a transaction on the fresh list so posting an open shift can't
   // wipe a claim or another post that arrived since the last snapshot.
   await txUpdateList(openRef, cur=>[...cur,o]);
+  // [50] Was unlogged. The Audit Log panel claims it records "everything that changes
+  // real data" — posting and removing open shifts were the two exceptions.
+  auditLog('open.post','Posted open shift '+(catalog.shifts?.[shiftId]?.label||shiftId)+' on '+date+(note?' — '+note:''));
   document.getElementById('openNote').value='';
 };
 function renderOpenAdmin(){
@@ -1423,9 +1474,14 @@ function renderOpenAdmin(){
     </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">Nothing posted.</div>';
 }
 window.removeOpen=async function(id){
+  // [50] Capture what is being removed BEFORE the transaction — afterwards it is gone and
+  // the audit entry would have nothing but an opaque id to report.
+  const gone=(openShifts.list||[]).find(o=>o.id===id)||{};
   // [H-10] Filter inside a transaction on the fresh list so removing one open shift can't
   // clobber a concurrent claim/post on another.
   await txUpdateList(openRef, cur=>cur.filter(o=>o.id!==id));
+  auditLog('open.remove','Removed open shift '+(catalog.shifts?.[gone.shiftId]?.label||gone.shiftId||id)
+    +(gone.date?' on '+gone.date:'')+(gone.status==='claimed'?' (was claimed by '+displayName(gone.claimedBy)+')':''));
 };
 
 // ── Users — shared roster with the Vacation Auction (vacations/userList,
@@ -1476,6 +1532,7 @@ function renderAdminAccess(){
     </div>`).join('');
 }
 window.addAdminEmail=async function(){
+  if(usersLockedRefuse()) return;
   const inp=document.getElementById('newAdminEmail');
   const msg=document.getElementById('adminAccessMsg'); if(msg) msg.textContent='';
   const email=(inp?.value||'').trim().toLowerCase();
@@ -1494,6 +1551,7 @@ window.addAdminEmail=async function(){
   auditLog('admin.grant','Granted admin access to '+email);
 };
 window.removeAdminEmail=async function(email){
+  if(usersLockedRefuse()) return;
   if(adminAccessEmails.length<=1){ alert('Cannot remove the last admin — grant someone else access first.'); return; }
   const self=email===_currentAdminEmail;
   if(!confirm((self?'⚠️ This is YOUR account — you will be locked out immediately after confirming.\n\n':'')+'Revoke Daily Schedule admin access for '+email+'?\n\nThis controls the Daily Schedule ONLY. It does NOT touch their Vacation Auction access — that is managed separately on the auction admin site’s Admin Access panel.')) return;
@@ -1537,6 +1595,7 @@ async function syncEmailToUserFromLogin(){
   }
 }
 window.addSchedUser=async function(){
+  if(usersLockedRefuse()) return;
   const msg=document.getElementById('uMsg'); msg.textContent='';
   const initials=document.getElementById('uInitials').value.trim().toUpperCase();
   const fullName=document.getElementById('uFullName').value.trim();
@@ -1579,6 +1638,7 @@ window.addSchedUser=async function(){
   auditLog('user.add','Added user '+initials+(fullName?' ('+fullName+')':''));
 };
 window.saveSchedUser=async function(u){
+  if(usersLockedRefuse()) return;
   // [build 48 · audit] Same loaded-gate as saveSchedField/saveAllSchedUsers: before the shared
   // docs load, a blank grid would deleteField() real values AND the duplicate guard below would
   // be checking against an empty cache (vacuous).
@@ -1620,6 +1680,39 @@ window.saveSchedUser=async function(u){
 };
 
 // Brief floating confirmation for the per-field / batch saves below.
+// ══ Users page lock [build 50] ══════════════════════════════════════════════
+// In-memory on purpose: locked on every load, so a reload always relocks (§20).
+let usersLocked=true;
+function renderUsersLock(){
+  const bar=document.getElementById('usersLockBar'); if(!bar) return;
+  const box=document.getElementById('usersLockable');
+  bar.className='lockbar '+(usersLocked?'locked':'open');
+  bar.innerHTML = usersLocked
+    ? '🔒 <b>This page is locked</b> — read-only. It writes to the LIVE Vacation Auction roster, so it opens locked every time.'
+      +'<span style="flex:1"></span><button class="btn" style="font-size:12px;padding:4px 10px" onclick="askUnlockUsers()">Unlock this page</button>'
+    : '🔓 <b>Users unlocked — changes reach the Vacation Auction.</b>'
+      +'<span class="who">unlocked by '+esc(_currentAdminEmail||'you')+'</span>'
+      +'<span style="flex:1"></span><button class="btn btn-primary" style="font-size:12px;padding:4px 10px" onclick="relockUsers()">Lock this page</button>';
+  if(box) box.className = usersLocked?'pagelocked':'';
+}
+window.askUnlockUsers=function(){
+  if(!confirm('Unlock the Users page?\n\nThis page does NOT only affect the Daily Schedule. While it is unlocked:\n\n'
+    +'  • Removing a user takes them off the LIVE Vacation Auction roster\n'
+    +'  • Saving a login e-mail rebuilds the auction\'s bid-security map\n\n'
+    +'The Vacation Auction runs all year, so there is no safe window. Unlock only when you actually intend to change the roster.\n\n'
+    +'It relocks when you lock it or reload the page. The unlock is recorded in the audit log.')) return;
+  usersLocked=false;
+  auditLog('users.unlock','Unlocked the Users page for editing (writes reach the Vacation Auction roster)');
+  renderUsersLock();
+};
+window.relockUsers=function(){ usersLocked=true; renderUsersLock(); };
+// Defence in depth: the handlers refuse regardless of what the DOM looks like.
+function usersLockedRefuse(){
+  if(!usersLocked) return false;
+  schedToast('The Users page is locked — unlock it first','err');
+  return true;
+}
+
 function schedToast(msg,type){
   let t=document.getElementById('_schedToast');
   if(!t){ t=document.createElement('div'); t.id='_schedToast'; t.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:100000;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.18);transition:opacity .3s'; document.body.appendChild(t); }
@@ -1636,6 +1729,7 @@ function schedToast(msg,type){
 // full name / login e-mail / secondary e-mail are SHARED with the Vacation Auction;
 // FTE is this site's own.
 window.saveSchedField=async function(u,kind){
+  if(usersLockedRefuse()) return;
   // [M-12] usernames / loginEmails / emails are AUCTION-collection docs — a schedule-only
   // admin gets permission-denied. Surface it instead of dying silently after a success toast.
   const sharedErr=(e)=>{ schedToast((e&&e.code==='permission-denied')?'Only a Vacation Auction admin can change shared name/e-mail fields':'Could not save — please try again','err'); };
@@ -1646,6 +1740,7 @@ window.saveSchedField=async function(u,kind){
     const v=(document.getElementById('ufn_'+u)?.value||'').trim();
     try{ if(v) await setDoc(usernamesRef,{[u]:v},{merge:true}); else await updateDoc(usernamesRef,{[u]:deleteField()}).catch(()=>{}); }
     catch(e){ return sharedErr(e); }
+    auditLog('user.name','Set '+u+"'s name to "+(v||'(cleared)'));
     schedToast('Saved name · '+u,'ok');
   } else if(kind==='lem'){
     const v=(document.getElementById('ulem_'+u)?.value||'').trim().toLowerCase();
@@ -1655,16 +1750,21 @@ window.saveSchedField=async function(u,kind){
     try{ if(v) await setDoc(loginEmailsRef,{[u]:v},{merge:true}); else await updateDoc(loginEmailsRef,{[u]:deleteField()}).catch(()=>{}); }
     catch(e){ return sharedErr(e); }
     await syncEmailToUserFromLogin();
+    // [50] THE serious gap: an admin could change anyone's Google login address — the
+    // credential that decides who they are on BOTH sites — leaving no trace anywhere.
+    auditLog('user.loginEmail','Set '+u+"'s Google login e-mail to "+(v||'(cleared)')+' — also re-synced the auction bid-security map');
     schedToast('Saved login e-mail · '+u,'ok');
   } else if(kind==='em'){
     const v=(document.getElementById('uem_'+u)?.value||'').trim();
     try{ if(v) await setDoc(emailsRef,{[u]:v},{merge:true}); else await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{}); }
     catch(e){ return sharedErr(e); }
+    auditLog('user.kpEmail','Set '+u+"'s KP e-mail to "+(v||'(cleared)'));
     schedToast('Saved KP e-mail · '+u,'ok');
   } else if(kind==='fte'){
     const raw=(document.getElementById('ufte_'+u)?.value||'').trim();
     if(raw===''){ await mergeFields(schedFteRef,{[u]:deleteField()}); }
     else { const val=parseFloat(raw); if(isNaN(val)||val<0||val>1){ schedToast('FTE must be a number between 0 and 1','err'); return; } await mergeFields(schedFteRef,{[u]:Math.round(val*10)/10}); }
+    auditLog('user.fte','Set '+u+"'s Daily Schedule FTE to "+(raw===''?'(not set)':raw));
     schedToast('Saved FTE · '+u,'ok');
   }
 };
@@ -1673,6 +1773,7 @@ window.saveSchedField=async function(u,kind){
 // four docs once each. Aborts with a clear message if any field is invalid, so a
 // single typo can't half-save the page.
 window.saveAllSchedUsers=async function(){
+  if(usersLockedRefuse()) return;
   // [H-12] Never write the shared docs from a grid that hasn't loaded yet — blanks
   // would become deleteField() and wipe names / logins / e-mails for everyone.
   if(!(usernamesLoaded&&emailsLoaded&&loginEmailsLoaded)){ schedToast('Still loading user data — try again in a moment','err'); return; }
@@ -1714,11 +1815,13 @@ window.saveAllSchedUsers=async function(){
   schedToast('Saved all '+names.length+' users','ok');
 };
 window.clearAllSchedFte=async function(){
+  if(usersLockedRefuse()) return;
   if(!confirm('Clear the FTE value for every user on this site (Daily Schedule only)?\n\nThe Vacation Auction\'s FTE is untouched — this only blanks the schedule site\'s own FTE column. Users go back to "not set" until entered again. This cannot be undone from here.')) return;
   await setDoc(schedFteRef,{}); // full overwrite (no merge) — wipes every user's value, including any left over from removed users
   auditLog('fte.clearAll','Cleared FTE for all users on the Daily Schedule site');
 };
 window.removeSchedUser=async function(u){
+  if(usersLockedRefuse()) return;
   if(!confirm('Remove '+u+' from the shared roster?\n\nThis removes them from BOTH the Daily Schedule and the Vacation Auction — they will no longer be selectable anywhere. Any shifts or vacation weeks already assigned to them stay in the history but they will disappear from user lists. This cannot be undone from here.\n\n⚠️ IF A VACATION AUCTION PHASE IS LIVE, DO NOT remove the user here — use the Vacation admin site instead. Removing here leaves their auction bids orphaned and still competing.')) return;
   // [M-12] userList is an auction-collection doc — a schedule-only admin can't write it.
   // Surface the failure instead of leaving the roster half-changed with no message.
@@ -2252,7 +2355,7 @@ function renderDash(){
   document.getElementById('dashUserSub').textContent=names.length?(noFte?(noFte+' of '+names.length+' user(s) have no FTE set here.'):'Every user has an FTE set.'):'No users yet.';
 }
 
-function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); }
+function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); renderUsersLock(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); }
 
 // ── Call-fairness baseline table (users × call shifts) ──
 function renderBaseline(){
