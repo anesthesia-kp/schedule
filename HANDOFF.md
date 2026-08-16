@@ -623,3 +623,34 @@ against its own predecessor (50, 52, 53, 55, 56) and still fails. Nothing is owe
    close it), defect 12 (renderAll destroys unsaved typing in the Users grid), defect 7.
 5. **Request types** (designed, approved, unblocked).
 6. **Stage 4** — roles + groups, which unblocks stage 5 (rules + conflict report, §44).
+
+---
+
+## ⚠️ SAY SO WHEN THE CONTEXT IS DEGRADING. Owner ruling, 16 Aug 2026.
+
+*"I want to add to the handoff summary that you should alert me when you are starting to
+suffer from context rot."*
+
+**Binding. Volunteer it — do not wait to be asked.** A long session degrades gradually and
+the failure mode is not dramatic: it is a slow rise in small errors, each individually
+recoverable, on work whose whole value is that it is careful.
+
+**The tells, in the order they actually appear:**
+
+1. Small mechanical slips — a command run in the wrong directory, a malformed heredoc, a
+   test probe that measures the wrong thing on the first try.
+2. **Asserting something about the code without re-reading it.** This is the dangerous one,
+   because it sounds exactly as confident as a verified statement. In this session the
+   audit log was described as growing unbounded until it hit Firestore's 1 MB limit; it had
+   trimmed itself at 400 entries all along. Reading the function is what caught it.
+3. Re-deriving something already settled, or re-asking a question the owner has answered.
+4. Losing the thread between the change and the reason for it.
+
+**What to do:** say plainly which tells are showing and how confident you are in recent
+work. Do NOT quietly compensate by working more slowly. Then offer a fresh session, and
+before it ends make sure `HANDOFF.md`, `DECISIONS.md`, `BUILD-LOG.md` and `TODO.md` carry
+everything the next session needs — those files are the memory, not the conversation.
+
+**A gate that does NOT bend:** every build still ships with its suite, its executed honesty
+check, and a byte-verified file. Tiredness is a reason to hand over, never a reason to
+lower the bar or to describe a check as done when it was reasoned about.

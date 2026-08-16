@@ -914,3 +914,46 @@ headings disappear under A–Z, because a heading there would be a lie.
 **This is a view preference for ONE page and does not touch `shiftList()`**, which feeds
 the grid, the simulator and the reports. Changing how the catalog reads must not quietly
 change what the schedule draws. Asserted.
+
+---
+
+## §53 — ROLES AND SUBGROUPS. Answers the question §43 left open. Unblocks stage 4.
+
+Owner, 16 Aug 2026:
+
+> *"There are only 2 broad categories of users: MD and CRNA. Some roles are covered by MD,
+> some by CRNA, and some by both."*
+> *"MDs and CRNAs then can each have subgroups they are a part of. This is important because
+> subgroups determines which shifts they can be assigned."*
+
+**Two levels, and they are different kinds of thing. Do not collapse them.**
+
+**Level 1 — CATEGORY, on the PERSON.** Exactly two: `MD` or `CRNA`. Every person is one.
+There is no third value. This is a property of who they are.
+
+**Level 2 — SUBGROUPS, on the PERSON, within their category.** A person belongs to zero or
+more subgroups. **Subgroups are what determine which shifts a person can be assigned** —
+they are the mechanism eligibility should eventually rest on, not a label.
+
+**"Both" is a property of the SHIFT, never of a person** — this restates §42 and it still
+holds. A shift is covered by MD, by CRNA, or by both. Nobody is "Both".
+
+### What this settles, and what it does NOT
+
+- ✅ §43's open question is answered: **"Both" is not a third role and not two groups.** It
+  is a field on the shift.
+- ✅ Stage 4 is unblocked and its shape is now known: a category on each person, a subgroup
+  list on each person, and a subgroup requirement on each shift.
+- ⚠️ **STILL OPEN — do not guess (§22):** whether a shift requires *any one* of its
+  subgroups or *all* of them; whether a person may belong to subgroups across categories
+  (the ruling says "MDs and CRNAs each have subgroups", which reads as within-category, but
+  it was not said outright); and how subgroups interact with the existing per-shift
+  eligibility ticks — whether subgroups REPLACE that grid or filter it. Ask before building.
+
+### The migration hazard to respect
+
+Eligibility today is a per-person-per-shift tick grid (`dailysched/eligibility`). If
+subgroups become the source of truth, that grid is a SECOND answer to "can this person do
+this shift" — precisely what §19 forbids. Whichever wins, the other must stop being
+consulted, not merely stop being edited. Build 61 routed every path through one checker,
+so there is exactly one place to change.

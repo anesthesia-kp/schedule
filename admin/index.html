@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 62;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 63;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -864,7 +864,7 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, collection, setDoc, updateDoc, deleteDoc, deleteField, getDoc, getDocs, writeBatch, arrayUnion, arrayRemove, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, collection, query, orderBy, limit, setDoc, updateDoc, deleteDoc, deleteField, getDoc, getDocs, writeBatch, arrayUnion, arrayRemove, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const app = initializeApp({
@@ -990,7 +990,34 @@ async function convertMonth(ym){
   return n;
 }
 const schedFteRef = doc(db,"dailysched","fteMap"); // THIS SITE's own FTE per user — totally separate from the Vacation Auction's FTE doc; the same person can carry a different number on each site. Never read from or written to the auction's fteMap — no seeding, no syncing, no fallback to it.
-const auditRef    = doc(db,"dailysched","auditLog"); // {log:[{id,ts,admin,action,detail}]} — who changed what, when
+// ══════════════════════════════════════════════════════════════════════════════
+// [63] THE AUDIT LOG — one document per entry, and NOTHING is discarded.
+//
+// The old shape was dailysched/auditLog = {log:[…]}, and the real defect in it was not
+// size — it never came close to 1 MB, because it TRIMMED ITSELF: at 400 entries it kept
+// the newest 300 and silently dropped the rest.
+//
+// That trim is the bug. At 60 anaesthesiologists working a live schedule, 300 entries is
+// a few days. Build 61 made this worse on purpose: every approval that overrides a warning
+// is recorded HERE, with the reason. An override from two weeks ago — exactly the one
+// somebody would ask about — was already gone. An audit log that forgets is not an audit
+// log; it is a recent-activity feed wearing the wrong name.
+//
+// Now: dailysched/auditLog/entries/{id}, one document per entry, never trimmed, and the
+// page reads the newest 300 with a real query instead of downloading all of them.
+//
+// ── WHY THIS NEEDS NO CONVERSION PRESS, AND §47 DID ──
+// A month is EDITED, so reading two sources could have produced one month in two states —
+// hence build 59's read-only lock and explicit Convert. An audit log is APPEND-ONLY:
+// nothing edits an entry and nothing deletes one. Merging the old array with the new
+// documents therefore cannot disagree with itself. The old array is simply read alongside
+// and never written to again. No banner, no lock, no button.
+const auditRef     = doc(db,"dailysched","auditLog");                       // legacy {log:[…]} — read for ever, never appended to again
+const auditColRef  = collection(db,"dailysched","auditLog","entries");      // the truth from build 63 on
+const AUDIT_SHOWN  = 300;                                                   // how many the page displays, NOT how many are kept
+// Sorts by time and does not collide. The id is padded so a plain string sort is a time
+// sort, which is what makes the query cheap.
+function auditId(ts){ return String(ts).padStart(14,'0')+'_'+Math.random().toString(36).slice(2,8); }
 // [51] Reports. Both live in dailysched — this site's own data. NEITHER may ever move to a
 // vacations/* document: the auction knows nothing about tags or this site's fairness pool,
 // and a write there would breach the cardinal rule. Pinned by tests/sched/isolation-test.mjs.
@@ -1018,7 +1045,20 @@ const vApprovalsRef = doc(db,"vacations","approvals");
 const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 let names=[], usernamesData={}, emailsData={}, loginEmailsData={}, adminAccessEmails=[], vPhases={}, vApprovals={};
-let auditLogData={log:[]};
+let auditLogData={log:[]};      // the MERGED view every renderer already reads
+let auditLegacy=[], auditEntries=[];
+// Newest first, de-duplicated by id — an entry written before build 63 exists only in the
+// array, one written after only in the subcollection, and the ids never collide.
+function recombineAudit(){
+  const seen=new Set(), all=[];
+  for(const e of [...auditEntries,...auditLegacy]){
+    if(!e||!e.id||seen.has(e.id)) continue;
+    seen.add(e.id); all.push(e);
+  }
+  all.sort((a,b)=>b.ts-a.ts);
+  auditLogData={log:all};
+  renderAudit(); renderDash();
+}
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, totals={}, monthData={days:{}};
 let curYM=null, unsubMonth=null, cellSel=null;
 let statsMode='month', statsYearLoadedFor=null, statsYearData=null;
@@ -1088,33 +1128,19 @@ async function txUpdateList(ref, mutate){
 // yet. Once the log gets large it switches to a plain rewrite that trims to
 // the most recent 300 entries, so this can't grow forever.
 function auditLog(action,detail){
-  const entry={id:Math.random().toString(36).slice(2),ts:Date.now(),admin:_currentAdminEmail||'unknown',action,detail};
+  const ts=Date.now();
+  const entry={id:auditId(ts),ts,admin:_currentAdminEmail||'unknown',action,detail};
   (async()=>{
-    try{
-      if((auditLogData.log||[]).length>=400){
-        // [M-17] Trim inside a transaction on the FRESH log, so an entry appended by a user
-        // tab between the admin's snapshot and this trim isn't dropped by the rewrite.
-        await runTransaction(db, async (tx)=>{
-          const snap=await tx.get(auditRef);
-          const log=(snap.exists()&&Array.isArray(snap.data().log))?snap.data().log:[];
-          const trimmed=[...log,entry].sort((a,b)=>a.ts-b.ts).slice(-300);
-          tx.set(auditRef,{log:trimmed});
-        });
-      } else {
-        await updateDoc(auditRef,{log:arrayUnion(entry)});
-      }
-    }catch(e){
-      // Only create-and-seed when the doc genuinely doesn't exist yet (its very
-      // first entry). On any OTHER failure (unavailable / deadline-exceeded /
-      // the doc hitting the 1MB limit — exactly when arrayUnion starts to fail)
-      // a setDoc-merge would REPLACE the whole log array with a single entry and
-      // wipe the entire audit history, so in that case warn and leave it intact.
-      // Never re-throw — logging must never break the action that triggered it. [M-17]
-      if(e && e.code==='not-found'){ await setDoc(auditRef,{log:[entry]},{merge:true}).catch(()=>{}); }
-      else { console.warn('audit append failed',e); }
-    }
+    // One document. No read-modify-write, so two admins acting at once cannot overwrite
+    // each other's entry, and there is no trim to drop anybody's history.
+    // Never re-throw — logging must never break the action that triggered it. [M-17]
+    try{ await setDoc(doc(auditColRef,entry.id),entry); }
+    catch(e){ console.warn('audit append failed',e); }
   })();
 }
+// HANDOFF trap 1 — module scope is invisible to inline handlers and to page.evaluate.
+window.auditLogForTest=(a,d)=>auditLog(a,d);
+window.auditCountForTest=()=>(auditLogData.log||[]).length;
 function fmtTs(ts){ try{ return new Date(ts).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }catch(_){ return ''; } }
 function renderAudit(){
   const el=document.getElementById('auditList'); if(!el) return;
@@ -4860,7 +4886,13 @@ setMonth(ymKey(new Date()));
 authReady.then(()=>{
   onSnapshot(userListRef,snap=>{ const d=snap.exists()?snap.data():{}; if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort(); namesLoaded=true; renderAll(); });
   onSnapshot(schedFteRef,snap=>{ schedFte=snap.exists()?snap.data():{}; schedFteLoaded=true; renderAll(); });
-  onSnapshot(auditRef,snap=>{ auditLogData=snap.exists()?snap.data():{log:[]}; if(!Array.isArray(auditLogData.log)) auditLogData.log=[]; renderAudit(); });
+  // [63] BOTH sources. The legacy array is read for ever and never written again; the
+  // subcollection is where everything new lands. Append-only, so they cannot disagree.
+  onSnapshot(auditRef,snap=>{ auditLegacy=(snap.exists()&&Array.isArray(snap.data().log))?snap.data().log:[]; recombineAudit(); });
+  onSnapshot(query(auditColRef,orderBy('ts','desc'),limit(AUDIT_SHOWN)),qs=>{
+    auditEntries=qs.docs.map(d=>d.data()).filter(Boolean);
+    recombineAudit();
+  });
   onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; usernamesLoaded=true; renderAll(); });
   onSnapshot(emailsRef,snap=>{ emailsData=snap.exists()?snap.data():{}; emailsLoaded=true; renderAll(); });
   onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; loginEmailsLoaded=true; renderUsersGrid(); });
