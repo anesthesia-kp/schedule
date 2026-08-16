@@ -857,3 +857,60 @@ warns and records overrides. Removing a *question* was not what was asked for.
 **§50c — An open-by-default bar must not claim someone opened it.** Each lock records WHO
 opened it; the bar says "open by default while the site is being built" when nobody did.
 A convenience default that fabricates an audit trail would be worse than the friction.
+
+---
+
+## §51 — Approval checks: warn, allow the override, record it. Never block.
+
+Defect 1 was that request and swap approval wrote assignments with no eligibility,
+capacity, vacation or collision check, while hand-editing a cell checked. The same action
+gave two answers depending on which button you pressed — the split §19 forbids.
+
+Owner ruling, 16 Aug 2026, choosing between warn / split / block: **warn, let me override,
+record it.** And separately: **eligibility should be checked everywhere**, including
+hand-editing, which never checked it at all.
+
+Built as build 61. There is now ONE `assignmentWarnings()`; the cell editor, request
+approval and swap approval all call it. Nothing blocks. Every override is written to the
+audit log **in the same entry as the change it authorised**, naming the reason.
+
+**§51a — the check runs before anything is committed.** Before the status flip, and before
+an open-shift claim is consumed. Declining a warning must leave the world exactly as it
+was; approving first and asking second would strand an "approved" request with nothing
+assigned. Asserted.
+
+**§51b — a swap simulates the giver's side first.** A straight swap does not change how
+many people are on a shift, so checking capacity against the current day would warn on
+every ordinary swap. A warning that always fires is a warning nobody reads.
+
+---
+
+## §49a — BOTH the real holiday and the observed day. Supersedes §49's "real date only".
+
+Owner, 16 Aug 2026: *"Observed holiday matters for this… Both real holiday and observed
+holiday should be included… for all holidays."*
+
+Built as build 62. Saturday is observed the Friday before, Sunday the Monday after, and
+**both dates count as holidays** — the hospital runs on the real day, and the observed day
+is when most of the group is off. Computed from the actual day of the week, not from a
+hardcoded list of which holidays can move, so a future calendar change cannot leave a
+stale list behind. Either date can still be removed by hand.
+
+**The trap worth remembering:** New Year's Day of the following year, when it falls on a
+Saturday, is observed on **31 December of the current year**. Without that, the last day of
+the year silently is not a holiday — a bug that only surfaces every few years.
+
+---
+
+## §52 — The Shift Catalog is grouped by family, and sortable.
+
+Owner, 16 Aug 2026: *"reorder shifts in the catalog so that they are grouped by family.
+Also make them sortable by family."*
+
+Built as build 62. Grouped by family by default with a coloured heading per family,
+families A–Z, "No family" last. Sortable by family, by catalog order, or A–Z; the family
+headings disappear under A–Z, because a heading there would be a lie.
+
+**This is a view preference for ONE page and does not touch `shiftList()`**, which feeds
+the grid, the simulator and the reports. Changing how the catalog reads must not quietly
+change what the schedule draws. Asserted.

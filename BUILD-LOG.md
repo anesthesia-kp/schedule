@@ -19,6 +19,7 @@ flagged. Where the full prose survives it is in the named commit, or in
 
 | build | commit | date | what shipped |
 |---|---|---|---|
+| **62** | —  not pushed yet | 16 Aug 2026 | §49a — BOTH the real holiday and the federal observed day count, for all holidays (Independence Day 2026 = Sat 04 Jul AND Fri 03 Jul), including the cross-year case where 1 Jan on a Saturday is observed 31 Dec of the year before. Plus §52 — the Shift Catalog grouped by family with headings, and sortable by family / catalog order / A–Z. |
 | **61** | —  not pushed yet | 16 Aug 2026 | Defect 1 — ONE definition of "is this assignment a problem?". Request and swap approval now run the same eligibility / capacity / vacation / collision checks the cell editor runs; warns and records an override, never blocks (§51). Eligibility checked on every path for the first time, closing half of defect 4. |
 | **60** | —  not pushed yet | 16 Aug 2026 | The config locks open by default (§50) — Shift Catalog, Report settings, Simulator. The Users page and the unconverted-month guard deliberately stay closed (§50a), and both refusals are asserted so a later session cannot "finish the job". |
 | **59** | `b7dd372` | 16 Aug 2026 12:48 | §47 — a month became one document PER DAY (`sched_YYYY-MM/days/{DD}`). Unconverted months are shown in full but read-only behind a banner; converting copies in one atomic batch and keeps the old record as a backup. Plus the repo housekeeping and the `_archive/` folder. ⚠️ **commit message lost** — a test file was pasted instead. |

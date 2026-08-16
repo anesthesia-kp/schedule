@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 60;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 62;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -538,7 +538,7 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
       <div class="card-title">Holidays</div>
       <div style="font-size:11.5px;color:var(--t2);line-height:1.55;margin-bottom:9px">
         The eleven US federal holidays are worked out automatically; add or remove any you like. A demand rule can point at “holidays”, so this list is what that rule reads.<br>
-        <b>The real date is used, not the federal “observed” day</b> — when one falls at the weekend the observed day shifts to the Friday or Monday, and a hospital runs on the real day. If that is wrong for your group, remove the date and add the one you actually use.
+        <b>Both the real date and the federal “observed” day count</b> (§49a) — when a holiday falls at the weekend, the observed day shifts to the Friday or Monday, and <b>both days are treated as holidays</b>: the hospital runs on the real day, and the observed day is the one most of the group is off. Remove either one if that is not how your group works.
       </div>
       <div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px">
         <span class="lbl" style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em">Year</span>
@@ -558,6 +558,11 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
         <button class="btn btn-ghost" id="catRoleFilter_MD" style="font-size:11px" onclick="setCatalogRoleFilter('MD')">MD</button>
         <button class="btn btn-ghost" id="catRoleFilter_CRNA" style="font-size:11px" onclick="setCatalogRoleFilter('CRNA')">CRNA</button>
         <button class="btn btn-ghost" id="catRoleFilter_Both" style="font-size:11px" onclick="setCatalogRoleFilter('Both')">Both</button>
+        <span style="width:14px"></span>
+        <span style="font-size:11px;color:var(--t2)">Sort</span>
+        <button class="btn btn-ghost" id="catSort_family" style="font-size:11px" onclick="setCatSort('family')" title="Group the list by clinical family — all ICU together, all OB together, and so on">by family</button>
+        <button class="btn btn-ghost" id="catSort_order"  style="font-size:11px" onclick="setCatSort('order')"  title="The catalog's own running order">catalog order</button>
+        <button class="btn btn-ghost" id="catSort_label"  style="font-size:11px" onclick="setCatSort('label')"  title="Straight A–Z by name">A–Z</button>
       </div>
       <div id="catTimeSummary" style="font-size:12px;line-height:1.6;margin-bottom:10px;padding:9px 12px;border-radius:9px;background:var(--s2);border:1px solid var(--b1)"></div>
       <div id="catList"></div>
@@ -1137,6 +1142,29 @@ const ymKey=d=>d.getFullYear()+'-'+pad(d.getMonth()+1);
 const dKey=d=>ymKey(d)+'-'+pad(d.getDate());
 function displayName(u){ return usernamesData[u]||u; }
 function shiftList(kind){ return Object.entries(catalog.shifts||{}).filter(([,s])=>!kind||s.kind===kind).sort((a,b)=>(a[1].order??99)-(b[1].order??99)); }
+// [62] The CATALOG's own order. Owner ruling, 16 Aug: "reorder shifts in the catalog so
+// that they are grouped by family. Also make them sortable by family."
+//
+// Deliberately separate from shiftList() above: that order feeds the grid, the simulator
+// and the reports, and changing it would quietly change what every one of those draws.
+// This is a view preference for one page, so it lives on that page.
+let catSort='family';   // 'family' | 'order' | 'label'
+const famLabelOf=f=>f?(catalog.families?.[f]?.label||f):'No family';
+function catalogList(){
+  const rows=Object.entries(catalog.shifts||{});
+  if(catSort==='label') return rows.sort((a,b)=>String(a[1].label||a[0]).localeCompare(String(b[1].label||b[0])));
+  if(catSort==='order') return rows.sort((a,b)=>(a[1].order??99)-(b[1].order??99));
+  // Grouped by family: families A–Z, "No family" last so it reads as the leftovers it is,
+  // then the catalog's own order within each group so a family stays internally familiar.
+  return rows.sort((a,b)=>{
+    const fa=famLabelOf(a[1].family), fb=famLabelOf(b[1].family);
+    const na=a[1].family?0:1, nb=b[1].family?0:1;
+    if(na!==nb) return na-nb;
+    if(fa!==fb) return fa.localeCompare(fb);
+    return (a[1].order??99)-(b[1].order??99) || String(a[1].label||a[0]).localeCompare(String(b[1].label||b[0]));
+  });
+}
+window.setCatSort=function(v){ catSort=v; renderCatalog(); };
 // A shift's color is always resolved LIVE from its family (if it has one) —
 // never a copy baked in at assign-time. That's what guarantees every shift in
 // a family shares the exact same color with zero variation, and means
@@ -1604,23 +1632,105 @@ window.updateCmWarning=function(){
 // What would be wrong about adding `addId` to what this person already holds. Warnings
 // only — §4 has no exceptions: "Safety checks warn and let you override. Nothing is
 // hard-blocked." Every override is recorded (see cmAddShift).
-function cmConflicts(addId){
-  if(!cellSel) return [];
-  const {u,dd}=cellSel;
-  const dk=curYM+'-'+dd;
-  const c=cellOf(u,dd), held=shiftsOf(c), off=!!c.off;
+// ══════════════════════════════════════════════════════════════════════════════
+// [61] ONE definition of "is this assignment a problem?"  DECISIONS §51.
+// CLOSES DEFECT 1, and the other half of defect 4.
+//
+// Defect 1: request and swap approval wrote assignments with NO eligibility, capacity,
+// vacation or collision check. Hand-editing a cell checked; the FAST path — working down a
+// queue clicking Approve — did not. The same action gave two different answers depending on
+// which button you pressed, which is exactly the split §19 exists to forbid.
+//
+// So there is now ONE function, and all three paths call it: the cell editor, request
+// approval, and swap approval.
+//
+// NOTHING HERE BLOCKS (owner ruling, §51). It warns, the admin can proceed, and the
+// override is written to the audit log naming the reason. A scheduler frequently MUST
+// override — somebody has to do the shift — and a tool that refuses outright gets worked
+// around, which is worse than one that warns and remembers.
+//
+// `cells` is {initials: cell} for THAT DAY of THAT MONTH — passed in rather than read from
+// monthData, because approval routinely acts on a month that is not the one on screen.
+function assignmentWarnings(ym,dd,u,addId,cells){
+  const dk=ym+'-'+dd;
+  const cur=(cells&&cells[u])||{};
+  const held=shiftsOf(cur), off=!!cur.off;
   const msgs=[];
   if(addId){
     const s=catalog.shifts?.[addId];
+    const lbl=s?.label||addId;
+    if(held.indexOf(addId)>=0) msgs.push(displayName(u)+' already holds '+lbl+' that day — approving adds nothing.');
+    // [61] ELIGIBILITY, checked on EVERY path — including hand-editing, which never checked
+    // it at all. Owner ruling §51: one rule for "can this person do this shift".
+    if(!allowed(u,addId)) msgs.push(displayName(u)+' is not ticked as eligible for '+lbl+' in the Shift Eligibility grid.');
     if(s){
-      const cap=s.capacity||1, have=shiftOccupancy(dd,addId,u);
-      if(have>=cap) msgs.push(s.label+' is already staffed by '+have+' — capacity is '+cap+'. This will go over.');
+      const cap=s.capacity||1;
+      let have=0;
+      for(const usr in (cells||{})){ if(usr===u) continue; if(holdsShift(cells[usr],addId)) have++; }
+      if(have>=cap) msgs.push(lbl+' is already staffed by '+have+' — capacity is '+cap+'. This will go over.');
     }
     if(vacationDays()[u+'|'+dk]) msgs.push(displayName(u)+' is on approved vacation this day — this will schedule a shift on top of it.');
     if(off) msgs.push(displayName(u)+' is marked OFF this day. Adding a shift does not clear that by itself — you would be leaving them both off and assigned.');
   }
   if(off && held.length) msgs.push('Marked "Day off" while still holding '+held.length+' shift'+(held.length===1?'':'s')+' — both are saved, which is probably not what you want.');
   return msgs;
+}
+window.assignmentWarnings=assignmentWarnings;   // HANDOFF trap 1
+
+// [61] What a swap would hand to whom, and what is wrong with it.
+//
+// The subtlety worth stating: a straight swap does NOT change how many people are on a
+// shift — the giver loses exactly what the receiver gains. Checking capacity against the
+// CURRENT day would therefore report "over capacity" on every ordinary swap, and a warning
+// that always fires is a warning nobody reads. So each day is simulated with the givers'
+// moving shifts ALREADY REMOVED, which is precisely the state mutateCell will see when it
+// performs the add. Capacity is then true, and "already holds" still means they held it
+// independently of this swap.
+async function swapWarnings(sw){
+  const legs=[];
+  if(sw.type==='3way'){
+    const [a,b,c]=sw.participants||[];
+    const L=sw.legs||[];
+    [[a,b,L[0]],[b,c,L[1]],[c,a,L[2]]].forEach(([giver,receiver,leg])=>{
+      if(leg&&leg.date) legs.push({mk:String(leg.date).slice(0,7),dd:String(leg.date).slice(8),giver,receiver,part:leg.part});
+    });
+  }else if(sw.date){
+    const mk=String(sw.date).slice(0,7), dd=String(sw.date).slice(8);
+    legs.push({mk,dd,giver:sw.from,receiver:sw.to,part:sw.part});
+    legs.push({mk,dd,giver:sw.to,receiver:sw.from,part:sw.part});
+  }
+  const dayCache={};
+  for(const l of legs){
+    const key=l.mk+'|'+l.dd;
+    if(!dayCache[key]) dayCache[key]=JSON.parse(JSON.stringify(await readDay(l.mk,l.dd)));
+  }
+  // Pass 1 — work out what moves, and take it off the givers in the simulated day.
+  const incoming=[];
+  for(const l of legs){
+    const key=l.mk+'|'+l.dd, cells=dayCache[key];
+    const k=l.part==='call'?'call':'day';
+    const moving=shiftsOf(cells[l.giver]).filter(x=>kindOfShift(x)===k);
+    for(const sid of moving) incoming.push({...l,s:sid,key});
+    if(moving.length && cells[l.giver]){
+      cells[l.giver]={...cells[l.giver],a:shiftEntries(cells[l.giver]).filter(x=>moving.indexOf(x.s)<0)};
+      delete cells[l.giver].day; delete cells[l.giver].call;   // the legacy pair, now superseded by `a`
+    }
+  }
+  // Pass 2 — ask the one checker about each incoming assignment.
+  const out=[];
+  for(const it of incoming){
+    for(const m of assignmentWarnings(it.mk,it.dd,it.receiver,it.s,dayCache[it.key]))
+      out.push(it.mk+'-'+it.dd+': '+m);
+  }
+  return [...new Set(out)];
+}
+window.swapWarnings=swapWarnings;   // HANDOFF trap 1
+// The cell editor's view of the same question. It is a thin wrapper on purpose: two
+// implementations of "is this a problem?" is how the paths drifted apart in the first place.
+function cmConflicts(addId){
+  if(!cellSel) return [];
+  const {u,dd}=cellSel;
+  return assignmentWarnings(curYM,dd,u,addId,monthData.days?.[dd]||{});
 }
 window.cmAddShift=async function(){
   if(!cellSel) return;
@@ -1940,6 +2050,31 @@ window.decideReq=async function(id,status){
   // rewrite, and a double-click (or two admins) can't decide the same item twice. mutate
   // aborts (null) if the item is already gone or no longer pending. The apply-side effects
   // below run only if THIS call actually flipped it.
+  // ══ [61] DEFECT 1 — the checks run HERE, before anything is committed ══
+  // Before the status flip AND before a claim consumes its open shift, because cancelling
+  // at the warning must leave the world exactly as it was. Approving first and asking
+  // second would strand an "approved" request with nothing assigned — the same shape as
+  // the bug decideSwap already carries a note about.
+  let overrode='';
+  if(status==='approved'){
+    const pre=(requests.list||[]).find(x=>x.id===id && x.status==='pending');
+    if(pre && pre.date && (pre.type==='shift'||pre.type==='claim')){
+      const mk=pre.date.slice(0,7), dd=pre.date.slice(8);
+      let cells=null, readErr=null;
+      try{ cells=await readDay(mk,dd); }catch(e){ readErr=e; }
+      if(readErr){
+        schedToast('Could not check this request: '+((readErr&&readErr.message)||'the month could not be read')+' Nothing was approved.','err');
+        return;
+      }
+      const warn=assignmentWarnings(mk,dd,pre.user,pre.shiftId,cells);
+      if(warn.length){
+        if(!confirm('Approve this request for '+displayName(pre.user)+' on '+pre.date+'?\n\n'
+          +'⚠️ '+warn.join('\n⚠️ ')
+          +'\n\nNothing is blocked — you can approve it anyway, and the override will be recorded in the audit log with the reason.')) return;
+        overrode=warn.join(' · ');
+      }
+    }
+  }
   let r=null;
   const wrote=await txUpdateList(requestsRef, cur=>{
     const item=cur.find(x=>x.id===id);
@@ -2020,7 +2155,10 @@ window.decideReq=async function(id,status){
         });
         applied=removed.length?('removed '+removed.map(lbl).join(', ')):'nothing to remove — they had no overnight call that day';
       }
-      if(applied) auditLog('cell.apply','Request approved for '+displayName(r.user)+' on '+r.date+' — '+applied);
+      // [61] The override is named in the SAME entry as the change it authorised, so the
+      // log answers "why was this allowed?" without needing two records lined up by hand.
+      if(applied) auditLog('cell.apply','Request approved for '+displayName(r.user)+' on '+r.date+' — '+applied
+        +(overrode?'  ⚠️ APPROVED OVER WARNINGS: '+overrode:''));
       // (The open-shift claim transaction now runs BEFORE this assignment — see [AUDIT #7]
       // above. Winning the shift is what authorises the write, not the other way round.)
     }catch(applyErr){
@@ -2116,6 +2254,7 @@ window.decideSwap=async function(id,status){
   // The apply below is a follow-on write, not part of the status commit (see the note
   // above), so approving first and discovering the problem second would leave the swap
   // marked approved with nothing moved.
+  let swapOverrode='';
   if(status==='approved'){
     const pre=(swaps.list||[]).find(x=>x.id===id);
     if(pre){
@@ -2124,6 +2263,19 @@ window.decideSwap=async function(id,status){
       if(bad.length){
         schedToast('Cannot approve this swap: '+bad.join(', ')+(bad.length>1?' are':' is')+' still in the old storage format. Convert '+(bad.length>1?'them':'it')+' first — Schedule → the banner above the grid.','err');
         return;
+      }
+      // ══ [61] DEFECT 1, the swap half ══
+      // Same checker as the cell editor and request approval. Also before the status flip.
+      let warn=[];
+      try{ warn=await swapWarnings(pre); }
+      catch(e){
+        schedToast('Could not check this swap: '+((e&&e.message)||'a day could not be read')+' Nothing was approved.','err');
+        return;
+      }
+      if(warn.length){
+        if(!confirm('Approve this swap?\n\n⚠️ '+warn.join('\n⚠️ ')
+          +'\n\nNothing is blocked — you can approve it anyway, and the override will be recorded in the audit log with the reason.')) return;
+        swapOverrode=warn.join(' · ');
       }
     }
   }
@@ -2179,9 +2331,11 @@ window.decideSwap=async function(id,status){
   }
   if(s.type==='3way'){
     const [a,b,c]=s.participants;
-    auditLog('swap.decide',(status==='approved'?(applyErr?'Approved (apply FAILED) ':'Approved '):'Denied ')+'3-way swap '+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a));
+    auditLog('swap.decide',(status==='approved'?(applyErr?'Approved (apply FAILED) ':'Approved '):'Denied ')+'3-way swap '+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)
+      +(swapOverrode?'  ⚠️ APPROVED OVER WARNINGS: '+swapOverrode:''));
   } else {
-    auditLog('swap.decide',(status==='approved'?(applyErr?'Approved (apply FAILED)':'Approved'):'Denied')+' swap between '+displayName(s.from)+' and '+displayName(s.to)+' on '+s.date);
+    auditLog('swap.decide',(status==='approved'?(applyErr?'Approved (apply FAILED)':'Approved'):'Denied')+' swap between '+displayName(s.from)+' and '+displayName(s.to)+' on '+s.date
+      +(swapOverrode?'  ⚠️ APPROVED OVER WARNINGS: '+swapOverrode:''));
   }
 };
 
@@ -2866,8 +3020,9 @@ window.setShiftSite=async function(id,site){
 // definitions and the nth-weekday / last-weekday helpers are the auction's; the return type
 // is not.
 //
-// The ACTUAL date is used, never the federal "observed" day. When a holiday falls at the
-// weekend the observed day shifts to the Friday or Monday — a hospital runs on the real
+// [62 · §49a] BOTH the actual date AND the federal "observed" day count as holidays. The
+// hospital runs on the real day; the observed day is when most of the group is off. What
+// follows was written when only the real
 // day. That is a guess about how this group works, so it is stated here and in the UI, and
 // the override list is how it gets corrected.
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2877,6 +3032,19 @@ function lastDowOf(year,month,dow){ const d=new Date(year,month+1,0); while(d.ge
 // The eleven US federal holidays — more than the auction's seven, which is trimmed to the
 // ones that shape bidding. A hospital may not care about all eleven; that is what the
 // remove list is for.
+// [62 · §49a] BOTH dates. Owner ruling, 16 Aug 2026: "Observed holiday matters for this…
+// Both real holiday and observed holiday should be included… for all holidays."
+//
+// Federal rule: a holiday landing on a Saturday is observed the Friday before; on a Sunday,
+// the Monday after. Computed from the ACTUAL day of the week rather than a hardcoded list
+// of which holidays can move — the floating Monday/Thursday ones simply never trigger it,
+// and deriving it means a future change to the calendar cannot leave a stale list behind.
+function observedOf(d){
+  const wd=d.getDay();
+  if(wd===6) return new Date(d.getFullYear(),d.getMonth(),d.getDate()-1);   // Sat -> Fri before
+  if(wd===0) return new Date(d.getFullYear(),d.getMonth(),d.getDate()+1);   // Sun -> Mon after
+  return null;                                                             // a weekday observes itself
+}
 function federalHolidays(year){
   return [
     {k:'newyear',  label:"New Year's Day",  d:new Date(year,0,1)},
@@ -2890,7 +3058,7 @@ function federalHolidays(year){
     {k:'veterans', label:'Veterans Day',    d:new Date(year,10,11)},
     {k:'thanks',   label:'Thanksgiving',    d:nthDowOf(year,10,4,4)},
     {k:'christmas',label:'Christmas Day',   d:new Date(year,11,25)},
-  ].map(h=>({...h,date:dKey(h.d)}));
+  ].map(h=>{ const o=observedOf(h.d); return {...h,date:dKey(h.d),observed:o?dKey(o):null}; });
 }
 // The effective calendar for a year: computed federal dates, minus the ones an admin
 // removed, plus the ones an admin added. §19 — two sources for one answer is allowed here
@@ -2899,8 +3067,18 @@ function holidaySet(year){
   const cfg=catalog.holidays||{};
   const removed=new Set(cfg.removed||[]);
   const out=new Map();
-  for(const h of federalHolidays(year)) if(!removed.has(h.date)) out.set(h.date,{label:h.label,src:'federal'});
-  for(const a of (cfg.added||[])) if(a&&a.date) out.set(a.date,{label:a.label||'Holiday',src:'added'});
+  const put=(date,label,kind)=>{ if(date && !removed.has(date)) out.set(date,{label,src:'federal',kind}); };
+  for(const h of federalHolidays(year)){
+    put(h.date,h.label,'actual');
+    // [62] The observed day is a SEPARATE holiday, not a replacement. Both count.
+    if(h.observed) put(h.observed,h.label+' (observed)','observed');
+  }
+  // New Year's Day of the FOLLOWING year, when it falls on a Saturday, is observed on
+  // 31 December of THIS one. Without this the last day of the year is silently not a
+  // holiday — a whole-year bug that only appears every few years and is easy to miss.
+  const nyNext=new Date(year+1,0,1), oNext=observedOf(nyNext);
+  if(oNext && oNext.getFullYear()===year) put(dKey(oNext),"New Year's Day (observed)",'observed');
+  for(const a of (cfg.added||[])) if(a&&a.date) out.set(a.date,{label:a.label||'Holiday',src:'added',kind:'added'});
   return out;
 }
 function isHoliday(dateKeyStr){
@@ -3288,15 +3466,24 @@ function renderHolidays(){
     return '<div class="rowline" style="'+(off?'opacity:.5':'')+'">'
       +'<b style="min-width:190px;font-size:12.5px">'+esc(label)+'</b>'
       +'<span class="mono" style="font-size:11.5px;color:var(--t2)">'+esc(wd)+' '+esc(date)+'</span>'
-      +(weekend?'<span style="font-size:10.5px;color:#92400e;font-weight:700">falls at the weekend — the real date is used, not the observed day</span>':'')
+      +(weekend?'<span style="font-size:10.5px;color:#92400e;font-weight:700">falls at the weekend — the observed day below counts too</span>':'')
       +'<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:'
         +(src==='added'?'#ecfdf5;color:#065f46':(off?'#fee2e2;color:#991b1b':'#f1f5f9;color:#5b6b7c'))+'">'
         +(src==='added'?'you added this':(off?'you removed this':'federal'))+'</span>'
       +'<span style="margin-left:auto"><button class="btn btn-ghost" style="font-size:11px;color:'+(off?'var(--green)':'var(--red)')+'" onclick="toggleHoliday(\''+esc(date)+'\',\''+esc(src)+'\','+(off?'false':'true')+')">'
         +(src==='added'?'Remove':(off?'Put it back':'Remove'))+'</button></span></div>';
   };
+  // [62 · §49a] Real date AND observed day, each its own removable row.
+  const rows=[];
+  for(const h of fed){
+    rows.push({date:h.date,label:h.label});
+    if(h.observed) rows.push({date:h.observed,label:h.label+' (observed)'});
+  }
+  const nyNext=new Date(year+1,0,1), oNext=observedOf(nyNext);
+  if(oNext && oNext.getFullYear()===year) rows.push({date:dKey(oNext),label:"New Year's Day (observed)"});
+  rows.sort((a,b)=>a.date.localeCompare(b.date));
   document.getElementById('holList').innerHTML =
-      fed.map(h=>row(h.date,h.label,'federal',removed.has(h.date))).join('')
+      rows.map(h=>row(h.date,h.label,'federal',removed.has(h.date))).join('')
     + added.map(a=>row(a.date,a.label||'Holiday','added',false)).join('')
     + '<div style="font-size:11.5px;color:var(--t2);margin-top:8px"><b>'+holidaySet(year).size+'</b> days count as holidays in '+year+'.</div>';
 }
@@ -3476,8 +3663,23 @@ function renderCatalog(){
   // rows alone and refresh just the derived text, then rebuild once they leave.
   if(_catEditing){ refreshCatDerived(); return; }
   ['','MD','CRNA','Both'].forEach(r=>{ const b=document.getElementById('catRoleFilter_'+r); if(b) b.className='btn '+(catalogRoleFilter===r?'btn-primary':'btn-ghost'); });
-  const list=shiftList().filter(([,s])=>!catalogRoleFilter||s.role===catalogRoleFilter||(catalogRoleFilter!=='Both'&&s.role==='Both'));
-  el.innerHTML=list.length?list.map(([id,s])=>`
+  ['family','order','label'].forEach(v=>{ const b=document.getElementById('catSort_'+v); if(b) b.className='btn '+(catSort===v?'btn-primary':'btn-ghost'); });
+  const list=catalogList().filter(([,s])=>!catalogRoleFilter||s.role===catalogRoleFilter||(catalogRoleFilter!=='Both'&&s.role==='Both'));
+  // [62] A heading whenever the family changes, so "grouped by family" is visible rather
+  // than merely true. Only in family mode — a heading under an A–Z sort would be a lie.
+  let _lastFam=null;
+  const famHead=(s)=>{
+    if(catSort!=='family') return '';
+    const f=famLabelOf(s.family);
+    if(f===_lastFam) return '';
+    _lastFam=f;
+    const col=(s.family&&catalog.families?.[s.family]?.color)||'#e2e8f0';
+    return '<div style="display:flex;align-items:center;gap:8px;margin:12px 0 4px">'
+      +'<span style="width:12px;height:12px;border-radius:4px;background:'+esc(col)+';border:1px solid var(--b2)"></span>'
+      +'<b style="font-size:12px;color:var(--t1)">'+esc(f)+'</b>'
+      +'<span style="flex:1;height:1px;background:var(--b1)"></span></div>';
+  };
+  el.innerHTML=list.length?list.map(([id,s])=>famHead(s)+`
     <div class="rowline">
       <input type="text" class="inp" id="lb_${esc(id)}" value="${esc(s.label)}" title="What people call this shift. The internal id stays ${esc(id)} — see the note under the list."
              style="width:112px;font-size:11.5px;font-weight:700;padding:3px 7px;border-radius:999px;text-align:center;background:${esc(shiftColor(s))};border:1px solid var(--b2)"
