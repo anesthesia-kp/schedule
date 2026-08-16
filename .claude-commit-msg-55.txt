@@ -1,0 +1,110 @@
+Build 55 (admin) — Stage 1: shift DEMAND rules, holidays, and tab-through time entry
+
+DECISIONS §9, §19, §48, §49. Admin only; staff untouched at 27. No rules change.
+
+WHY
+
+  Owner, 16 Aug: "Some shifts have variable # of people assigned to them each day. I need to
+  be able to enter which days of the week/month as well."
+
+  And, having tried build 54: "part of 55 must be ability to tab through shift entering
+  times without getting blocked by the half set alert. Just track missing settings at the
+  top, don't block me from entering."
+
+DEMAND — a stacking list, LAST MATCH WINS (§9)
+
+  §9: "Daily. Weekly on certain days, certain days/week or month, weekdays, weekends,
+  holidays, every combination of the above, and more." One setting cannot express "two on
+  weekdays, one at the weekend, none on holidays", so demand is a LIST of rules per shift.
+
+  Rules are read top to bottom and the LAST one that matches a date decides it. General
+  rule first, exception after. The editor numbers them, marks which one wins, and lets you
+  reorder — because the order is the entire meaning of the list, and the suite proves it:
+  move `daily` below `holidays` and Labor Day flips from 0 to 2.
+
+  Frequencies: every day · weekdays · weekends · named days of the week · holidays. Each
+  carries how many people that day needs, and 0 is a legitimate answer.
+
+  A SHIFT WITH NO RULES IS NOT DEMANDED AT ALL — which is not the same as "0 people
+  needed" (§9: "Not all shifts need a person every day"). demandOn() returns null rather
+  than 0, the preview shows a dash rather than a zero, and the editor says so in words.
+
+  §48: "N per month" is deliberately ABSENT — the owner deferred it. §21 already ruled its
+  shape (an obligation the month owes, with suggested dates), and a stacking day-rule cannot
+  express "any two days, you pick" without naming them. The suite asserts it is not there,
+  so nobody adds it by accident without reading §21 first.
+
+A LIVE 60-DAY PREVIEW
+
+  §9 asks for this and gives the reason: the failure mode is silent. A rule that quietly
+  matches nothing looks exactly like a rule that works. Sixty day-cells show the resolved
+  need, holidays outlined, with a summary saying how many days actually ask for anybody and
+  how many matched no rule at all.
+
+HOLIDAYS — computed federal dates, editable on top (§49)
+
+  A PORT of the auction's computation, NOT a verbatim lift: the auction returns week indices
+  because it reasons in weeks, and the schedule reasons in days. The definitions and the
+  nth-weekday / last-weekday helpers are the auction's; the return type is not.
+
+  Eleven US federal holidays, not the auction's seven — the auction's list is trimmed to the
+  ones that shape bidding. Add or remove any of them.
+
+  THE REAL DATE IS USED, NOT THE OBSERVED ONE. When a holiday falls at the weekend the
+  federal observed day shifts to Friday or Monday; a hospital runs on the real day. That is
+  a guess about this group's practice, so it is stated on the page, weekend holidays are
+  flagged in the list, and the override list is how it gets corrected.
+
+  §19 warns against two sources for one answer, and computed-plus-overrides is exactly that.
+  Allowed here on one condition, which is built and tested: EVERY OVERRIDE IS VISIBLE — a
+  removed federal holiday shows as "you removed this", an added day as "you added this".
+  Never a silent difference between what the code computes and what the calendar says.
+
+★ TAB-THROUGH ENTRY — the thing that made 92 shifts impossible
+
+  Saving a time fires a Firestore snapshot → renderAll() → renderCatalog(), which rebuilt
+  the whole list. A rebuilt <input> is a NEW element: focus dies, and the anti-autofill guard
+  at the top of the page re-arms it readonly through a MutationObserver, so the next
+  keystroke goes nowhere. Tabbing down the catalog was impossible. Same shape as defect 12.
+
+  Two wrong fixes were tried before the right one, and both are recorded because the next
+  person will reach for them:
+
+  1. Restore focus after the rebuild. Not enough — the element being tabbed TO is destroyed
+     before focus ever arrives, and the restored one comes back readonly.
+  2. Skip the rebuild when document.activeElement is inside the list. ALSO NOT ENOUGH, and
+     this is the subtle one: on Tab, Chromium fires `change` AFTER blur, so at the instant
+     the save triggers the re-render, activeElement is momentarily <body>. The guard misses
+     by a hair and the symptom is that Tab appears to do nothing at all.
+
+  The fix is to track editing as a STATE with a debounced exit: focus landing anywhere in
+  the list means "still editing", and only a settled departure ends it and triggers the
+  rebuild. While editing, only the DERIVED text updates in place — the duration appears, the
+  counts move, and the keyboard is never taken away.
+
+NOTHING BLOCKS ENTRY
+
+  The half-set confirmation is gone, per the owner's instruction. alert() on the add path is
+  replaced with a toast. A half-set shift is still worth knowing about — it looks finished
+  and reasons like blank — so it is COUNTED at the top and flagged on its own row, and never
+  put in the way of the next keystroke.
+
+  The summary is now the single place missing configuration is tracked: how many shifts have
+  times, how many have a site, how many have demand rules, how many are half set.
+
+GATES
+
+  · sched/build55-test.mjs — 45/45, three consecutive runs, driven in a real browser.
+    The tab test types keystrokes and presses Tab rather than using fill(), because fill()
+    dispatches `change` immediately and would not reproduce what a human does.
+  · Honesty check — the same suite against build 54/27 scores 4 pass / 41 fail.
+  · Whole schedule battery green on these bytes: isolation 27/27 · elig 33/33 ·
+    build50 37/37 · build51 88/88 · build52 49/49 · build53 29/29 · build54 45/45.
+  · AUCTION battery, on the owner's machine — 14 suites, 1074 assertions, green.
+
+Bumped: var BUILD in admin/index.html AND versions.json -> {"index":27,"admin":55}
+
+DECISIONS.md gains 48 and 49 (49 total):
+  48  "N per month" deferred — daily demand only for now; §21's shape stands for later.
+  49  Holidays are computed federal dates, editable on top; a port not a verbatim lift; the
+      real date not the observed one; overrides must be visible (§19).

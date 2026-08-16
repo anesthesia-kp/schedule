@@ -748,3 +748,45 @@ Three things it buys, not one:
 
 Timing: after the Testing section and after stage 1 — it is independent of both, since stage
 1 is the shift catalog rather than month documents.
+
+## 48 · "N per month" is deferred — daily demand only, for now — 16 Aug 2026
+
+> *"Skip monthly thing for now."*
+
+Build 55 gives each shift a stacking list of **per-day** rules — daily, weekdays, weekends,
+named weekdays, holidays — each carrying how many people that day needs. A shift owed *N
+times a month with no particular dates* is **not** built.
+
+**§21 is not reversed, only postponed.** It already ruled the shape: *"a shift owed N times
+in a month is tracked as an obligation… the app suggests candidate dates and the owner
+accepts or moves them. It never places one silently."* When it arrives it is a separate
+field on the shift, not another row in the day-by-day list — a stacking rule cannot express
+*"any two days, you pick"* without naming dates, which is the thing §21 forbids.
+
+## 49 · Holidays — computed federal dates, editable on top — 16 Aug 2026
+
+Offered the auction's computed federal set, a hand-kept list, both, or skipping holidays,
+the owner chose **both**: the federal dates appear automatically and can be added to or
+removed from.
+
+**On lifting the auction's code.** The auction has a holiday computation, and §32's
+instinct is to lift rather than approximate — but it returns **week indices**, because the
+auction reasons in weeks. The schedule reasons in days. So the *definitions* and the
+nth-weekday / last-weekday helpers port; the return type does not. This is a **port, not a
+verbatim lift**, and it is described that way rather than claimed as identical.
+
+**Two things stated rather than assumed:**
+
+* The computed set is the **eleven US federal holidays**, not the auction's seven — the
+  auction's list is trimmed to the ones that shape bidding. A hospital may well not care
+  about all eleven, which is exactly why the list is editable.
+* **The actual date is used, not the observed one.** When a holiday falls at the weekend the
+  federal *observed* day shifts to the Friday or Monday; a hospital runs on the real day.
+  This may be wrong for how the group treats coverage — it is a guess about their practice,
+  so it is flagged here rather than buried, and the override list is how it gets corrected.
+
+**§19 applies.** Computed dates plus overrides is two sources for one answer, which is what
+that ruling warns about. It is allowed here on the same condition as §43: an override must
+be **visible** — a removed federal holiday and an added local one are both shown as
+deliberate changes, never as a silent difference between what the code computes and what
+the calendar says.

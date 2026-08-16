@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 54;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 55;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -486,6 +486,22 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
       <div id="catColorNote" style="font-size:11px;color:var(--t3);margin-top:6px"></div>
     </div>
     <div class="card">
+      <div class="card-title">Holidays</div>
+      <div style="font-size:11.5px;color:var(--t2);line-height:1.55;margin-bottom:9px">
+        The eleven US federal holidays are worked out automatically; add or remove any you like. A demand rule can point at “holidays”, so this list is what that rule reads.<br>
+        <b>The real date is used, not the federal “observed” day</b> — when one falls at the weekend the observed day shifts to the Friday or Monday, and a hospital runs on the real day. If that is wrong for your group, remove the date and add the one you actually use.
+      </div>
+      <div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px">
+        <span class="lbl" style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em">Year</span>
+        <select class="sel" id="holYear" style="font-size:12px" onchange="renderHolidays()"></select>
+        <span style="width:1px;height:20px;background:var(--b2)"></span>
+        <input type="date" class="inp" id="holDate" style="font-size:12px">
+        <input type="text" class="inp" id="holLabel" placeholder="what it is" style="font-size:12px;width:150px">
+        <button class="btn btn-primary" style="font-size:12px" onclick="addHoliday()">+ Add a day</button>
+      </div>
+      <div id="holList"></div>
+    </div>
+    <div class="card">
       <div class="card-title">Shifts</div>
       <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
         <span style="font-size:11px;color:var(--t2);font-weight:700">Role:</span>
@@ -494,7 +510,7 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
         <button class="btn btn-ghost" id="catRoleFilter_CRNA" style="font-size:11px" onclick="setCatalogRoleFilter('CRNA')">CRNA</button>
         <button class="btn btn-ghost" id="catRoleFilter_Both" style="font-size:11px" onclick="setCatalogRoleFilter('Both')">Both</button>
       </div>
-      <div style="font-size:11.5px;color:var(--t2);margin-bottom:8px" id="catTimeSummary"></div>
+      <div id="catTimeSummary" style="font-size:12px;line-height:1.6;margin-bottom:10px;padding:9px 12px;border-radius:9px;background:var(--s2);border:1px solid var(--b1)"></div>
       <div id="catList"></div>
     </div>
     </div>
@@ -665,6 +681,33 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
     <div class="card" style="padding:10px 12px">
       <div style="margin-bottom:8px"><input type="text" class="inp" id="auditFilter" placeholder="Filter by name, action, or admin e-mail…" style="width:300px" oninput="renderAudit()"></div>
       <div id="auditList" style="max-height:75vh;overflow:auto"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Shift demand modal — DECISIONS §9 -->
+<div class="modal" id="demandModal">
+  <div class="mcard" style="width:min(760px,94vw)">
+    <div style="font-weight:800;margin-bottom:2px" id="dmTitle"></div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:10px">
+      Rules are read top to bottom and <b>the last one that matches a day decides it</b>. So put the general rule first and the exception after it.
+    </div>
+    <div id="dmRules"></div>
+    <div class="row" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:10px">
+      <select class="sel" id="dmWhen" style="font-size:12.5px" onchange="onDmWhenChange()"></select>
+      <span id="dmDays" style="display:none;gap:3px;flex-wrap:wrap"></span>
+      <label style="font-size:12px;color:var(--t2);display:flex;align-items:center;gap:4px">needs
+        <input type="number" class="inp" id="dmNeed" value="1" min="0" max="30" step="1" style="width:60px;padding:5px 6px">
+      </label>
+      <button class="btn btn-primary" style="font-size:12.5px" onclick="dmAddRule()">+ Add rule</button>
+    </div>
+    <div id="dmEmptyNote" style="font-size:11.5px;color:#92400e;margin-top:9px;line-height:1.5"></div>
+    <div class="card-title" style="margin-top:14px;margin-bottom:6px">The next 60 days</div>
+    <div style="font-size:11.5px;color:var(--t2);margin-bottom:7px">A rule that quietly matches nothing looks exactly like a rule that works. This is the only way to see the difference.</div>
+    <div id="dmPreview" style="display:flex;flex-wrap:wrap;gap:3px"></div>
+    <div id="dmPreviewSum" style="font-size:11.5px;color:var(--t2);margin-top:8px"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-primary" onclick="closeDemand()">Done</button>
     </div>
   </div>
 </div>
@@ -2487,6 +2530,116 @@ window.setShiftSite=async function(id,site){
   auditLog('shift.site','Set '+(sh.label||id)+"'s site to "+(site||'unset'));
 };
 
+// ══════════════════════════════════════════════════════════════════════════════
+// [55] HOLIDAYS — DECISIONS §49.  Computed federal dates, editable on top.
+//
+// A PORT of the Vacation Auction's computation, not a verbatim lift: the auction returns
+// WEEK INDICES because it reasons in weeks, and the schedule reasons in days. The
+// definitions and the nth-weekday / last-weekday helpers are the auction's; the return type
+// is not.
+//
+// The ACTUAL date is used, never the federal "observed" day. When a holiday falls at the
+// weekend the observed day shifts to the Friday or Monday — a hospital runs on the real
+// day. That is a guess about how this group works, so it is stated here and in the UI, and
+// the override list is how it gets corrected.
+// ══════════════════════════════════════════════════════════════════════════════
+function nthDowOf(year,month,dow,k){ const d=new Date(year,month,1); let c=0;
+  for(;;){ if(d.getDay()===dow){ c++; if(c===k) return new Date(d); } d.setDate(d.getDate()+1); } }
+function lastDowOf(year,month,dow){ const d=new Date(year,month+1,0); while(d.getDay()!==dow) d.setDate(d.getDate()-1); return d; }
+// The eleven US federal holidays — more than the auction's seven, which is trimmed to the
+// ones that shape bidding. A hospital may not care about all eleven; that is what the
+// remove list is for.
+function federalHolidays(year){
+  return [
+    {k:'newyear',  label:"New Year's Day",  d:new Date(year,0,1)},
+    {k:'mlk',      label:'MLK Day',         d:nthDowOf(year,0,1,3)},
+    {k:'presidents',label:"Presidents' Day",d:nthDowOf(year,1,1,3)},
+    {k:'memorial', label:'Memorial Day',    d:lastDowOf(year,4,1)},
+    {k:'juneteenth',label:'Juneteenth',     d:new Date(year,5,19)},
+    {k:'july4',    label:'Independence Day',d:new Date(year,6,4)},
+    {k:'labor',    label:'Labor Day',       d:nthDowOf(year,8,1,1)},
+    {k:'columbus', label:'Indigenous Peoples’ Day', d:nthDowOf(year,9,1,2)},
+    {k:'veterans', label:'Veterans Day',    d:new Date(year,10,11)},
+    {k:'thanks',   label:'Thanksgiving',    d:nthDowOf(year,10,4,4)},
+    {k:'christmas',label:'Christmas Day',   d:new Date(year,11,25)},
+  ].map(h=>({...h,date:dKey(h.d)}));
+}
+// The effective calendar for a year: computed federal dates, minus the ones an admin
+// removed, plus the ones an admin added. §19 — two sources for one answer is allowed here
+// only because every override is SHOWN as a deliberate change (§49).
+function holidaySet(year){
+  const cfg=catalog.holidays||{};
+  const removed=new Set(cfg.removed||[]);
+  const out=new Map();
+  for(const h of federalHolidays(year)) if(!removed.has(h.date)) out.set(h.date,{label:h.label,src:'federal'});
+  for(const a of (cfg.added||[])) if(a&&a.date) out.set(a.date,{label:a.label||'Holiday',src:'added'});
+  return out;
+}
+function isHoliday(dateKeyStr){
+  const y=Number(dateKeyStr.slice(0,4));
+  return holidaySet(y).has(dateKeyStr);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// [55] SHIFT DEMAND — DECISIONS §9.  A STACKING LIST, last match wins.
+//
+// §9: "Daily. Weekly on certain days, certain days/week or month, weekdays, weekends,
+// holidays, every combination of the above, and more." Modelled as a list of rules per
+// shift rather than one setting, because one setting cannot express "two on weekdays, one
+// at the weekend, none on holidays".
+//
+// LAST MATCH WINS. Rules are read top to bottom and the last one that matches a date
+// decides how many people that date needs. So the general rule goes first and the exception
+// goes after it.
+//
+// §9 again: "Not all shifts need a person every day." A shift with NO rules is never
+// demanded and never counts as uncovered — it is not "0 people needed daily", it is simply
+// not asked for. That distinction is why an empty list is a real answer here too.
+//
+// §48: "N per month" is deliberately NOT here. §21 already ruled its shape — an obligation
+// the month owes, with suggested dates — and a stacking day-rule cannot express "any two
+// days, you pick" without naming them.
+// ══════════════════════════════════════════════════════════════════════════════
+const DEMAND_WHENS=[
+  {k:'daily',    label:'Every day'},
+  {k:'weekdays', label:'Weekdays (Mon–Fri)'},
+  {k:'weekends', label:'Weekends (Sat–Sun)'},
+  {k:'dow',      label:'Named days of the week'},
+  {k:'holidays', label:'Holidays'},
+];
+const DOW_SHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function demandRules(sh){ return Array.isArray(sh&&sh.demand)?sh.demand:[]; }
+function ruleMatches(r,dt,dk){
+  const wd=dt.getDay();
+  switch(r.when){
+    case 'daily':    return true;
+    case 'weekdays': return wd>=1&&wd<=5;
+    case 'weekends': return wd===0||wd===6;
+    case 'dow':      return Array.isArray(r.days)&&r.days.indexOf(wd)>=0;
+    case 'holidays': return isHoliday(dk);
+    default:         return false;
+  }
+}
+// How many people this shift needs on this date. null = NOT DEMANDED AT ALL, which is
+// different from 0 and is what a shift with no matching rule returns.
+function demandOn(sh,dt){
+  const rules=demandRules(sh);
+  if(!rules.length) return null;
+  const dk=dKey(dt);
+  let need=null;
+  for(const r of rules) if(ruleMatches(r,dt,dk)) need=Math.max(0,Number(r.need)||0);
+  return need;
+}
+function ruleText(r){
+  const w=DEMAND_WHENS.find(x=>x.k===r.when);
+  const when=r.when==='dow'
+    ? ((r.days||[]).slice().sort().map(d=>DOW_SHORT[d]).join(', ')||'no days chosen')
+    : (w?w.label:r.when);
+  const n=Math.max(0,Number(r.need)||0);
+  return when+' → '+(n===0?'nobody needed':n+(n===1?' person':' people'));
+}
+window.shiftsOfDemandProbe=demandOn;   // module scope — HANDOFF trap 1
+
 function parseHHMM(raw){
   const t=String(raw==null?'':raw).trim().replace(/\s+/g,'');
   if(!t) return {ok:true,val:''};                       // blank is a real answer
@@ -2556,6 +2709,31 @@ function catLockedRefuse(){
 // ── Setting a time on an existing shift ──
 // §17: a refused value keeps the PREVIOUS one. Nothing is half-written and nothing is
 // silently coerced into something the admin did not type.
+// "Is the admin working in the catalog list right now?"
+//
+// Sampling document.activeElement inside renderCatalog is NOT good enough, and this cost an
+// hour to pin down. On Tab, Chromium fires `change` AFTER blur — so at the instant the save
+// triggers a re-render, activeElement is momentarily <body>, the guard misses, and the field
+// Tab was about to land on is destroyed before focus ever arrives. The observed symptom is
+// that Tab appears to do nothing at all.
+//
+// So track it as a state with a debounced exit instead: focus landing anywhere in the list
+// says "still editing", and only a real departure that has settled ends it.
+let _catEditing=false, _catBlurT=null;
+document.addEventListener('focusin',e=>{
+  const el=document.getElementById('catList');
+  if(el&&el.contains(e.target)){ clearTimeout(_catBlurT); _catEditing=true; }
+});
+document.addEventListener('focusout',e=>{
+  const el=document.getElementById('catList');
+  if(!el||!el.contains(e.target)) return;
+  clearTimeout(_catBlurT);
+  _catBlurT=setTimeout(()=>{
+    const l=document.getElementById('catList');
+    if(l&&!l.contains(document.activeElement)){ _catEditing=false; renderCatalog(); }
+  },250);
+});
+
 window.setShiftTime=async function(id,which,raw,inputEl){
   if(catLockedRefuse()){ renderCatalog(); return; }
   const s=catalog.shifts?.[id]; if(!s) return;
@@ -2585,38 +2763,226 @@ window.setShiftProvisional=async function(id,val){
   auditLog('shift.time',(val?'Marked ':'Un-marked ')+(s.label||id)+' times as provisional');
 };
 
-function renderCatalog(){
-  const el=document.getElementById('catList'); if(!el) return;
-  ['','MD','CRNA','Both'].forEach(r=>{ const b=document.getElementById('catRoleFilter_'+r); if(b) b.className='btn '+(catalogRoleFilter===r?'btn-primary':'btn-ghost'); });
-  const list=shiftList().filter(([,s])=>!catalogRoleFilter||s.role===catalogRoleFilter||(catalogRoleFilter!=='Both'&&s.role==='Both'));
-  // How far off "every shift has a time" the catalog is. §44 makes this the real progress
-  // bar for the whole project: an untimed shift is an input the engine cannot use.
+// ── Holidays UI ──
+function renderHolidays(){
+  const sel=document.getElementById('holYear'); if(!sel) return;
+  const yNow=new Date().getFullYear();
+  if(!sel.options.length){
+    let o=''; for(let y=yNow-1;y<=yNow+3;y++) o+='<option value="'+y+'"'+(y===yNow?' selected':'')+'>'+y+'</option>';
+    sel.innerHTML=o;
+  }
+  const year=Number(sel.value)||yNow;
+  const cfg=catalog.holidays||{};
+  const removed=new Set(cfg.removed||[]);
+  const fed=federalHolidays(year);
+  const added=(cfg.added||[]).filter(a=>a&&a.date&&a.date.slice(0,4)===String(year));
+  const row=(date,label,src,off)=>{
+    const d=new Date(Number(date.slice(0,4)),Number(date.slice(5,7))-1,Number(date.slice(8,10)));
+    const wd=DOW_SHORT[d.getDay()], weekend=(d.getDay()===0||d.getDay()===6);
+    return '<div class="rowline" style="'+(off?'opacity:.5':'')+'">'
+      +'<b style="min-width:190px;font-size:12.5px">'+esc(label)+'</b>'
+      +'<span class="mono" style="font-size:11.5px;color:var(--t2)">'+esc(wd)+' '+esc(date)+'</span>'
+      +(weekend?'<span style="font-size:10.5px;color:#92400e;font-weight:700">falls at the weekend — the real date is used, not the observed day</span>':'')
+      +'<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:'
+        +(src==='added'?'#ecfdf5;color:#065f46':(off?'#fee2e2;color:#991b1b':'#f1f5f9;color:#5b6b7c'))+'">'
+        +(src==='added'?'you added this':(off?'you removed this':'federal'))+'</span>'
+      +'<span style="margin-left:auto"><button class="btn btn-ghost" style="font-size:11px;color:'+(off?'var(--green)':'var(--red)')+'" onclick="toggleHoliday(\''+esc(date)+'\',\''+esc(src)+'\','+(off?'false':'true')+')">'
+        +(src==='added'?'Remove':(off?'Put it back':'Remove'))+'</button></span></div>';
+  };
+  document.getElementById('holList').innerHTML =
+      fed.map(h=>row(h.date,h.label,'federal',removed.has(h.date))).join('')
+    + added.map(a=>row(a.date,a.label||'Holiday','added',false)).join('')
+    + '<div style="font-size:11.5px;color:var(--t2);margin-top:8px"><b>'+holidaySet(year).size+'</b> days count as holidays in '+year+'.</div>';
+}
+window.toggleHoliday=async function(date,src,removeIt){
+  if(catLockedRefuse()) return;
+  const cfg=catalog.holidays||{};
+  if(src==='added'){
+    if(!confirm('Remove '+date+' from the holiday list?')) return;
+    await mergeFields(catalogRef,{'holidays.added':(cfg.added||[]).filter(a=>a&&a.date!==date)});
+    auditLog('holiday','Removed the added holiday '+date);
+  } else {
+    const removed=new Set(cfg.removed||[]);
+    if(removeIt) removed.add(date); else removed.delete(date);
+    await mergeFields(catalogRef,{'holidays.removed':[...removed]});
+    auditLog('holiday',(removeIt?'Removed the federal holiday ':'Restored the federal holiday ')+date);
+  }
+  renderHolidays();
+};
+window.addHoliday=async function(){
+  if(catLockedRefuse()) return;
+  const date=document.getElementById('holDate').value;
+  const label=document.getElementById('holLabel').value.trim()||'Holiday';
+  if(!date){ schedToast('Pick a date first','err'); return; }
+  const cfg=catalog.holidays||{};
+  if((cfg.added||[]).some(a=>a&&a.date===date)){ schedToast('That date is already on the list','err'); return; }
+  if(!confirm('Add '+date+' — "'+label+'" — as a holiday?\n\nAny demand rule pointing at "holidays" will start counting it.')) return;
+  await mergeFields(catalogRef,{'holidays.added':[...(cfg.added||[]),{date,label}]});
+  auditLog('holiday','Added holiday '+date+' — '+label);
+  document.getElementById('holDate').value=''; document.getElementById('holLabel').value='';
+  renderHolidays();
+};
+
+// ── Demand editor ──
+let dmShift=null;
+window.openDemand=function(id){
+  dmShift=id;
+  const sh=catalog.shifts?.[id]; if(!sh) return;
+  document.getElementById('dmTitle').textContent='When does '+(sh.label||id)+' run, and how many people does it need?';
+  const w=document.getElementById('dmWhen');
+  w.innerHTML=DEMAND_WHENS.map(x=>'<option value="'+x.k+'">'+esc(x.label)+'</option>').join('');
+  const dd=document.getElementById('dmDays');
+  dd.innerHTML=DOW_SHORT.map((n,i)=>'<label class="tp" style="cursor:pointer"><input type="checkbox" value="'+i+'" style="margin-right:4px">'+n+'</label>').join('');
+  onDmWhenChange();
+  renderDemand();
+  document.getElementById('demandModal').classList.add('on');
+};
+window.closeDemand=function(){ document.getElementById('demandModal').classList.remove('on'); dmShift=null; };
+window.onDmWhenChange=function(){
+  const v=document.getElementById('dmWhen').value;
+  document.getElementById('dmDays').style.display=(v==='dow')?'inline-flex':'none';
+};
+function renderDemand(){
+  if(!dmShift) return;
+  const sh=catalog.shifts?.[dmShift]||{};
+  const rules=demandRules(sh);
+  document.getElementById('dmRules').innerHTML = rules.length
+    ? rules.map((r,i)=>'<div class="rowline">'
+        +'<span style="font-size:10px;font-weight:800;color:var(--t3);min-width:16px">'+(i+1)+'</span>'
+        +'<b style="font-size:12.5px">'+esc(ruleText(r))+'</b>'
+        +(i===rules.length-1&&rules.length>1?'<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:#f5f3ff;color:#5b21b6">wins ties</span>':'')
+        +'<span style="margin-left:auto;display:flex;gap:4px">'
+        +'<button class="btn btn-ghost" style="font-size:11px"'+(i===0?' disabled':'')+' onclick="dmMove('+i+',-1)">↑</button>'
+        +'<button class="btn btn-ghost" style="font-size:11px"'+(i===rules.length-1?' disabled':'')+' onclick="dmMove('+i+',1)">↓</button>'
+        +'<button class="btn btn-ghost" style="font-size:11px;color:var(--red)" onclick="dmRemove('+i+')">Remove</button>'
+        +'</span></div>').join('')
+    : '<div style="font-size:12px;color:var(--t3);font-style:italic;padding:4px 2px">No rules — this shift is never asked for.</div>';
+  document.getElementById('dmEmptyNote').innerHTML = rules.length ? ''
+    : '<b>A shift with no rules is never demanded and never counts as uncovered (§9).</b> That is different from “nobody needed”: it is not being asked for at all. Leave it this way if that is what you mean.';
+  renderDemandPreview();
+}
+function renderDemandPreview(){
+  const sh=catalog.shifts?.[dmShift]||{};
+  const host=document.getElementById('dmPreview'); if(!host) return;
+  const start=new Date(); start.setHours(0,0,0,0);
+  let cells='', demanded=0, people=0, zero=0, none=0;
+  for(let i=0;i<60;i++){
+    const d=new Date(start); d.setDate(start.getDate()+i);
+    const dk=dKey(d), need=demandOn(sh,d), hol=isHoliday(dk);
+    if(need===null) none++; else if(need===0) zero++; else { demanded++; people+=need; }
+    const bg = need===null ? '#f1f5f9' : need===0 ? '#e2e8f0' : '#dbeafe';
+    const fg = need===null ? '#94a3b8' : need===0 ? '#64748b' : '#1e3a8a';
+    cells+='<span title="'+esc(dk)+(hol?' · holiday':'')+'" style="width:30px;height:30px;border-radius:6px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;'
+      +'background:'+bg+';color:'+fg+';font-size:9px;font-weight:800;line-height:1;'
+      +(hol?'box-shadow:0 0 0 2px #7c3aed;':'')
+      +(d.getDay()===0||d.getDay()===6?'opacity:.75;':'')+'">'
+      +'<span style="font-size:8px;opacity:.75">'+d.getDate()+'</span>'
+      +'<span>'+(need===null?'–':need)+'</span></span>';
+  }
+  host.innerHTML=cells;
+  document.getElementById('dmPreviewSum').innerHTML =
+    '<b>'+demanded+'</b> of the next 60 days ask for somebody ('+people+' people in total)'
+    +(zero?' · <b>'+zero+'</b> matched a rule that asks for nobody':'')
+    +(none?' · <b>'+none+'</b> matched no rule at all, so the shift is not asked for':'')
+    +' · <span style="color:#5b21b6;font-weight:700">purple outline = holiday</span>';
+}
+async function saveDemand(rules,what){
+  if(catLockedRefuse()) return false;
+  const sh=catalog.shifts?.[dmShift];
+  try{
+    await mergeFields(catalogRef,{['shifts.'+dmShift+'.demand']:rules});
+    auditLog('shift.demand',(sh?.label||dmShift)+' — '+what+'. Now: '+(rules.length?rules.map(ruleText).join(' · '):'no rules, never demanded'));
+    return true;
+  }catch(e){ schedToast('Could not save that: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); return false; }
+}
+window.dmAddRule=async function(){
+  if(!dmShift) return;
+  const when=document.getElementById('dmWhen').value;
+  const need=Math.max(0,Math.min(30,parseInt(document.getElementById('dmNeed').value,10)||0));
+  const days=[...document.querySelectorAll('#dmDays input:checked')].map(x=>Number(x.value));
+  if(when==='dow'&&!days.length){ schedToast('Tick at least one day of the week','err'); return; }
+  const r={when,need}; if(when==='dow') r.days=days;
+  const rules=[...demandRules(catalog.shifts?.[dmShift]||{}),r];
+  if(await saveDemand(rules,'added "'+ruleText(r)+'"')) renderDemand();
+};
+window.dmRemove=async function(i){
+  const rules=demandRules(catalog.shifts?.[dmShift]||{}).slice();
+  const gone=rules[i]; if(!gone) return;
+  if(!confirm('Remove this rule?\n\n'+ruleText(gone)+'\n\nThe days it covered will fall back to whatever rule above it matches — or to not being asked for at all.')) return;
+  rules.splice(i,1);
+  if(await saveDemand(rules,'removed "'+ruleText(gone)+'"')) renderDemand();
+};
+window.dmMove=async function(i,dir){
+  const rules=demandRules(catalog.shifts?.[dmShift]||{}).slice();
+  const j=i+dir; if(j<0||j>=rules.length) return;
+  const t=rules[i]; rules[i]=rules[j]; rules[j]=t;
+  if(await saveDemand(rules,'reordered the rules — last match wins, so this changes which one decides')) renderDemand();
+};
+
+// Everything on a catalog row that is COMPUTED rather than typed. Updated in place while
+// the admin is mid-entry, so they still see the duration appear and the counts move without
+// their keyboard being taken away.
+function refreshCatDerived(){
+  for(const [id,s] of shiftList()){
+    const d=document.getElementById('dur_'+id);
+    if(d){
+      d.style.color=s.timesProvisional?'#92400e':'var(--t2)';
+      d.innerHTML=(s.start&&s.end)
+        ? (s.timesProvisional?'⚠ provisional · ':'')+esc(fmtDur(shiftMinutes(s.start,s.end)))+(crossesMidnight(s.start,s.end)?' ⏰':'')
+        : (s.start||s.end) ? '<span style="color:#b91c1c">half set</span>'
+                           : '<span style="color:var(--t3)">no times</span>';
+    }
+  }
+  renderCatSummary();
+}
+function renderCatSummary(){
+  const sum=document.getElementById('catTimeSummary'); if(!sum) return;
   const all=shiftList();
   const timed=all.filter(([,x])=>x.start&&x.end).length;
   const half=all.filter(([,x])=>(x.start?1:0)+(x.end?1:0)===1).length;
   const prov=all.filter(([,x])=>x.start&&x.end&&x.timesProvisional).length;
   const sited=all.filter(([,x])=>x.site).length;
-  const sum=document.getElementById('catTimeSummary');
-  if(sum) sum.innerHTML = all.length
+  const nodemand=all.filter(([,x])=>!demandRules(x).length).length;
+  sum.innerHTML = all.length
     ? '<b>'+timed+' of '+all.length+'</b> shifts have times set'
-      +(prov?' · <span style="color:#92400e"><b>'+prov+'</b> marked provisional</span>':'')
-      +(half?' · <span style="color:#b91c1c"><b>'+half+'</b> half set — a start with no end, or the other way round, counts as nothing</span>':'')
-      +(timed<all.length?' · <span style="color:var(--t3)">the rest are blank, which is a real answer until you say otherwise (§38)</span>':' · <b style="color:#065f46">all timed</b>')
+      +(prov?' · <span style="color:#92400e"><b>'+prov+'</b> provisional</span>':'')
+      +(half?' · <span style="color:#b91c1c"><b>'+half+'</b> half set — a start with no end counts as nothing</span>':'')
+      +(timed<all.length?' · <span style="color:var(--t3)">the rest are blank, which is a real answer (§38)</span>':' · <b style="color:#065f46">all timed</b>')
       +'<br><b>'+sited+' of '+all.length+'</b> have a site'
-      +(sited<all.length?' · <span style="color:var(--t3)">§18 makes site a property of a whole day, so a shift without one cannot be checked against another</span>':' · <b style="color:#065f46">all sited</b>')
+      +(sited<all.length?' · <span style="color:var(--t3)">§18 makes site a property of a whole day</span>':' · <b style="color:#065f46">all sited</b>')
+      +'<br><b>'+(all.length-nodemand)+' of '+all.length+'</b> have demand rules'
+      +(nodemand?' · <span style="color:var(--t3)">'+nodemand+' are never asked for at all, which is different from needing nobody (§9)</span>':' · <b style="color:#065f46">all set</b>')
     : '';
+}
+
+function renderCatalog(){
+  const el=document.getElementById('catList'); if(!el) return;
+  // [55] DO NOT REBUILD THIS LIST WHILE THE ADMIN IS WORKING IN IT.
+  //
+  // Saving a time fires a Firestore snapshot → renderAll() → renderCatalog(). Rebuilding
+  // the rows replaces every <input> with a NEW element, which means: focus dies, and the
+  // anti-autofill guard at the top of this page re-arms the new one as readonly through a
+  // MutationObserver — so the next keystroke goes nowhere. Tabbing down 92 shifts becomes
+  // impossible. Same shape as defect 12, where renderAll() eats unsaved typing in Users.
+  //
+  // Restoring focus afterwards was tried and is NOT enough: the element the admin tabbed to
+  // is destroyed before they ever arrive on it. The only reliable answer is to leave the
+  // rows alone and refresh just the derived text, then rebuild once they leave.
+  if(_catEditing){ refreshCatDerived(); return; }
+  ['','MD','CRNA','Both'].forEach(r=>{ const b=document.getElementById('catRoleFilter_'+r); if(b) b.className='btn '+(catalogRoleFilter===r?'btn-primary':'btn-ghost'); });
+  const list=shiftList().filter(([,s])=>!catalogRoleFilter||s.role===catalogRoleFilter||(catalogRoleFilter!=='Both'&&s.role==='Both'));
   el.innerHTML=list.length?list.map(([id,s])=>`
     <div class="rowline">
       <span class="chipp" style="background:${esc(shiftColor(s))}">${esc(s.label)}</span>
       <span style="font-size:11px;color:var(--t2)">${s.kind==='call'?'call':'day'}</span>
       <span style="display:inline-flex;align-items:center;gap:3px" title="24-hour clock — 0730, 7:30 or 07.30">
-        <input type="text" class="inp" style="width:62px;font-size:11px;padding:3px 5px;text-align:center${(!s.start&&!s.end)?';background:#fffbeb;border-color:#fcd34d':''}"
+        <input type="text" class="inp" id="tm_${esc(id)}_start" style="width:62px;font-size:11px;padding:3px 5px;text-align:center${(!s.start&&!s.end)?';background:#fffbeb;border-color:#fcd34d':''}"
                value="${esc(s.start||'')}" placeholder="start" onchange="setShiftTime('${esc(id)}','start',this.value,this)">
         <span style="font-size:10px;color:var(--t3)">–</span>
-        <input type="text" class="inp" style="width:62px;font-size:11px;padding:3px 5px;text-align:center${(!s.start&&!s.end)?';background:#fffbeb;border-color:#fcd34d':''}"
+        <input type="text" class="inp" id="tm_${esc(id)}_end" style="width:62px;font-size:11px;padding:3px 5px;text-align:center${(!s.start&&!s.end)?';background:#fffbeb;border-color:#fcd34d':''}"
                value="${esc(s.end||'')}" placeholder="end" onchange="setShiftTime('${esc(id)}','end',this.value,this)">
       </span>
-      <span style="font-size:10.5px;min-width:118px;color:${s.timesProvisional?'#92400e':'var(--t2)'}">${
+      <span id="dur_${esc(id)}" style="font-size:10.5px;min-width:118px;color:${s.timesProvisional?'#92400e':'var(--t2)'}">${
         (s.start&&s.end)
           ? (s.timesProvisional?'⚠ provisional · ':'')+esc(fmtDur(shiftMinutes(s.start,s.end)))+(crossesMidnight(s.start,s.end)?' ⏰':'')
           : (s.start||s.end) ? '<span style="color:#b91c1c">half set</span>'
@@ -2626,6 +2992,7 @@ function renderCatalog(){
         <input type="checkbox" ${s.timesProvisional?'checked':''} onchange="setShiftProvisional('${esc(id)}',this.checked)">?
       </label>
       <select class="sel" style="font-size:11px${s.site?'':';background:#fffbeb;border-color:#fcd34d'}" title="Site (§18 — one site per person per day)" onchange="setShiftSite('${esc(id)}',this.value)">${siteOptionsHtml(s.site||'')}</select>
+      <button class="btn btn-ghost" style="font-size:11px${demandRules(s).length?'':';color:#92400e'}" title="Which days this shift runs, and how many people it needs" onclick="openDemand('${esc(id)}')">📅 ${demandRules(s).length?esc(demandRules(s).length+' rule'+(demandRules(s).length===1?'':'s')):'no demand'}</button>
       <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:3px" title="How many people can hold this shift on the same day">👥
         <input type="number" class="inp" style="width:48px;font-size:11px;padding:3px 4px" value="${s.capacity||1}" min="1" max="20" step="1" onchange="setShiftCapacity('${esc(id)}',this.value)">
       </label>
@@ -2638,7 +3005,10 @@ function renderCatalog(){
       </select>
       <span style="margin-left:auto"><button class="btn btn-ghost" style="font-size:11px;color:var(--red)" onclick="delShift('${esc(id)}')">Delete</button></span>
     </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No shifts yet — add one above.</div>';
+  renderCatSummary();
   renderCatFamilyOptions();
+  renderHolidays();
+  if(dmShift) renderDemand();
   const ss=document.getElementById('catSite');
   if(ss){ const keep=ss.value; ss.innerHTML=siteOptionsHtml(''); if(keep) ss.value=keep; }
 }
@@ -2690,20 +3060,20 @@ window.addShift=async function(){
   const color=family?(catalog.families?.[family]?.color||PALETTE[0]):(document.getElementById('catColor').value||PALETTE[0]);
   const capacity=Math.max(1,Math.min(20,parseInt(document.getElementById('catCapacity').value,10)||1));
   if(catLockedRefuse()) return;
-  if(!label){ alert('Enter a label.'); return; }
+  if(!label){ schedToast('Give the shift a label first','err'); return; }
   const ps=parseHHMM(document.getElementById('catStart').value);
   const pe=parseHHMM(document.getElementById('catEnd').value);
-  if(!ps.ok){ alert(ps.why); return; }
-  if(!pe.ok){ alert(pe.why); return; }
+  if(!ps.ok){ schedToast(ps.why,'err'); return; }
+  if(!pe.ok){ schedToast(pe.why,'err'); return; }
   const start=ps.val, end=pe.val;
-  // Half a time is worse than none: it looks set and reasons like blank. Say so up front
-  // rather than storing it and letting something downstream quietly ignore it.
-  if((start?1:0)+(end?1:0)===1 && !confirm('Only the '+(start?'start':'end')+' time is filled in.\n\n'
-    +'A shift with half a time counts as having none — nothing can work out how long it runs.\n\nAdd it anyway?')) return;
+  // [55] NO CONFIRMATION for a half-set time. Owner, 16 Aug: "just track missing settings at
+  // the top, don't block me from entering." A half-set shift is still worth knowing about —
+  // it looks finished and reasons like blank — so it is COUNTED in the summary and flagged
+  // on its own row, and never put in the way of the next keystroke.
   const timesProvisional=!!document.getElementById('catProvisional').checked;
   const site=document.getElementById('catSite').value||'';
   const id=label.toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('S'+Date.now());
-  if(catalog.shifts?.[id]){ alert('A shift with this label already exists.'); return; }
+  if(catalog.shifts?.[id]){ schedToast('A shift called "'+label+'" already exists','err'); return; }
   const order=Math.max(0,...Object.values(catalog.shifts||{}).map(s=>s.order??0))+1;
   await mergeFields(catalogRef,{['shifts.'+id]:{label,kind,color,family,role,order,capacity,start,end,timesProvisional,site}});
   auditLog('shift.add','Added shift "'+label+'" ('+id+')'
