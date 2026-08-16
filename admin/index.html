@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 59;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 60;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -1735,21 +1735,29 @@ async function windowShiftCounts(endYm, priorMonths, cache){
 // schedule and every user sees the result at once.
 // In memory on purpose, so it disarms on reload rather than remembering an unlock — same
 // reasoning as the Users-page lock in build 50.
-let rehearsalOn=false;
+// [60] Armed by default. §45 made the simulator a testing tool; gating a testing tool
+// behind a switch you must find first is friction with no payoff this far from real use.
+// The CONFIRMATION on Clear Month stays — that is not a lock, it is a question, and it is
+// the thing that actually stops an accidental wipe.
+let rehearsalOn=true, _rehearsalArmedBy=null;
 function renderRehearsal(){
   const bar=document.getElementById('rehearseBanner'), btns=document.getElementById('rehearseBtns');
   if(!btns) return;
   if(bar){
     bar.style.display=rehearsalOn?'block':'none';
-    bar.innerHTML='🎭 <b>REHEARSAL MODE IS ON.</b> Auto-populate and Clear Month are unlocked. '
+    // [60] The warning is the point and it STAYS. What changed is that it no longer has
+    // to be switched on first — the danger it names is unchanged, so the words are too.
+    bar.innerHTML='🎭 <b>REHEARSAL MODE IS ON.</b> Auto-populate and Clear Month are available. '
       +'This is <b>not</b> a sandbox — everything writes the real schedule and staff see it immediately. '
-      +'Turn it off when you have finished testing.';
+      +'Clear Month has no undo. Turn it off if you want them out of reach.';
   }
   btns.innerHTML = rehearsalOn
     ? '<button class="btn btn-primary" onclick="setRehearsal(false)">Turn rehearsal mode OFF</button>'
-      +'<span style="font-size:11.5px;color:var(--t2)">Unlocked by '+esc(_currentAdminEmail||'you')+'. It turns itself off when you reload.</span>'
+      +'<span style="font-size:11.5px;color:var(--t2)">'
+      +(_rehearsalArmedBy?('Turned on by '+esc(_rehearsalArmedBy)+'.'):'On by default while the site is being built.')
+      +' Reloading puts it back to on.</span>'
     : '<button class="btn" onclick="setRehearsal(true)">Turn rehearsal mode ON</button>'
-      +'<span style="font-size:11.5px;color:var(--t2)">The tools below refuse until this is on.</span>';
+      +'<span style="font-size:11.5px;color:var(--t2)">You turned it off. The tools below refuse until it is back on; reloading also turns it back on.</span>';
   const dim=x=>{ const e=document.getElementById(x); if(e) e.className='card'+(rehearsalOn?'':' pagelocked'); };
   dim('simTools'); dim('simDanger');
 }
@@ -1759,7 +1767,7 @@ window.setRehearsal=function(v){
     +'This is NOT a sandbox. Everything they do writes the REAL schedule for this site, and '
     +'staff see the result immediately. Clear Month has no undo.\n\n'
     +'It turns itself off when you reload the page.')) return;
-  rehearsalOn=!!v;
+  rehearsalOn=!!v; _rehearsalArmedBy=v?(_currentAdminEmail||'you'):null;
   auditLog('rehearsal.'+(v?'on':'off'),'Rehearsal mode turned '+(v?'ON — auto-populate and Clear Month unlocked':'off'));
   renderRehearsal();
 };
@@ -2420,7 +2428,27 @@ window.saveSchedUser=async function(u){
 // Brief floating confirmation for the per-field / batch saves below.
 // ══ Users page lock [build 50] ══════════════════════════════════════════════
 // In-memory on purpose: locked on every load, so a reload always relocks (§20).
-let usersLocked=true;
+// [60] The config pages now OPEN UNLOCKED. Owner ruling, 16 Aug: "The locking of all
+// settings is annoying and unnecessary right now. We are many months away from this being
+// used and there's plenty of time to fix any errors that occur."
+//
+// That reasoning is sound for SCHEDULE-ONLY settings, and the Shift Catalog, the Report
+// settings and the Simulator gate are now open by default.
+//
+// It does NOT hold for the USERS page, which is why that one is still locked. This page is
+// the single sanctioned exception to the cardinal rule — it writes the roster the LIVE
+// Vacation Auction reads. A mistake here does not wait months to matter; it lands on an
+// auction that is running today. Left locked deliberately, not by oversight. Ask the owner
+// before changing it.
+//
+// Honest wording: a bar that is open BY DEFAULT must not claim a person unlocked it, so the
+// locks record WHO opened them and the bar says "open by default" when nobody did.
+function openedBy(who){
+  return who
+    ? '<span class="who">unlocked by '+esc(who)+'</span>'
+    : '<span class="who">open by default while the site is being built</span>';
+}
+let usersLocked=true, usersOpenedBy=null;
 function renderUsersLock(){
   const bar=document.getElementById('usersLockBar'); if(!bar) return;
   const box=document.getElementById('usersLockable');
@@ -2429,7 +2457,7 @@ function renderUsersLock(){
     ? '🔒 <b>This page is locked</b> — read-only. It writes to the LIVE Vacation Auction roster, so it opens locked every time.'
       +'<span style="flex:1"></span><button class="btn" style="font-size:12px;padding:4px 10px" onclick="askUnlockUsers()">Unlock this page</button>'
     : '🔓 <b>Users unlocked — changes reach the Vacation Auction.</b>'
-      +'<span class="who">unlocked by '+esc(_currentAdminEmail||'you')+'</span>'
+      +openedBy(usersOpenedBy)
       +'<span style="flex:1"></span><button class="btn btn-primary" style="font-size:12px;padding:4px 10px" onclick="relockUsers()">Lock this page</button>';
   if(box) box.className = usersLocked?'pagelocked':'';
 }
@@ -2439,11 +2467,11 @@ window.askUnlockUsers=function(){
     +'  • Saving a login e-mail rebuilds the auction\'s bid-security map\n\n'
     +'The Vacation Auction runs all year, so there is no safe window. Unlock only when you actually intend to change the roster.\n\n'
     +'It relocks when you lock it or reload the page. The unlock is recorded in the audit log.')) return;
-  usersLocked=false;
+  usersLocked=false; usersOpenedBy=_currentAdminEmail||'you';
   auditLog('users.unlock','Unlocked the Users page for editing (writes reach the Vacation Auction roster)');
   renderUsersLock();
 };
-window.relockUsers=function(){ usersLocked=true; renderUsersLock(); };
+window.relockUsers=function(){ usersLocked=true; usersOpenedBy=null; renderUsersLock(); };
 // Defence in depth: the handlers refuse regardless of what the DOM looks like.
 function usersLockedRefuse(){
   if(!usersLocked) return false;
@@ -2982,7 +3010,8 @@ window.onCatTimePreview=function(){
 
 // ── Page lock ── §20: config pages open LOCKED, and unlocking is what puts the page into
 // batch-editing mode. The Shift Catalog is on §20's list; it never got its switch until now.
-let catLocked=true;
+// [60] Open by default — schedule-only configuration, months from real use.
+let catLocked=false, catOpenedBy=null;
 function renderCatLock(){
   const bar=document.getElementById('catLockBar'); if(!bar) return;
   const box=document.getElementById('catLockable');
@@ -2991,15 +3020,15 @@ function renderCatLock(){
     ? '🔒 <b>The catalog is locked</b> — read-only. Shifts, times and capacities are rarely-changed configuration (§12).'
       +'<span style="flex:1"></span><button class="btn" style="font-size:12px;padding:4px 10px" onclick="unlockCatalog()">Unlock to edit</button>'
     : '🔓 <b>Catalog unlocked.</b> Times you set here feed the rules, the compatibility check and the engine.'
-      +'<span class="who">unlocked by '+esc(_currentAdminEmail||'you')+'</span>'
+      +openedBy(catOpenedBy)
       +'<span style="flex:1"></span><button class="btn btn-primary" style="font-size:12px;padding:4px 10px" onclick="relockCatalog()">Lock</button>';
   if(box) box.className = catLocked?'pagelocked':'';
 }
 window.unlockCatalog=function(){
   if(!confirm('Unlock the Shift Catalog?\n\nIt stays open until you lock it or reload the page.')) return;
-  catLocked=false; auditLog('catalog.unlock','Unlocked the Shift Catalog for editing'); renderCatLock();
+  catLocked=false; catOpenedBy=_currentAdminEmail||'you'; auditLog('catalog.unlock','Unlocked the Shift Catalog for editing'); renderCatLock();
 };
-window.relockCatalog=function(){ catLocked=true; renderCatLock(); };
+window.relockCatalog=function(){ catLocked=true; catOpenedBy=null; renderCatLock(); };
 function catLockedRefuse(){
   if(!catLocked) return false;
   schedToast('The Shift Catalog is locked — unlock it first','err');
@@ -4051,7 +4080,8 @@ function compWorking(u){ return compDraft ? compDraft[u]!==false : inCompPool(u)
 // ── Page lock ── §20 gives each admin page one master switch. Reports was not on that
 // list because it did not exist. Running a report is read-only and never needs unlocking;
 // the switch covers the two settings above, which are configuration.
-let reportsLocked=true;
+// [60] Open by default — schedule-only configuration.
+let reportsLocked=false, reportsOpenedBy=null;
 function renderReportsLock(){
   const bar=document.getElementById('reportsLockBar'); if(!bar) return;
   const box=document.getElementById('reportsLockable');
@@ -4060,7 +4090,7 @@ function renderReportsLock(){
     ? '🔒 <b>Report settings are locked</b> — running a report never needs unlocking. Unlock only to change which shifts count as overnight call, or who counts toward the comparison.'
       +'<span style="flex:1"></span><button class="btn" style="font-size:12px;padding:4px 10px" onclick="unlockReports()">Unlock settings</button>'
     : '🔓 <b>Report settings unlocked.</b> Changing these changes every report from now on.'
-      +'<span class="who">unlocked by '+esc(_currentAdminEmail||'you')+'</span>'
+      +openedBy(reportsOpenedBy)
       +'<span style="flex:1"></span><button class="btn btn-primary" style="font-size:12px;padding:4px 10px" onclick="relockReports()">Lock settings</button>';
   if(box) box.className = reportsLocked?'pagelocked':'';
 }
@@ -4070,11 +4100,11 @@ window.unlockReports=function(){
     +'  • who counts toward the group comparison\n\n'
     +'Changing them changes every report produced afterwards. Nothing already printed changes.\n\n'
     +'They relock when you lock them or reload the page.')) return;
-  reportsLocked=false;
+  reportsLocked=false; reportsOpenedBy=_currentAdminEmail||'you';
   auditLog('reports.unlock','Unlocked the Reports settings (overnight-call list and comparison pool)');
   renderReportsLock();
 };
-window.relockReports=function(){ reportsLocked=true; ocDraft=null; compDraft=null; renderReports(); };
+window.relockReports=function(){ reportsLocked=true; reportsOpenedBy=null; ocDraft=null; compDraft=null; renderReports(); };
 function reportsLockedRefuse(){
   if(!reportsLocked) return false;
   schedToast('Report settings are locked — unlock them first','err');

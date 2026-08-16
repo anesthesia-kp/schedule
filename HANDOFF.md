@@ -363,6 +363,9 @@ owner's machine — `node run-all.mjs` (auction) and `node sched/run-all.mjs` (s
 
 ## Working discipline — binding
 
+**File hygiene is one of these rules** — outdated files are archived, never left to
+pile up and never deleted. Full procedure in the FILE HYGIENE section below.
+
 * **The owner does every git push.** Claude files to the working tree and byte-verifies
   (md5 device vs cloud); the owner commits and pushes in GitHub Desktop.
 * Never deploy. Never write to production Firebase.
@@ -438,50 +441,88 @@ cardinal rule does not relax while it is quiet.
 
 ---
 
-## FILE HYGIENE — `_archive/`, and the .gitignore trap (16 Aug)
+## COMMIT SUMMARIES — one per build, PER REPO, and SHORT
 
-The owner asked that obsolete files stop piling up in `~/Documents/GitHub`, and that
-nothing be destroyed: *"placed into a to delete folder or archive folder for when a file
-might be useful in the future."*
+Owner ruling, 16 Aug 2026, after finding several commits had lost their message:
+*"ensure going forward and in the handoff docs that commit summaries are always provided
+for every build and for every repo. These summaries would be better to be short and
+concise, just so i recognize them, nothing more."*
 
-**`~/Documents/GitHub/_archive/`** is the answer. It sits **outside every repo**, so
-GitHub never serves it and GitHub Desktop never shows it, but every byte is still on
-disk. `_archive/README.md` lists what moved, what stayed, and why. Read it before
-archiving anything else.
+**Binding, both sites:**
 
-**The test that decides.** A file moves only after grepping the whole GitHub folder and
-confirming no live page, no test suite, and no current handoff document reads it. If
-unsure, it stays. Three things looked like junk and were kept: `0c0fd0a8….html`
-(schedule), `2nd-admin-page-234asld.html` and `a5696c46….html` (auction) are **live
-redirects for old admin URLs**, not hash junk — my first guess that they were Google
-verification files was wrong.
+1. **Every repo touched by a push gets its own summary.** If a build changes `schedule/`
+   and `tests/`, that is TWO summaries, not one. Same for the auction and its tests.
+   A repo with no message is not ready to hand over.
 
-**Worth knowing about the auction repo:** it is a public GitHub Pages site, so
-`build265-staged/` … `build267-staged/` were *serving* three superseded copies of the
-admin console at guessable live URLs. Archiving them took those URLs off the internet.
-`build268-staged/` and `build269-staged/` stay — 269 is live.
+2. **SHORT.** A subject line the owner can recognise at a glance, then two to four lines
+   of plain description. Not the essay. The reasoning belongs in `BUILD-LOG.md`,
+   `DECISIONS.md` and `HANDOFF.md` — all committed, none of them lost to a mis-paste.
 
-### ⚠️ THE TRAP: `.gitignore` does not apply to files git already tracks
+3. **The shape:**
 
-The `schedule` repo had **no `.gitignore` at all**, so seven `.claude-commit-msg*.txt`
-files and `.DS_Store` had been committed to a public repo. Adding the rule does **not**
-untrack them. Worse: writing a fresh file at a tracked path turns a clean deletion into a
-modification, and the cleanup silently does not happen — which is exactly what happened
-here on the first attempt.
+   ```
+   Build 61 (admin) — approval now runs the same checks as hand-editing
 
-`git rm --cached` would fix it, but **the bridge must never mutate a git index** (see the
-lock-file section above). The workaround that needs no git command:
+   Request and swap approval were writing assignments with no eligibility,
+   capacity, vacation or collision check. They now use the same checker the
+   cell editor uses: it warns, you can override, the override is logged.
 
-1. leave the tracked path **absent** so it stays `D` in the owner's commit;
-2. write this build's message to a name that is *not* tracked and *is* matched by the new
-   rule — `.claude-commit-msg-hk.txt`;
-3. after the owner commits, the path is untracked, `.gitignore` takes over, and the normal
-   `.claude-commit-msg.txt` is safe again.
+   Closes defect 1. DECISIONS §51. Battery: 13 suites, 542 assertions, green.
+   Detail: BUILD-LOG.md.
+   ```
 
-Always verify with `git --no-optional-locks -C <repo> check-ignore -v <file>`. It prints
-the rule and line number that matched; silence with exit 1 means **not** ignored.
+4. **Where it goes:** `<repo>/.claude-commit-msg.txt`, one per repo, overwritten each
+   build. It is gitignored, so it never appears in GitHub Desktop's changed-files list —
+   open it from Finder. **Copy from THAT file**, not from a source or test file; pasting
+   a test file is exactly how builds 59's and seven of the tests repo's messages were lost.
 
----
+5. **`BUILD-LOG.md` gets its row in the same breath as the code**, so that even a
+   mis-pasted commit message costs nothing. That file is the durable record; the commit
+   message only has to be recognisable.
+
+## FILE HYGIENE — a STANDING RULE, not a one-off tidy-up
+
+The owner's instruction, 16 Aug 2026: *"As files in my github folder pile up, I would like
+to remain organized and remove old files. Please ensure that all obsolete files are placed
+into a to delete folder or archive folder for when a file might be useful in the future."*
+
+That applies to **every future session, in every repo.** It is not a task that was done
+once; it is how this folder is kept.
+
+**Where things go.** The main folders hold only what is live or in flight. Anything
+outdated moves to `~/Documents/GitHub/_archive/<repo>/<category>/`, which sits OUTSIDE
+every repo — so GitHub never serves it and GitHub Desktop never shows it, while every byte
+stays on disk. True junk (`.DS_Store` and the like) goes to `_to_delete/`. **Nothing is
+ever deleted.** "Archive" is the default; "delete" is only for machine-generated litter.
+
+**The test, before moving anything.** Grep the WHOLE GitHub folder and move a file only
+after confirming that no live page, no test suite, and no current handoff/TODO reads it.
+**If you are unsure, it stays.** Being wrong costs a broken URL or a red battery; leaving
+one extra file costs nothing.
+
+**Never move** anything the live site serves. Be careful with files whose names look like
+junk hashes — `0c0fd0a8….html` (schedule), `2nd-admin-page-234asld.html` and
+`a5696c46….html` (auction) are **live redirects for old admin URLs**, not litter. Open one
+and read its `<title>` before assuming. That guess was made wrong once already.
+
+**Record every move** in `_archive/README.md`: what moved, where to, why, and — just as
+important — what was deliberately KEPT and the reason. That file is the inventory; this
+rule is the procedure. Do not duplicate one into the other.
+
+**Scratch files must be gitignored, never committed.** `.claude-commit-msg*.txt`,
+`.DS_Store`, staged build folders. ⚠️ **`.gitignore` does NOT apply to files git already
+tracks.** Adding the rule is not enough: the tracked path must be **absent** in that commit
+for the removal to land, so write that build's message to a name that is not yet tracked
+(e.g. `.claude-commit-msg-hk.txt`). Writing the usual name recreates the tracked file and
+turns a clean deletion into a modification — the cleanup then silently does not happen.
+Verify with `git --no-optional-locks -C <repo> check-ignore -v <file>`; it prints the rule
+and line that matched, and silence means NOT ignored.
+
+**Housekeeping is its own commit**, never mixed into a build, so the diff stays readable.
+Prove it before handing it over: `git diff --stat` should show ~1 insertion and no modified
+application code, and every deleted file should hash-match its archived copy.
+
+**The device bridge cannot delete** — `rm` fails with "Operation not permitted". Use `mv`.
 
 ## Build 59 / 28 — FILED, NOT PUSHED — one document per DAY (§47)
 
@@ -546,9 +587,20 @@ print the diff gzip+base64 in ~12 KB chunks, and reassemble — verify with md5 
 step. A single large blob printed through `device_bash` LOSES BYTES; a 29 KB one arrived
 386 bytes short. Chunk it and check it.
 
+## Build 60 — FILED, NOT PUSHED — the config locks open by default (§50)
+
+Shift Catalog, Report settings and Simulator now OPEN/ARMED on load. **The Users page and
+the unconverted-month guard were deliberately NOT opened** — §50a says why, `build60-test`
+pins it, and the source carries the reason inline. Do not "finish the job" by opening them.
+
+Battery: **13 suites, 515 assertions, green.** Five suites had ASSERTIONS rewritten (51, 53,
+54, 56, 57) because they encoded the old default; each keeps its protective property by
+re-locking and proving the handler refusal still works, and each honesty check was re-run
+against its own predecessor (50, 52, 53, 55, 56) and still fails. Nothing is owed.
+
 ## Next actions, in order
 
-1. **Owner pushes build 59/28 + the housekeeping** (both are in the same commit; message
+1. **Owner pushes build 59/28 + 60 + the housekeeping** (both are in the same commit; message
    at `schedule/.claude-commit-msg-59.txt` and `tests/.claude-commit-msg-59.txt`), and the
    auction repo's housekeeping-only commit (`vacation-kp.github.io/.claude-commit-msg.txt`).
 2. **Run the AUCTION battery on the owner's machine** — 14 suites. Build 59 changed the

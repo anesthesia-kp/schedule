@@ -284,3 +284,32 @@ worked example of why that matters.
 
 The standard: every claim executed, every fix honesty-proven, every guess labelled as a
 guess, the owner's authority absolute.
+
+---
+
+## Housekeeping is a standing duty, not a favour
+
+The owner asked (16 Aug) that outdated files never pile up in `~/Documents/GitHub`.
+Obsolete files go to `_archive/<repo>/…` — outside every repo, nothing ever deleted —
+and true junk to `_to_delete/`. Before moving anything, grep the whole GitHub folder and
+move it only if no live page, no test suite and no current handoff reads it; **if unsure,
+it stays.** Some files that look like junk hashes are LIVE REDIRECTS — check the `<title>`.
+Log every move in `_archive/README.md`.
+
+⚠️ `.gitignore` does not apply to files git already tracks — the tracked path must be
+ABSENT in the commit for a removal to land.
+
+**Full procedure: the FILE HYGIENE section of `HANDOFF.md`. Read it before archiving
+anything.**
+
+---
+
+## COMMIT SUMMARIES — binding
+
+**Every repo** touched by a push gets its **own** summary — schedule and tests are two
+summaries, not one. Keep them **SHORT**: a recognisable subject line plus two to four
+lines. The reasoning goes in `BUILD-LOG.md` / `DECISIONS.md` / `HANDOFF.md`, which are
+committed and cannot be lost.
+
+Write it to `<repo>/.claude-commit-msg.txt` (gitignored — open it from Finder) and add the
+build's row to `BUILD-LOG.md` at the same time. Full procedure in the handoff.

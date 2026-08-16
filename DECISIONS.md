@@ -822,3 +822,38 @@ Also settled here: **Clear Month must write the v2 marker alongside the deletion
 Without it, clearing empties the day records, the reader falls back to the old document,
 and every assignment just cleared comes back. That is a general shape worth remembering —
 whenever "empty" and "look somewhere else" are both possible, something must say which.
+
+---
+
+## §50 — The config locks open by default. Two do not.
+
+Owner, 16 Aug 2026: *"The locking of all settings is annoying and unnecessary right now. We
+are many months away from this being used and there's plenty of time to fix any errors that
+occur. For now, make it so that all the locks on the schedule site for editing are
+unlocked. we can change later."*
+
+Built as build 60. **OPEN by default:** the Shift Catalog, the Report settings, the
+Simulator. All three are schedule-only configuration, and the owner's reasoning holds
+exactly: a mistake has months to surface before anyone depends on it. §20 is superseded for
+the DEFAULT only.
+
+**§50a — TWO were deliberately NOT opened, and Claude said so rather than doing as asked.**
+
+**The Users page stays locked.** It is the single sanctioned exception to the cardinal rule:
+it writes the roster the LIVE Vacation Auction reads. Removing a user takes them off the
+auction; saving a login e-mail rebuilds the auction's bid-security map. The owner's
+reasoning — errors have months to surface — is TRUE of the schedule and FALSE here, because
+the auction is running today. This is the cardinal rule, not a preference. It can be opened
+on request; it will not be opened by inference from a sentence about schedule settings.
+
+**The unconverted-month guard stays.** It is not a settings lock. It stops one month
+existing in two storage formats at once (§47a), which is silent corruption rather than a
+recoverable error, and Convert is one click away — so opening it buys no convenience at all.
+
+**§50b — What was never the annoying part, and stays.** Confirmations are not locks.
+Clear Month still asks. The simulator still says it is not a sandbox. Hand-editing still
+warns and records overrides. Removing a *question* was not what was asked for.
+
+**§50c — An open-by-default bar must not claim someone opened it.** Each lock records WHO
+opened it; the bar says "open by default while the site is being built" when nobody did.
+A convenience default that fabricates an audit trail would be worse than the friction.
