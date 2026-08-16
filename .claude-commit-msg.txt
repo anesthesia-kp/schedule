@@ -1,149 +1,143 @@
-Build 51 (admin) — Reports: per-doctor shift counts, dated call list, FTE-adjusted comparison
+Build 52 / 27 — THE ASSIGNMENT MODEL: a list per person per day. Closes defect 2.
 
-Stage 9. Admin only. Staff page untouched, so staff stays 26.
-No firestore.rules change, so NO Firebase console step.
+Stage 3. Both pages. No firestore.rules change, so NO Firebase console step.
 
-WHAT IT DOES
+THE RULING THIS SATISFIES
 
-  Per doctor, for a day / month / quarter / year / custom range:
+  DECISIONS §8, the owner, 15 Aug:
+    "People can definitely have 2 daytime shifts. No shift can ever just be replaced.
+     Good to have the warning, but some day shifts are compatible together."
 
-  1. How many of each shift they did, with OVERNIGHT CALL AT THE TOP, each line
-     carrying what they were expected to do at their own FTE and the difference,
-     plus subtotals for all overnight call and for all shifts.
-  2. A dated list of every overnight call in the period — a list, not a count.
-  3. A comparison with the group, adjusted for FTE, with the method printed on
-     the page.
+WHAT WAS WRONG
 
-  Producible for one doctor or for every doctor in one page-broken document.
-  Opens in its own tab, or prints, or exports to a styled .xlsx.
+  A cell was {day, call, off} — two slots and a flag. That is not a storage detail; it is
+  a rule about the world, and it was the wrong rule. A person could hold at most one day
+  shift, because the second one deleted the first.
 
-THE OVERNIGHT-CALL TAG — the first admin-defined tag (DECISIONS §25, §27)
+  Defect 2 in the actual code. Approving a shift request did this:
 
-  Seeded with the owner's own three: Call 16, Call 24, OB PM. NEVER derived, and
-  the test suite proves it behaviourally rather than by inspection: the fixture
-  catalog deliberately contains RCH-ICU B (19:30-07:30, crosses midnight) and
-  Eye Call (07:30-15:30, in the call family), and asserts that neither is ticked.
+      patch = { ...cur, day:null, call:null, off:false, [kind]: r.shiftId }
 
-  Nothing is written on page load. With no tag document saved, reports use the
-  owner's starting set and the page says plainly that it is not saved yet. This
-  avoids repeating defect 24 — a one-shot self-marking seeding migration that
-  makes later edits to the source constants have no effect.
+  It cleared BOTH slots and set one. If the person already held a day shift it was gone —
+  no warning, no confirmation, and NOTHING IN THE AUDIT LOG naming what was taken away.
+  They were told their call request was approved; they were not told they had been taken
+  off their day shift, and nobody was covering it. The same shape appeared in the swap
+  apply and in auto-populate.
 
-THE COMPARISON POOL (§35) — and why it is NOT on the Users page
+THE NEW SHAPE
 
-  §29 excludes per diem and locums from the group average and requires the report
-  to name who was excluded. Neither was answerable: there is no per-diem or locum
-  data anywhere on either page. Groups are stage 4 and not built.
+  days[DD][user] = { a:[{s, by, at, via}], off }
 
-  So each person carries a "counts toward comparisons" flag, defaulting ON, with
-  only the exclusions stored — an untouched roster is entirely in the pool and a
-  new hire needs no write at all.
+  `a` IS THE TRUTH WHENEVER PRESENT. The legacy day/call pair is read only for cells
+  written before this build and is NEVER merged with `a` — two sources for one answer is
+  what §19 warns about, and it is how the eligibility grid nearly went wrong.
 
-  Ruling §35 as first written put that flag on the Users page. It is on the
-  REPORTS page instead, with the owner's approval: the Users panel is the one
-  place on this site that writes the LIVE Vacation Auction roster, and it opens
-  locked for exactly that reason. A schedule-only report setting must never be a
-  reason to unlock it.
+  `via` is one of manual · auto · request · swap · open · legacy. It answers the question
+  people actually ask — "who put me on that?" — and it is what the per-person change feed
+  (§6, stage 7) will be built from.
 
-NO FTE MEANS NO GUESS (§36)
+THERE IS NO MIGRATION
 
-  FTE is optional by design — "no default on this site, ever". A doctor with no
-  FTE gets their full report and dated call list, but no expected figure, and
-  their block says so in plain words. They do not enter the pool and do not
-  affect anyone else's rate. A blank FTE is never quietly treated as 1.0.
+  No mass rewrite, no one-shot self-marking migration, and no moment where the app is half
+  converted. Defect 24 is the standing warning: the v2 catalog seeding marked itself done,
+  so editing the source constants afterwards has no effect on an already-seeded database.
+  That pattern is not repeated.
 
-THE CALL BASELINE IS KEPT OUT OF DATED REPORTS (§37)
+  Instead: ONE NORMALISER, used by every reader. Old months keep working for ever,
+  unread and unrewritten. A cell converts the first time somebody actually changes it, in
+  the same write that changes it, dropping day/call at that moment.
 
-  dailysched/callBaseline is one undated lump per person per shift that decays
-  over twelve months. It cannot be apportioned to a chosen period, and it makes
-  the same August report give a different answer each month it is run.
+  Roughly twenty read sites were routed through it: the grid, both Stats modes,
+  windowShiftCounts, both auto-populate paths, the capacity check, request and swap
+  approval, dashCoverage, the Reports collector from build 51, and the staff page's
+  personal calendar and Quick View.
 
-  Period reports are therefore pure schedule data and say so. A separate
-  "last 12 months — fairness view" is the one place the baseline appears, showing
-  exactly what auto-populate sees, stating the _asOf stamp and the weight
-  currently applied, and warning that it is not a dated report.
+THREE WRITERS, AND NONE OF THEM IS "REPLACE"
 
-AN UNREADABLE MONTH IS STATED, NEVER SILENTLY ZERO
+  addCellShift  — appends. Never removes anything.
+  removeCellShift — removes the shift you named, and nothing else.
+  setCellOff    — sets the flag. Touches no shifts.
 
-  A month that fails to read is collected and named in red at the top of the
-  report, which marks every number below it incomplete. Quietly treating it as
-  empty would print "3 overnight calls" for someone who did nine, with nothing
-  on the page to hint at it.
+  All three run inside a transaction against the FRESH cell, so two admins editing the same
+  day can no longer lose each other's change — the old whole-cell mergeFields write had
+  exactly that hole. Replacing is now remove-then-add, said out loud in one confirmation
+  (§3), rather than an implicit consequence of a dropdown changing value.
 
-EXCEL (§32)
+THE DAY CELL
 
-  Same library, same version and the same construction as the auction's
-  exportUserSummary — title row, coloured scope row, timestamp, navy per-person
-  banners, bordered and colour-coded cells, auto-sized columns, merged banner
-  rows with computed heights, and the identical CSV fallback when the library is
-  unavailable.
+  Two dropdowns became a list with an Add button. Each held shift shows where it came from
+  and has its own named Remove. Adding confirms and promises in words that nothing already
+  there will be removed. Marking someone off warns that it does NOT clear their shifts.
+  Every action applies on its own and is audited by name, so there is no batch of unsaved
+  edits for an incoming snapshot to destroy (cf. defect 12).
 
-  The library is fetched only when Excel is actually pressed, NOT in a script tag
-  at page load as the auction does it. The eligibility suite caught the first
-  cut: a script tag logs a console error on every page load when the CDN is
-  unreachable, and that suite asserts zero console errors. The assertion was not
-  loosened to accommodate the change; the page keeps the zero network
-  dependencies it had.
+REQUEST APPROVAL, REWRITTEN
 
-REPORT_CSS is lifted from the auction admin page VERBATIM, including its internal
-comment. The schedule-only classes are appended below a marked divider rather
-than edited into the lifted block, and the suite asserts every auction line is
-present byte for byte.
+  · shift / claim — ADDS. Removes nothing. The off flag is cleared (leaving someone both
+    off and assigned helps nobody) and the audit entry says that it was.
+  · dayoff — removes their shifts, because that is what the request MEANS, but names every
+    one of them in the audit log. That naming is precisely what defect 2 never did.
+  · nocall — now points at the OVERNIGHT-CALL TAG (§27), the list the admin set, instead of
+    "whatever sat in the call slot". Same correction §25 made everywhere else. Eye Call is
+    the reason: it is in the call family, runs 07:30-15:30, and SURVIVES a no-call request.
+
+SWAPS
+
+  A leg now moves the actual shifts the giver holds of the named kind — add to the
+  receiver, then remove from the giver, two named operations. The old version copied a slot
+  wholesale, which overwrote whatever the receiver already had in it. Whatever either side
+  holds of the OTHER kind is now left alone.
+
+AUTO-POPULATE — POLICY DELIBERATELY UNCHANGED
+
+  One shift of each kind per person per day, exactly as before. This build changes how
+  assignments are STORED, not who gets what; mixing a data-model change with a
+  scheduling-policy change would make any regression impossible to attribute. Whether
+  auto-populate should stack shifts is a rules question and belongs to stage 5.
 
 CARDINAL RULE — no schedule work may degrade the live Vacation Auction
 
-  · sched/isolation-test.mjs — 27/27 on 51, and 27/27 on 50. ZERO new write paths
-    to any vacations/* document. The two new documents are dailysched/tags and
-    dailysched/compPool, both this site's own.
-  · FTE independence — 5/5. dailysched/fteMap stays the schedule's own (§2).
-  · AUCTION battery, run on the owner's machine — 14 suites, 1074 assertions,
-    green. Same numbers as before this change.
-  · test-audit-fixes.mjs — 333/333. That is the auction suite that reaches into
-    this page and extracts saveSchedField, and it is where build 50 went red.
+  · sched/isolation-test.mjs — 27/27. Zero new write paths to any vacations/* document.
+  · FTE independence — 5/5.
+  · AUCTION battery, on the owner's machine — 14 suites, 1074 assertions, green.
+
+  WORTH RECORDING: the auction battery went RED before it was fixed, for the second time
+  on a schedule-only change. test-audit-fixes.mjs is an auction suite that reads the
+  SCHEDULE admin page and pins the order of operations in decideReq — the open-shift claim
+  transaction must run BEFORE anything reaches the schedule, and a lost race must return
+  before any write. That property is still true; the suite anchored it on the literal
+  string "if(patch) await mergeFields", which this build replaced with mutateCell(). The
+  ANCHOR was updated. The assertion was not weakened. Nothing in production was affected —
+  but it is the second live example of the two sites touching, and it is why the auction
+  battery runs after every schedule change and not only the ones that look shared.
 
 GATES
 
-  · sched/build51-test.mjs — 88/88, three consecutive runs, both the settings and
-    the reports driven in a real browser against an in-memory Firestore that
-    records every write.
-  · Honesty check — the same suite against build 50 scores 14 pass / 66 fail.
-    A suite that passes on the pre-fix bytes proves nothing.
-  · sched/elig-test.mjs — 33/33 on these bytes, and 33/33 on build 50 as a
-    control, so 51 breaks nothing that 49 shipped.
+  · sched/build52-test.mjs — 49/49, three consecutive runs, both pages driven in a real
+    browser against an in-memory Firestore that records every write.
+  · Honesty check — the same suite against build 51/26 scores 4 pass / 39 fail. The
+    centrepiece assertion, "D10 SURVIVED the approval", is one of the failures, which is
+    the entire point of running it.
+  · sched/build50-test.mjs 37/37 · sched/build51-test.mjs 88/88 · sched/elig-test.mjs
+    33/33 · sched/isolation-test.mjs 27/27 — 234 assertions across the battery, none of
+    which this data-model change broke.
 
-  The FTE arithmetic is pinned by a fixture built so that the correct method and
-  a flat mean give DIFFERENT answers: pool 1.5 FTE, 6 pool calls, rate 4.0 per
-  1.0 FTE. A flat mean over all four doctors would say 2.0. The suite asserts
-  4.0, so a flat mean cannot pass by accident.
+  The month fixture is seeded in the OLD shape on purpose, so the normaliser and the lazy
+  conversion are exercised against real legacy bytes rather than a mock of them.
 
-Bumped: var BUILD in admin/index.html AND versions.json -> {"index":26,"admin":51}
+WHAT THIS DOES NOT FIX
 
-DOCS
+  · Defect 1 stays open — request and swap approval still write assignments without
+    checking eligibility, capacity, vacation or collision. Stage 3 makes the WRITE safe
+    (nothing is silently destroyed); it does not make the DECISION checked. Stage 6 is what
+    closes that, and this build is a prerequisite for it, not a substitute.
+  · Defect 3 stays open — swap apply is still not atomic with swap status.
+  · Defect 8 gets closer to mattering — a list with provenance is bigger than two strings,
+    and each month is still one document against a 1 MB cap.
 
-  DECISIONS.md   rulings 35-41 added (41 total):
-                 35 the comparison pool is a per-person switch
-                 36 a doctor with no FTE is reported but never guessed at
-                 37 the baseline is out of period reports, in a fairness view
-                 38 estimated times are parked — every unconfirmed shift stays blank
-                 39 "4 to 6" is a real shift, added via the UI not in code
-                 40 no bulk demand editing
-                 41 only some shifts are requestable — it is a curated list
-  TODO.md        build 51, Q7/Q11/Q13/Q15 answered and moved, request types raised
+Also: build51-test.mjs's build-number assertion changed from == 51 to >= 51. It guards a
+feature that SHIPPED in 51 and must keep passing on every later build; pinning the exact
+number turned a healthy 52 red for no reason, which is the brittleness HANDOFF trap 3 warns
+about.
 
-DESIGN — delivered, NOT built
-
-  design/REQUEST-TYPES.md + request-types-preview.html
-      The 27-entry Task list from the current system, modelled as five kinds
-      (work / avoid / off / absence / available) over admin-curated shift lists,
-      with [MAX]/[HIGH]/[LOW] as a sortable field rather than three text labels.
-      Admins create new request types themselves, with no build.
-  design/ASSIGNMENT-MODEL.md + assignment-model-preview.html
-      Stage 3. A list per person per day instead of two slots (§8). The preview
-      reproduces defect 2 live — approving a request silently deletes an existing
-      day shift. No data migration: one normaliser reads both shapes, and a cell
-      converts only when someone actually changes it.
-  design/RULES.md + rules-preview.html
-      Stage 5. Seven rule types, all pointing at tags rather than the retired
-      `kind`. Blocked on roles and groups, which do not exist on people — the
-      smallest slice that unblocks it is proposed, and the two questions inside
-      it are flagged for a ruling rather than assumed.
+Bumped: var BUILD in BOTH pages AND versions.json -> {"index":27,"admin":52}

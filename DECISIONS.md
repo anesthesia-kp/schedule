@@ -595,3 +595,60 @@ rather than the Users page as §35's wording said. The wording was Claude's, not
 owner's; the owner approved the move on 16 Aug. Reason: the Users page is the one page that
 writes the LIVE auction roster and opens locked for that reason, and a schedule-only report
 setting must never be a reason to unlock it.
+
+## 42 · "Both" is a property of the SHIFT, not the person — 16 Aug 2026
+
+> *"Both means that both MDs and CRNAs do the shift. MDs are always different users from
+> CRNAs however."*
+
+Claude asked whether `Both (MD & CRNA)` was a third **role for a person**. It is not, and
+the question was wrong.
+
+* **A person is an MD or a CRNA. Never both.** One value, no third option.
+* **A shift is MD only, CRNA only, or Both** — *Both* meaning either may cover it.
+
+**This makes the shift's `role` field mean something for the first time.** Defect 23 records
+that it is currently decorative: stored, shown, and filtered in the catalog, but **never
+compared to a person anywhere**. Once people carry a role it becomes a real eligibility
+constraint — a person may only be given a shift marked for their own role or marked *Both* —
+and defect 23 is closed by using the field rather than by removing it.
+
+Defect 21 is also resolved by this: the hardcoded `MD / CRNA / Both` three-option list is
+correct **on a shift**. What must become data is the list of **person roles**, which is two
+entries today and should not be baked in (§11).
+
+Consequence for stage 5: role is a legitimate rule target (*"everyone · a role · a group"*,
+§10) and needs no group to express it.
+
+## 43 · The fairness pool — the group sets it, a person can override — 16 Aug 2026
+
+The question: whose numbers go into the group average a report compares someone against?
+§26 already ruled that per diem and locums are out of it. This settles *where that is set*.
+
+Offered per-group, per-person, or group-with-override, the owner chose
+**group sets it, person can override**.
+
+**Claude argued against it and was overruled.** The objection was §19 — *"Rules and the grid
+are never two competing sources of the same answer"* — which is the lesson from the
+eligibility grid. Two places that can answer "does this person count?" is exactly that shape.
+
+**Accepted, with the hazard named so it is never mistaken for closed, and with a mitigation
+that is part of the ruling rather than an afterthought:**
+
+An override must be **visible everywhere it matters**, never a quiet difference between two
+screens:
+
+1. On the **person**, wherever their status is shown: *"In Per diem, which does not count
+   toward averages — individually overridden to count."*
+2. On the **group**, listing its members whose individual setting disagrees with it.
+3. **Inside the report itself.** §29 already requires the method to be printed on the page,
+   naming the pool and who was excluded and why. An override is part of that answer and must
+   appear there by name — otherwise a number changes and nothing on the page explains it.
+
+The rule: **there is one answer, with visible exceptions** — not two answers that happen to
+disagree. That is the difference between this and what §19 warns about, and it only holds if
+the visibility above is actually built.
+
+**Supersedes the placement in §35**, which shipped the switch per person on the Reports page
+as an interim. That per-person value becomes the *override*, not the source. When groups
+land, the group is the default and the person's setting is an exception to it.

@@ -48,8 +48,8 @@ is the entire guarantee. Run it before filing anything.
 
 | | live | working tree |
 |---|---|---|
-| schedule admin | **50 — PUSHED and live 16 Aug** | clean |
-| schedule staff | **26 — PUSHED and live 16 Aug** | clean |
+| schedule admin | **51 — live** | **52 FILED, byte-verified, NOT pushed** |
+| schedule staff | **26 — live** | **27 FILED, byte-verified, NOT pushed** |
 | auction admin | 269 | clean |
 | auction staff / mobile | 139 / 17 | clean |
 
@@ -97,6 +97,123 @@ the reason the auction battery is run after **every** schedule change, not just 
 that look shared.
 
 ---
+
+---
+
+## ⚠️ NEVER RUN A PLAIN `git` COMMAND OVER THE DEVICE BRIDGE
+
+**This has now bitten the owner twice**, in two consecutive sessions, and it surfaces as a
+GitHub Desktop alert: *"A lock file already exists in the repository, which blocks this
+operation from completing."*
+
+**What happens.** The bridge that lets Claude read and write `Documents/GitHub` mounts the
+folder in a sandbox that **cannot unlink files** — `rm` returns *Operation not permitted*.
+Git takes `.git/index.lock` while it works and deletes it afterwards. If the delete is the
+thing that fails, a zero-byte `index.lock` is left behind, and every later git operation —
+including GitHub Desktop's — refuses to run.
+
+On 16 Aug a plain `git status --short --branch` in the **tests** repo at 05:56 left one
+behind. A deliberate attempt to reproduce it later in the **schedule** repo did **not**
+leave one, so the exact trigger is not pinned down. Treat it as: it can happen, and the
+cost of avoiding it is nil.
+
+**The rule, binding:**
+
+1. **Read-only git only, and always with `--no-optional-locks`:**
+   `git --no-optional-locks status --short --branch` · `... log` · `... rev-parse`.
+   That flag exists precisely to stop git taking a lock it does not need.
+2. **Never** run `add`, `commit`, `checkout`, `stash`, `merge` or `reset` over the bridge.
+   Those are GitHub Desktop's job — §15, the owner does every push — so there is no
+   legitimate reason to reach for them anyway.
+3. **Check for a stale lock at the start of every session**, alongside the build check:
+   `find <repo>/.git -maxdepth 2 -name '*.lock'`
+
+**Clearing one when it happens.** `rm` cannot, but `mv` can:
+
+```
+mkdir -p ~/Documents/GitHub/_to_delete
+mv ~/Documents/GitHub/<repo>/.git/index.lock ~/Documents/GitHub/_to_delete/
+```
+
+Then tell the owner what was moved there so he can empty it. From the owner's **own
+Terminal** (outside the sandbox) a plain `rm -f .../.git/index.lock` works normally — that
+is the faster fix if he is at the keyboard.
+
+---
+
+## Build 52 / 27 — FILED, NOT PUSHED — the assignment model
+
+**Stage 3, and the thing everything else was waiting on.** A cell is now
+`{a:[{s,by,at,via}], off}` — a list. §8: *"People can definitely have 2 daytime shifts. No
+shift can ever just be replaced."* **Defect 2 is closed.**
+
+**No migration, deliberately.** One normaliser; `a` is the truth whenever present and is
+NEVER merged with the legacy day/call pair (§19); a cell converts only when somebody changes
+it, in the same write. Defect 24 is the standing warning against self-marking migrations and
+it is not repeated. ~20 read sites routed through the normaliser; three writers — add,
+remove, set-off — replace every whole-cell write, each in a transaction on the fresh cell.
+
+**Two things a fresh session should know:**
+
+* **"No call" now points at the overnight-call tag**, not `kind` (§27). `Eye Call` survives a
+  no-call request, and there is a test that fails if that regresses.
+* **Auto-populate's POLICY is unchanged on purpose** — one shift of each kind per person per
+  day, as before. This build changed how assignments are stored, not who gets what; mixing
+  the two would make a regression impossible to attribute. Stacking is a stage-5 question.
+
+Gates: `sched/build52-test.mjs` **49/49** ×3 · honesty `--pre` vs 51/26 **4 pass / 39 fail**
+· build50 **37/37** · build51 **88/88** · elig **33/33** · isolation **27/27** · FTE 5/5 ·
+**auction battery 14 suites / 1074 assertions green** on the owner's machine.
+
+**⚠️ The auction battery went RED first — the second time on a schedule-only change.**
+`test-audit-fixes.mjs` is an auction suite that reads the *schedule* admin page and pins the
+order of operations in `decideReq`: the open-shift claim transaction must run before anything
+reaches the schedule, and a lost race must return before any write. It anchored that on the
+literal string `if(patch) await mergeFields`, which this build replaced with `mutateCell()`.
+**The anchor was updated; the assertion was not weakened.** Expect this again — it is the two
+sites touching, and it is why the auction battery runs after *every* schedule change.
+
+---
+
+## Build 51 — pushed and live 16 Aug
+
+**Admin 51 — the Reports section (stage 9).** Staff untouched, stays 26. No rules change,
+so no Firebase console step. Commit message ready at `schedule/.claude-commit-msg.txt`.
+
+Per doctor, for any period: shift counts with **overnight call at the top**, a **dated list
+of every overnight call**, and an **FTE-adjusted comparison with the method printed on the
+page** (§28, §29). One doctor or all of them in one page-broken document. Opens in its own
+tab, prints, or exports to a styled `.xlsx` built the same way as the auction's
+`exportUserSummary` (§32).
+
+Carries the **first admin-defined tag** — Overnight call, seeded with the owner's `Call 16`,
+`Call 24`, `OB PM`, never derived (§27) — the **comparison-pool switch** (§35, placed on the
+Reports page rather than Users, see below), the **no-FTE handling** (§36), and the
+**baseline split into a separate fairness view** (§37).
+
+**Gates, all executed 16 Aug — the last two on the owner's own machine:**
+
+| gate | result |
+|---|---|
+| `sched/build51-test.mjs` | **88/88**, three consecutive runs, real browser |
+| honesty `--pre` vs build 50 | **14 pass / 66 fail** |
+| `sched/isolation-test.mjs` | **27/27** on 51 and 27/27 on 50 → **zero new auction writes** |
+| FTE independence | **5/5** |
+| `sched/elig-test.mjs` | **33/33** on 51, 33/33 on 50 as a control |
+| **auction `run-all.mjs`** | **14 suites, 1074 assertions, green** — same as before |
+| **auction `test-audit-fixes.mjs`** | **333/333** — the suite that reaches into this page |
+
+**Two things worth carrying forward:**
+
+* **The eligibility suite caught the first cut.** The Excel library was loaded in a
+  `<script>` tag exactly as the auction loads it, which made the page log a console error on
+  every load when the CDN was unreachable — and that suite asserts zero console errors. The
+  assertion was **not** loosened to accommodate the change; the library is now fetched only
+  when Excel is pressed, so the page keeps the zero network dependencies it had.
+* **`sched/isolation-test.mjs` runs in seconds in a cloud container but did not finish in
+  65s over the device bridge** against byte-identical files (md5 verified both sides). Not
+  diagnosed. It is not a page problem — run it in a cloud session, or give it minutes on the
+  bridge.
 
 ---
 
@@ -162,6 +279,13 @@ everything below it.
 | 31 | Fix the **Quick View bug now**; phone view and notifications later. |
 | 33 | Build order: the **small independent fixes first** — which is build 50/26. |
 | 34 | **One chat for both sites.** ⟵ **overruled Claude** — Claude recommended separate chats from general principle; a full day of evidence pointed the other way and the recommendation was withdrawn. |
+| 35 | The comparison pool is a **per-person switch, default ON**. Shipped on the **Reports** page, not Users — a schedule-only setting must never be a reason to unlock the page that writes the live auction roster. |
+| 36 | A doctor with **no FTE** gets a full report but **no expected figure**, and is outside the pool. A blank is never treated as 1.0. |
+| 37 | The **call baseline is out of dated reports** and appears only in a separate rolling-12-month fairness view. ⟵ **Claude pushed back once** on the owner's first answer, on grounds the original framing had missed; the owner then chose the two-view answer. |
+| 38 | **Estimated times are parked** — every unconfirmed shift stays blank. The 68 estimates and the 4 SUSPECT call times are not loaded. |
+| 39 | **`4 to 6` is a real shift** (15:30–17:30), catalog 91 → 92. Added in the Shift Catalog UI, **not** in code — the seeding migration is one-shot (defect 24) and §11 says data needs no build. |
+| 40 | **No bulk demand editing.** Dropped from stage 1. |
+| 41 | **Only some shifts are requestable — a curated list.** ⟵ **overruled Claude** — Claude proposed generating the requestable set from the catalog; the owner: *"Not all shifts can be requested, that's why i want just these."* |
 
 
 ## Sessions: ONE chat for both sites is working — keep it that way for now
@@ -280,12 +404,34 @@ owner's machine — `node run-all.mjs` (auction) and `node sched/run-all.mjs` (s
    believing a new failure, run the same suite against the PREVIOUS build. If it fails
    there too, the harness moved, not the page.
 
+## Design artefacts — delivered, NOT built
+
+`design/` now holds six previews and four specs. They are **mockups, not the app** — no
+Firebase, no real data, every invented value labelled (§22).
+
+| file | what |
+|---|---|
+| `elig-grid-preview.html` | the eligibility rebuild — **shipped in 49** |
+| `shift-editor-preview.html` | stage 1 — times, sites, stacking demand rules, 60-day preview |
+| `reports-preview.html` | stage 9 — **shipped in 51** |
+| `REQUEST-TYPES.md` + `request-types-preview.html` | the owner's 27-entry Task list, modelled |
+| `ASSIGNMENT-MODEL.md` + `assignment-model-preview.html` | stage 3 — the preview reproduces defect 2 live |
+| `RULES.md` + `rules-preview.html` | stage 5 — **blocked on roles/groups**, two questions flagged |
+| `shift-times.xlsx` | the owner's worksheet. **Not an import** — §38 parks every estimate |
+
 ## Next actions, in order
 
-1. ~~Push 49 / 25 + the docs~~ — **done, live 16 Aug.**
-2. ~~Finish the build 50 harness, file and push it~~ — **done. 50 / 26 live 16 Aug,
-   `versions.json` verified cache-busted.**
-3. Answer the open questions at the top of `TODO.md` — several are one-liners that unblock
-   real work; the four SUSPECT call times are the most valuable.
-4. Then **stage 1** (the shift editor) or **stage 9** (reports — needs only the
-   Overnight-call tag, so it lands sooner).
+1. ~~Push 49 / 25~~ · ~~build 50 / 26~~ — **both done and live 16 Aug.**
+2. **Push build 51** — filed, byte-verified, every gate green including both auction
+   batteries on the owner's machine. Commit message at `.claude-commit-msg.txt` in each repo.
+3. **Add `4 to 6` in the Shift Catalog UI** (§39) — data, not a build, and Claude never
+   writes to production Firebase.
+4. **Rule on the three design docs.** The blocking one is `RULES.md`: roles and groups do
+   not exist on people, and two questions inside the proposed slice need the owner rather
+   than a guess — is *Both (MD & CRNA)* a third role or two groups, and does the fairness
+   switch move from the person onto the group as §35 anticipated.
+5. Then **stage 3** (the assignment model — everything else rests on it), then **request
+   types**, then **stage 5**.
+
+**Vacation Auction: on hold until Monday** (owner, 16 Aug). Schedule work continues; the
+cardinal rule does not relax while it is quiet.

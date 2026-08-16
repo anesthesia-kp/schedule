@@ -16,8 +16,31 @@ reference.
 
 | page | live | in working tree | state |
 |---|---|---|---|
-| admin | **50** | **51** | 51 FILED, byte-verified, **NOT pushed** — awaiting the auction battery |
-| staff | **26** | 26 | **PUSHED and live 16 Aug**, commit `8c43847` |
+| admin | **51** | **52** | 52 FILED, byte-verified, **NOT pushed** |
+| staff | **26** | **27** | 27 FILED, byte-verified, **NOT pushed** |
+
+**Build 52 / 27 — THE ASSIGNMENT MODEL (stage 3).** A cell is now `{a:[{s,by,at,via}], off}`
+— a **list**, so a person can hold two day shifts (§8) and nothing is ever removed as a side
+effect. **Closes defect 2**, the silent overwrite: approving a request used to write
+`{...cur, day:null, call:null, [kind]:id}`, clearing both slots and setting one, with nothing
+in the audit log naming what vanished.
+
+**No migration.** One normaliser reads both shapes, `a` always wins and is never merged with
+the old keys (§19), and a cell converts only when someone actually changes it. ~20 read sites
+routed through it; three writers — add / remove / set-off — replace every whole-cell write,
+each inside a transaction on the fresh cell.
+
+Also: "no call" now points at the **overnight-call tag** rather than `kind`, so `Eye Call`
+survives a no-call request (§27). Auto-populate's *policy* is deliberately unchanged — this
+build changes how assignments are stored, not who gets what.
+
+Gates: `sched/build52-test.mjs` **49/49** ×3 · honesty `--pre` vs 51/26 = **4 pass / 39 fail**
+· build50 **37/37** · build51 **88/88** · elig **33/33** · isolation **27/27** ·
+auction battery **14 suites / 1074 assertions green**.
+
+*The auction battery went red first, for the second time on a schedule-only change* —
+`test-audit-fixes.mjs` anchors an order-of-operations assertion on a literal string this
+build replaced. The **anchor** was updated; the assertion was not weakened.
 
 **Build 51 (admin only)** — the **Reports** section, stage 9. Per doctor, for any period:
 shift counts with overnight call first, every overnight call listed by date, and an
@@ -183,8 +206,9 @@ Verified by reading build 48 unless noted.
    `decideSwap` (~1294–1308) write assignments with no eligibility, capacity, vacation or
    collision check. The hand-editing path *does* check (`cmConflicts`); the fast path
    working down a queue does not. → stage 6.
-2. **Silent overwrite.** Assigning a second day shift replaces the first with no warning
-   and no record. → stage 3.
+2. ~~**Silent overwrite.**~~ **FIXED in 52/27.** Assigning a second day shift replaced the
+   first with no warning and no record. A cell is now a list; adding never removes, and
+   every removal is named in the audit log.
 3. **Swap apply is not atomic with swap status** — self-declared in-code at ~1269–1272. A
    mid-apply failure leaves "approved" with only some legs moved, and no repair path in
    the UI.

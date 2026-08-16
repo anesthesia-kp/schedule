@@ -1,7 +1,8 @@
 # NEXT CHAT START PROMPT — Daily Schedule
 
-**Written 16 Aug 2026** by the session that shipped schedule admin 49 / staff 25, built
-50 / 26, designed the foundations, and designed the Reports section. Read fully before
+**Written 16 Aug 2026** by the session that shipped schedule admin **51** (Reports),
+designed request types, the assignment model and the rules section, and recorded owner
+rulings 35–41. Read fully before
 touching anything.
 
 **Build numbers in this file go stale the moment the owner pushes.** Every one of them is
@@ -22,6 +23,10 @@ It does not soften the priority rule below by one inch.
 
 The owner is building the schedule **in parallel** with a live auction serving ~60
 anesthesiologists that runs **all year**. Phase 3 began around 17 Aug 2026.
+
+**As of 16 Aug the owner has put Vacation Auction work on hold until Monday.** That is a
+pause on *building* it — it does **not** relax the cardinal rule by one inch. The auction is
+still live and still serving people while nobody is working on it.
 
 > **No schedule work may degrade the auction — not by a little, not temporarily, not
 > "just while testing".** If a schedule change carries any risk to the auction, it does
@@ -44,7 +49,7 @@ the auction session, not this one. Full detail in `HANDOFF.md`.
 3. **The owner does every git push.** Claude files to the working tree and byte-verifies;
    the owner commits and pushes in GitHub Desktop. Never deploy, never write to
    production Firebase.
-4. **Read `DECISIONS.md` before proposing anything.** **34 owner rulings** are recorded
+4. **Read `DECISIONS.md` before proposing anything.** **41 owner rulings** are recorded
    there, four of which overrule Claude's own recommendation (§1, §28, §34, and the
    phase-gate proposal under §1). Do not re-litigate them. `HANDOFF.md` carries a
    one-line index of all 34 if you need the map before the detail.
@@ -57,7 +62,7 @@ A daily shift-scheduling site for ~60 anesthesiologists (Kaiser East Bay), shari
 Firebase project with the live Vacation Auction.
 
 * Staff: `anesthesia-kp.github.io/schedule/` — build **26**
-* Admin: `anesthesia-kp.github.io/schedule/admin/` — build **50**
+* Admin: `anesthesia-kp.github.io/schedule/admin/` — build **51** live, **52 filed**
 * Repo `anesthesia-kp/schedule`, local at `Documents/GitHub/schedule`
 * Its own Firestore collection `dailysched`; its own admin list
   (`dailysched/adminAccess`), independent of the auction's
@@ -75,27 +80,41 @@ The demo banner came off on 16 Aug, but it is not in real use yet.
 
 | page | live | working tree |
 |---|---|---|
-| admin | **50 — live** | clean |
+| admin | **51 — live** | **52 filed, not pushed** |
 | staff | **26 — live** | clean |
 
 **Build 49 / 25** — Shift Eligibility readability rebuild + demo banner removed from both
 pages. No rules change, so **no Firebase console step**.
 
-**Build 50 / 26 — PUSHED and LIVE 16 Aug** (commit `8c43847`). Six approved small fixes
-(stale-build gate ported from auction 268 · Quick View month-boundary bug · a staff error
-surface, the page had none at all · Users-page lock · missing audit entries · sticky name
-column), plus the correction to the false `// vacations — READ-ONLY` comment.
-Full detail and the gate results in `HANDOFF.md`.
+**Build 51 (admin) — PUSHED and LIVE 16 Aug** (commit `0027a5e`), `versions.json` verified
+cache-busted at `{"index":26,"admin":51}`. Staff untouched, stays 26. No rules change, so
+no Firebase console step.
 
-**Verified live on 16 Aug** — `versions.json` read `{"index":26,"admin":50}` cache-busted.
-**Re-verify anyway before you touch anything.** The owner pushes between sessions, and on
-16 Aug he pushed *while this file was being written*, which made it wrong within the hour.
-Do not answer this from memory.
+**The Reports section — stage 9.** Per doctor, for a day / month / quarter / year / range:
+shift counts with **overnight call at the top**, a **dated list of every overnight call**,
+and an **FTE-adjusted comparison with the method printed on the page** (§28, §29). One
+doctor or all of them in one page-broken document. Opens in its own tab, prints, or exports
+to a styled `.xlsx` built the same way as the auction's `exportUserSummary` (§32).
 
-Gates, executed 16 Aug: `sched/build50-test.mjs` **37/37** ×3 · honesty `--pre` vs 49/25
-**11 pass / 26 fail** · `sched/elig-test.mjs` **33/33** on 50 and 33/33 on 49 as a control ·
-`sched/isolation-test.mjs` **27/27**, zero new auction write paths · the auction battery
-**14 suites / 1074 assertions, green**.
+It carries the **first admin-defined tag** — Overnight call, seeded with the owner's
+`Call 16`, `Call 24`, `OB PM`, and **never derived** (§27) — plus the comparison-pool switch
+(§35), the no-FTE handling (§36), and the baseline kept out of dated reports (§37).
+
+Gates, executed 16 Aug: `sched/build51-test.mjs` **88/88** ×3 · honesty `--pre` vs 50
+**14 pass / 66 fail** · `sched/isolation-test.mjs` **27/27** on 51 and 27/27 on 50 →
+**zero new auction writes** · FTE independence **5/5** · `sched/elig-test.mjs` **33/33** on
+51 and 33/33 on 50 as a control · **auction battery 14 suites / 1074 assertions green** and
+`test-audit-fixes.mjs` **333/333**, both run on the owner's own machine.
+
+**Build 52 / 27 — FILED, NOT PUSHED. The assignment model (stage 3).** A cell is a **list**
+now, so a person can hold two day shifts (§8), and **defect 2 is closed** — approving a
+request no longer silently deletes what they already hold. No migration: one normaliser reads
+both shapes for ever. Gates: build52 **49/49** ×3 · honesty vs 51 **4 pass / 39 fail** ·
+the whole schedule battery **234 assertions green** · **auction battery green** — after going
+red first, for the second time on a schedule-only change (see `HANDOFF.md`).
+
+Commit messages are ready at `.claude-commit-msg.txt` in both repos.
+
 
 ---
 
@@ -249,13 +268,19 @@ worked example of why that matters.
 
 ## First moves for the new session
 
-1. Read this file, then `DECISIONS.md`, then `TODO.md`.
-2. Verify live builds: `anesthesia-kp.github.io/schedule/versions.json`, cache-busted.
-3. Ask the owner where the **Vacation Auction Phase 3** stands before touching anything
-   shared.
-4. Check the open questions at the top of `TODO.md` — several are one-line answers that
-   unblock real work.
-5. Then stage 1.
+1. Read this file, then `DECISIONS.md` (**41 rulings**), then `TODO.md`.
+2. Verify live builds: `anesthesia-kp.github.io/schedule/versions.json`, **cache-busted**.
+   Assume every build number you did not personally verify in the last few minutes is stale.
+3. **Check for a stale git lock** — `find <repo>/.git -maxdepth 2 -name '*.lock'`. This has
+   blocked the owner's GitHub Desktop twice. `HANDOFF.md` has the rule and the fix; the short
+   version is **never run a plain `git` command over the device bridge**, always
+   `git --no-optional-locks`, and never `add` / `commit` / `checkout` from there.
+4. Ask the owner where the **Vacation Auction** stands before touching anything shared —
+   it is on hold until Monday, which is not the same as safe to disturb.
+5. **The three design documents are waiting on rulings, and one is blocking.**
+   `design/RULES.md` cannot be built until roles and groups exist on people, and two
+   questions inside the proposed slice need the owner rather than a guess.
+6. Then **stage 3** (`design/ASSIGNMENT-MODEL.md`) — everything else rests on it.
 
 The standard: every claim executed, every fix honesty-proven, every guess labelled as a
 guess, the owner's authority absolute.

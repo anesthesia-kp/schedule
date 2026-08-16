@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 51;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 52;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -617,16 +617,20 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
   <div class="mcard">
     <div style="font-weight:800;margin-bottom:2px" id="cmTitle"></div>
     <div style="font-size:12px;color:var(--t2);margin-bottom:12px" id="cmSub"></div>
-    <div style="display:flex;flex-direction:column;gap:10px">
-      <label style="font-size:12px;font-weight:700">Day shift<br><select class="sel" id="cmDay" style="width:100%;margin-top:4px" onchange="updateCmWarning()"></select></label>
-      <label style="font-size:12px;font-weight:700">Call<br><select class="sel" id="cmCall" style="width:100%;margin-top:4px" onchange="updateCmWarning()"></select></label>
-      <label style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px"><input type="checkbox" id="cmOff" onchange="updateCmWarning()"> Day off</label>
+    <!-- [52] A LIST, not two slots. Adding never removes; removing takes the one shift you
+         named and nothing else. Each action applies on its own and confirms by name (§3),
+         so there is no batch of unsaved edits for a snapshot to destroy (cf. defect 12). -->
+    <div class="lbl" style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em">Shifts on this day</div>
+    <div id="cmList" style="margin-top:5px"></div>
+    <div style="display:flex;gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap">
+      <select class="sel" id="cmAdd" style="flex:1;min-width:200px;font-size:12.5px" onchange="updateCmWarning()"></select>
+      <button class="btn btn-primary" style="font-size:12.5px" onclick="cmAddShift()">+ Add</button>
     </div>
+    <label style="font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;margin-top:12px"><input type="checkbox" id="cmOff" onchange="cmToggleOff()"> Day off</label>
     <div id="cmWarn" style="display:none;background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:8px;padding:8px 10px;font-size:12px;margin-top:10px"></div>
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
-      <button class="btn" onclick="closeCellModal()">Cancel</button>
-      <button class="btn btn-danger" onclick="saveCell(true)">Clear</button>
-      <button class="btn btn-primary" onclick="saveCell(false)">Save</button>
+      <button class="btn btn-danger" onclick="cmClearAll()">Remove everything</button>
+      <button class="btn btn-primary" onclick="closeCellModal()">Done</button>
     </div>
   </div>
 </div>
@@ -1063,6 +1067,88 @@ function highlightDay(dd){
 }
 function cellOf(u,dd){ return monthData.days?.[dd]?.[u]||{}; }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// [52] THE ASSIGNMENT MODEL — a LIST per person per day.  DECISIONS §8.
+//
+// §8: "People can definitely have 2 daytime shifts. No shift can ever just be replaced."
+// The old shape was {day, call, off} — two slots and a flag. That is not a storage detail,
+// it is a rule about the world, and it was the wrong rule. Defect 2 was the consequence:
+// approving a request wrote {...cur, day:null, call:null, [kind]:id}, so an existing day
+// shift vanished with no warning, no confirmation, and nothing in the audit log naming it.
+//
+// A cell is now { a:[{s,by,at,via}], off }.  `a` IS THE TRUTH WHENEVER PRESENT.
+// The legacy day/call pair is read only for cells written before this build and is NEVER
+// merged with `a` — two sources for one answer is exactly what §19 warns about.
+//
+// THERE IS NO MIGRATION. Old months are read through the normaliser for ever, unrewritten;
+// a cell converts only when somebody actually changes it, in the same write. Defect 24 is
+// the standing warning against one-shot self-marking migrations, and it is not repeated.
+// ══════════════════════════════════════════════════════════════════════════════
+function shiftEntries(cell){
+  if(!cell) return [];
+  if(Array.isArray(cell.a)) return cell.a.filter(x=>x&&x.s);
+  return [cell.day,cell.call].filter(Boolean).map(s=>({s,via:'legacy'}));
+}
+function shiftsOf(cell){ return shiftEntries(cell).map(x=>x.s); }
+// Auto-populate's POLICY is deliberately unchanged by build 52: one shift of each kind per
+// person per day, exactly as before. This build changes how assignments are STORED, not who
+// gets what — mixing a data-model change with a scheduling-policy change would make any
+// regression impossible to attribute. Whether auto-populate should stack shifts is a rules
+// question and belongs to stage 5. `kind` survives here as a catalog field; §25 retired it
+// as the basis for fairness, rules and reports, which now point at tags.
+function kindOfShift(id){ return catalog.shifts?.[id]?.kind==='call'?'call':'day'; }
+function holdsKind(cell,slot){ return shiftsOf(cell).some(x=>kindOfShift(x)===slot); }
+function holdsShift(cell,id){ return shiftsOf(cell).indexOf(id)>=0; }
+// Module scope is invisible to inline onclick= and to page.evaluate in tests — HANDOFF
+// trap 1, which has already caused one shipped bug and two false test failures.
+window.shiftsOf=shiftsOf; window.shiftEntries=shiftEntries; window.holdsShift=holdsShift;
+
+// The ONLY way an assignment changes. Runs against the FRESH cell inside a transaction, so
+// two admins editing the same day cannot lose each other's change — the old whole-cell
+// mergeFields write had exactly that hole. `fn` gets {shifts:[entries], off} and returns
+// the same shape, or null to abort and write nothing.
+async function mutateCell(ym,dd,u,fn){
+  let result=null;
+  await runTransaction(db, async (tx)=>{
+    result=null;                                  // reset per attempt — this closure re-runs on conflict
+    const ref=monthRef(ym);
+    const snap=await tx.get(ref);
+    const exists=snap.exists();
+    const cur=(exists&&snap.data().days&&snap.data().days[dd]&&snap.data().days[dd][u])||{};
+    const next=fn({shifts:shiftEntries(cur),off:!!cur.off});
+    if(!next) return;                             // guard failed on fresh data — no-op
+    const cell={
+      a:next.shifts.map(x=>({s:x.s,by:x.by||_currentAdminEmail||'unknown',at:x.at||Date.now(),via:x.via||'manual'})),
+      off:!!next.off,
+    };
+    // updateDoc honours a dotted path and REPLACES the value there — which is what drops
+    // the legacy day/call keys in the same write that converts the cell. setDoc+merge
+    // silently ignores dotted paths (confirmed against production; see the catalog
+    // migration's comment), so it cannot be used here.
+    if(exists) tx.update(ref,{['days.'+dd+'.'+u]:cell});
+    else       tx.set(ref,{days:{[dd]:{[u]:cell}}},{merge:true});
+    result=cell;
+  });
+  return result;
+}
+// Three operations, and none of them is "replace". Replacing is remove-then-add, said out
+// loud in one confirmation (§3), never an implicit consequence of a field changing value.
+window.addCellShift=function(ym,dd,u,shiftId,via){
+  return mutateCell(ym,dd,u,st=>{
+    if(st.shifts.some(x=>x.s===shiftId)) return null;   // already held — a no-op, never a duplicate
+    return {shifts:[...st.shifts,{s:shiftId,via:via||'manual'}],off:st.off};
+  });
+};
+window.removeCellShift=function(ym,dd,u,shiftId){
+  return mutateCell(ym,dd,u,st=>{
+    if(!st.shifts.some(x=>x.s===shiftId)) return null;
+    return {shifts:st.shifts.filter(x=>x.s!==shiftId),off:st.off};
+  });
+};
+window.setCellOff=function(ym,dd,u,val){
+  return mutateCell(ym,dd,u,st=>({shifts:st.shifts,off:!!val}));   // touches NO shifts
+};
+
 // ── Schedule grid ──
 function renderGrid(){
   const g=document.getElementById('schedGrid'); if(!g||!curYM) return;
@@ -1083,38 +1169,61 @@ function renderGrid(){
       const c=cellOf(u,dd); const bits=[];
       if(vac[u+'|'+dk]) bits.push('<span class="chipp" style="background:#bbf7d0;color:#065f46">VAC</span>');
       if(c.off) bits.push('<span class="chipp" style="background:#e2e8f0;color:#475569">OFF</span>');
-      if(c.day) bits.push(chipHtml(c.day));
-      if(c.call) bits.push(chipHtml(c.call));
+      for(const id of shiftsOf(c)) bits.push(chipHtml(id));   // [52] a list, however many
       rows+='<td data-day="'+dd+'" class="cell '+((wd===0||wd===6)?'wkend':'')+'" onclick="openCell(\''+esc(u)+'\',\''+dd+'\')">'+(bits.join('<br>')||'')+'</td>';
     }
     rows+='</tr>';
   }
   g.innerHTML=head+rows;
 }
-// How many people OTHER than `excludeUser` already hold shift `id` in `slot`
-// on day `dd` — used both for the "(2/3 filled)" dropdown hint and the
-// capacity-conflict warning below.
-function slotOccupancy(dd,slot,id,excludeUser){
+// How many people OTHER than `excludeUser` already hold shift `id` on day `dd` — used both
+// for the "(2/3 filled)" hint and the capacity warning.
+// [52] No longer asks which SLOT it sat in: a person holds a list, and holding a shift is
+// holding it. That also makes the count right for a legacy cell, where the same shift could
+// only ever have been in one of the two slots anyway.
+function shiftOccupancy(dd,id,excludeUser){
   let n=0;
   for(const [usr,c] of Object.entries(monthData.days?.[dd]||{})){
     if(usr===excludeUser) continue;
-    if(c?.[slot]===id) n++;
+    if(holdsShift(c,id)) n++;
   }
   return n;
 }
 window.openCell=function(u,dd){
   cellSel={u,dd};
-  const c=cellOf(u,dd);
   document.getElementById('cmTitle').textContent=displayName(u)+' — '+MS[Number(curYM.slice(5))-1]+' '+Number(dd);
-  document.getElementById('cmSub').textContent='Only shifts this user is eligible for are listed.';
-  const dsel=document.getElementById('cmDay'), csel=document.getElementById('cmCall');
-  const optLabel=(id,s,slot)=>{ const cap=s.capacity||1; if(cap<=1) return s.label; const have=slotOccupancy(dd,slot,id,u); return s.label+' ('+have+'/'+cap+' filled)'; };
-  dsel.innerHTML='<option value="">— none —</option>'+shiftList('day').filter(([id])=>allowed(u,id)||c.day===id).map(([id,s])=>`<option value="${esc(id)}">${esc(optLabel(id,s,'day'))}</option>`).join('');
-  csel.innerHTML='<option value="">— none —</option>'+shiftList('call').filter(([id])=>allowed(u,id)||c.call===id).map(([id,s])=>`<option value="${esc(id)}">${esc(optLabel(id,s,'call'))}</option>`).join('');
-  dsel.value=c.day||''; csel.value=c.call||''; document.getElementById('cmOff').checked=!!c.off;
+  document.getElementById('cmSub').textContent='Adding never removes anything already here. Removing takes only the shift you name.';
+  renderCellModal();
   document.getElementById('cellModal').classList.add('on');
-  updateCmWarning();
 };
+// Redrawn after every change, and by renderAll() when a snapshot arrives, so two admins on
+// the same day see each other's edits rather than one silently overwriting the other.
+function renderCellModal(){
+  if(!cellSel) return;
+  const {u,dd}=cellSel;
+  const c=cellOf(u,dd), held=shiftEntries(c);
+  const lbl=id=>catalog.shifts?.[id]?.label||id;
+  const viaTxt={manual:'added by hand',auto:'auto-populate',request:'from a request',swap:'from a swap',open:'claimed an open shift',legacy:'saved before this build'};
+  document.getElementById('cmList').innerHTML = held.length
+    ? held.map(x=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 9px;border:1px solid var(--b1);border-radius:8px;margin-top:5px;background:var(--s2)">
+        <b style="font-size:13px">${esc(lbl(x.s))}</b>
+        <span style="font-size:10.5px;color:var(--t3)">${esc(viaTxt[x.via]||x.via||'')}</span>
+        <span style="flex:1"></span>
+        <button class="btn btn-danger" style="font-size:11.5px;padding:3px 9px" onclick="cmRemoveShift('${esc(x.s)}')">Remove</button>
+      </div>`).join('')
+    : '<div style="font-size:12px;color:var(--t3);font-style:italic;padding:4px 2px">No shifts on this day.</div>';
+  const sel=document.getElementById('cmAdd'), keep=sel.value;
+  const heldIds=held.map(x=>x.s);
+  const optLabel=(id,s)=>{ const cap=s.capacity||1; if(cap<=1) return s.label;
+    return s.label+' ('+shiftOccupancy(dd,id,u)+'/'+cap+' filled)'; };
+  const opts=shiftList().filter(([id])=>allowed(u,id)&&heldIds.indexOf(id)<0);
+  sel.innerHTML = opts.length
+    ? opts.map(([id,s])=>`<option value="${esc(id)}">${esc(optLabel(id,s))}</option>`).join('')
+    : '<option value="">— nothing left this person is eligible for —</option>';
+  if(keep&&opts.some(([id])=>id===keep)) sel.value=keep;
+  document.getElementById('cmOff').checked=!!c.off;
+  updateCmWarning();
+}
 window.closeCellModal=function(){ document.getElementById('cellModal').classList.remove('on'); cellSel=null; };
 // Live conflict check shown inside the modal, re-run on every field change —
 // this is the "flag it before Save" warning: on approved vacation, or a
@@ -1123,47 +1232,87 @@ window.closeCellModal=function(){ document.getElementById('cellModal').classList
 // if a conflict is still showing, so an admin can never save over one by accident.
 window.updateCmWarning=function(){
   const box=document.getElementById('cmWarn'); if(!box||!cellSel) return;
-  const msgs=cmConflicts();
+  const msgs=cmConflicts(document.getElementById('cmAdd')?.value||'');
   if(msgs.length){ box.style.display='block'; box.innerHTML='⚠️ '+msgs.join('<br>⚠️ '); }
   else { box.style.display='none'; box.innerHTML=''; }
 };
-function cmConflicts(){
+// What would be wrong about adding `addId` to what this person already holds. Warnings
+// only — §4 has no exceptions: "Safety checks warn and let you override. Nothing is
+// hard-blocked." Every override is recorded (see cmAddShift).
+function cmConflicts(addId){
   if(!cellSel) return [];
   const {u,dd}=cellSel;
   const dk=curYM+'-'+dd;
-  const day=document.getElementById('cmDay')?.value||'';
-  const call=document.getElementById('cmCall')?.value||'';
-  const off=document.getElementById('cmOff')?.checked;
+  const c=cellOf(u,dd), held=shiftsOf(c), off=!!c.off;
   const msgs=[];
-  if((day||call) && vacationDays()[u+'|'+dk]) msgs.push(displayName(u)+' is on approved vacation this day — this will schedule a shift on top of it.');
-  if(off && (day||call)) msgs.push('"Day off" is checked along with a shift — both will be saved, which is probably not what you want.');
-  [[day,'day'],[call,'call']].forEach(([id,slot])=>{
-    if(!id) return;
-    const s=catalog.shifts?.[id]; if(!s) return;
-    const cap=s.capacity||1;
-    const have=slotOccupancy(dd,slot,id,u);
-    if(have>=cap) msgs.push(s.label+' is already staffed by '+have+' — capacity is '+cap+'. This will go over.');
-  });
+  if(addId){
+    const s=catalog.shifts?.[addId];
+    if(s){
+      const cap=s.capacity||1, have=shiftOccupancy(dd,addId,u);
+      if(have>=cap) msgs.push(s.label+' is already staffed by '+have+' — capacity is '+cap+'. This will go over.');
+    }
+    if(vacationDays()[u+'|'+dk]) msgs.push(displayName(u)+' is on approved vacation this day — this will schedule a shift on top of it.');
+    if(off) msgs.push(displayName(u)+' is marked OFF this day. Adding a shift does not clear that by itself — you would be leaving them both off and assigned.');
+  }
+  if(off && held.length) msgs.push('Marked "Day off" while still holding '+held.length+' shift'+(held.length===1?'':'s')+' — both are saved, which is probably not what you want.');
   return msgs;
 }
-window.saveCell=async function(clear){
+window.cmAddShift=async function(){
   if(!cellSel) return;
   const {u,dd}=cellSel;
-  const dateLabel=curYM+'-'+dd;
-  if(clear){
-    await mergeFields(monthRef(curYM),{['days.'+dd+'.'+u]:deleteField()});
-    auditLog('cell.clear','Cleared '+displayName(u)+'’s assignment on '+dateLabel);
-  } else{
-    const conflicts=cmConflicts();
-    if(conflicts.length && !confirm(conflicts.join('\n')+'\n\nSave anyway?')) return;
-    const day=document.getElementById('cmDay').value||null;
-    const call=document.getElementById('cmCall').value||null;
-    const off=document.getElementById('cmOff').checked;
-    await mergeFields(monthRef(curYM),{['days.'+dd+'.'+u]:{day,call,off}});
-    const parts=[]; if(day) parts.push('day='+(catalog.shifts?.[day]?.label||day)); if(call) parts.push('call='+(catalog.shifts?.[call]?.label||call)); if(off) parts.push('day off');
-    auditLog('cell.save','Set '+displayName(u)+' on '+dateLabel+': '+(parts.join(', ')||'cleared'));
+  const id=document.getElementById('cmAdd').value; if(!id) return;
+  const lbl=catalog.shifts?.[id]?.label||id, dateLabel=curYM+'-'+dd;
+  const conflicts=cmConflicts(id);
+  if(!confirm('Add '+lbl+' to '+displayName(u)+' on '+dateLabel+'?'
+    +(conflicts.length?'\n\n⚠️ '+conflicts.join('\n⚠️ ')+'\n\nYou can do this anyway — nothing is blocked. The override will be recorded.':'')
+    +'\n\nNothing already on this day will be removed.')) return;
+  try{
+    const r=await window.addCellShift(curYM,dd,u,id,'manual');
+    if(!r){ schedToast(displayName(u)+' already holds '+lbl+' that day','err'); return; }
+    auditLog('cell.add','Added '+lbl+' to '+displayName(u)+' on '+dateLabel
+      +(conflicts.length?' — OVERRIDE: '+conflicts.join(' · '):''));
+    renderCellModal();
+  }catch(e){ schedToast('Could not add it: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); }
+};
+window.cmRemoveShift=async function(id){
+  if(!cellSel) return;
+  const {u,dd}=cellSel;
+  const lbl=catalog.shifts?.[id]?.label||id, dateLabel=curYM+'-'+dd;
+  if(!confirm('Take '+lbl+' off '+displayName(u)+' on '+dateLabel+'?\n\nOnly this shift is removed. Anything else on this day stays.')) return;
+  try{
+    const r=await window.removeCellShift(curYM,dd,u,id);
+    if(!r){ schedToast(displayName(u)+' does not hold '+lbl+' that day','err'); return; }
+    auditLog('cell.remove','Removed '+lbl+' from '+displayName(u)+' on '+dateLabel);
+    renderCellModal();
+  }catch(e){ schedToast('Could not remove it: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); }
+};
+window.cmToggleOff=async function(){
+  if(!cellSel) return;
+  const {u,dd}=cellSel;
+  const want=document.getElementById('cmOff').checked;
+  const held=shiftsOf(cellOf(u,dd)).map(x=>catalog.shifts?.[x]?.label||x);
+  if(want && held.length && !confirm('Mark '+displayName(u)+' off on '+curYM+'-'+dd+'?\n\n'
+    +'They still hold '+held.join(' and ')+'. Marking them off does NOT remove those — remove them yourself if that is what you mean.')){
+    document.getElementById('cmOff').checked=false; return;
   }
-  closeCellModal();
+  try{
+    await window.setCellOff(curYM,dd,u,want);
+    auditLog('cell.off',(want?'Marked ':'Cleared the day-off flag for ')+displayName(u)+' on '+curYM+'-'+dd+(want?' as OFF':'')+' (no shifts touched)');
+    renderCellModal();
+  }catch(e){ schedToast('Could not save that: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); }
+};
+window.cmClearAll=async function(){
+  if(!cellSel) return;
+  const {u,dd}=cellSel;
+  const held=shiftsOf(cellOf(u,dd)).map(x=>catalog.shifts?.[x]?.label||x);
+  if(!confirm('Remove everything for '+displayName(u)+' on '+curYM+'-'+dd+'?\n\n'
+    +(held.length?'This removes: '+held.join(', ')+'\n\n':'There are no shifts to remove.\n\n')
+    +'The day-off flag is cleared too.')) return;
+  try{
+    await mergeFields(monthRef(curYM),{['days.'+dd+'.'+u]:deleteField()});
+    auditLog('cell.clear','Cleared '+displayName(u)+'’s whole day on '+curYM+'-'+dd+(held.length?' — removed '+held.join(', '):''));
+    renderCellModal();
+  }catch(e){ schedToast('Could not clear it: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); }
 };
 
 // ── Fairness: rolling 12-month window ──
@@ -1202,7 +1351,7 @@ async function windowShiftCounts(endYm, priorMonths, cache){
     const ym=d.getFullYear()+'-'+pad(d.getMonth()+1);
     let days = (cache && cache[ym]!==undefined) ? cache[ym] : null;
     if(days===null){ try{ const snap=await getDoc(monthRef(ym)); days=(snap.exists()&&snap.data().days)||{}; }catch(_){ days={}; } if(cache) cache[ym]=days; }
-    for(const dd in days) for(const u in days[dd]){ const c=days[dd][u]; if(c&&c.day) counts[u+'|'+c.day]=(counts[u+'|'+c.day]||0)+1; if(c&&c.call) counts[u+'|'+c.call]=(counts[u+'|'+c.call]||0)+1; }
+    for(const dd in days) for(const u in days[dd]) for(const id of shiftsOf(days[dd][u])) counts[u+'|'+id]=(counts[u+'|'+id]||0)+1;
   }
   return counts;
 }
@@ -1223,7 +1372,7 @@ window.autoPopulate=async function(){
   const counts= await windowShiftCounts(curYM, 11);
   const cnt=(u,s)=>counts[u+'|'+s]||0;
   // …plus THIS month's already-placed assignments (the 12th month of the window).
-  for(const dd in days) for(const u in days[dd]){ const c=days[dd][u]; if(c.day) counts[u+'|'+c.day]=(counts[u+'|'+c.day]||0)+1; if(c.call) counts[u+'|'+c.call]=(counts[u+'|'+c.call]||0)+1; }
+  for(const dd in days) for(const u in days[dd]) for(const id of shiftsOf(days[dd][u])) counts[u+'|'+id]=(counts[u+'|'+id]||0)+1;
   let filled=0, unfillable=[];
   const changed={}; // [M-20] only the cells THIS run actually assigns, so we don't clobber concurrent edits
   for(let d=1;d<=nDays;d++){
@@ -1233,16 +1382,16 @@ window.autoPopulate=async function(){
       const slot=s.kind==='call'?'call':'day';
       const capacity=s.capacity||1;
       // fill up to capacity — most shifts (capacity 1) stop after the first pick, same as before
-      let have=Object.values(days[dd]).filter(c=>c[slot]===id).length;
+      let have=Object.values(days[dd]).filter(c=>holdsShift(c,id)).length;
       while(have<capacity){
         const cands=names.filter(u=>allowed(u,id)
           &&!vac[u+'|'+dk]
           &&!(days[dd][u]?.off)
-          &&!(days[dd][u]?.[slot]));
+          &&!holdsKind(days[dd][u],slot));
         if(!cands.length){ unfillable.push(dk+' '+s.label+(capacity>1?' ('+(capacity-have)+' more needed)':'')); break; }
         cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
         const pick=cands[0];
-        days[dd][pick]=Object.assign({day:null,call:null,off:false},days[dd][pick],{[slot]:id});
+        days[dd][pick]={a:[...shiftEntries(days[dd][pick]),{s:id,by:_currentAdminEmail||'unknown',at:Date.now(),via:'auto'}],off:!!days[dd][pick]?.off};
         counts[pick+'|'+id]=cnt(pick,id)+1;
         changed[dd+'.'+pick]=true;
         filled++; have++;
@@ -1280,7 +1429,7 @@ window.autoPopulateYear=async function(){
     // year-run's already-filled earlier months count toward later months' fairness.
     const counts= await windowShiftCounts(ym, 11, _cache);
     const cnt=(u,s)=>counts[u+'|'+s]||0;
-    for(const dd in days) for(const u in days[dd]){ const c=days[dd][u]; if(c.day) counts[u+'|'+c.day]=(counts[u+'|'+c.day]||0)+1; if(c.call) counts[u+'|'+c.call]=(counts[u+'|'+c.call]||0)+1; }
+    for(const dd in days) for(const u in days[dd]) for(const id of shiftsOf(days[dd][u])) counts[u+'|'+id]=(counts[u+'|'+id]||0)+1;
     const changed={}; // [M-20] cells THIS month's fill actually assigns
     for(let d=1;d<=nDays;d++){
       const dd=pad(d), dk=ym+'-'+dd;
@@ -1288,13 +1437,13 @@ window.autoPopulateYear=async function(){
       for(const [id,s] of shiftList()){
         const slot=s.kind==='call'?'call':'day';
         const capacity=s.capacity||1;
-        let have=Object.values(days[dd]).filter(c=>c[slot]===id).length;
+        let have=Object.values(days[dd]).filter(c=>holdsShift(c,id)).length;
         while(have<capacity){
-          const cands=names.filter(u=>allowed(u,id)&&!vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!(days[dd][u]?.[slot]));
+          const cands=names.filter(u=>allowed(u,id)&&!vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!holdsKind(days[dd][u],slot));
           if(!cands.length){ grandUnfillable.push(dk+' '+s.label+(capacity>1?' ('+(capacity-have)+' more needed)':'')); break; }
           cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
           const pick=cands[0];
-          days[dd][pick]=Object.assign({day:null,call:null,off:false},days[dd][pick],{[slot]:id});
+          days[dd][pick]={a:[...shiftEntries(days[dd][pick]),{s:id,by:_currentAdminEmail||'unknown',at:Date.now(),via:'auto'}],off:!!days[dd][pick]?.off};
           counts[pick+'|'+id]=cnt(pick,id)+1;
           changed[dd+'.'+pick]=true;
           grandFilled++; have++;
@@ -1388,12 +1537,47 @@ window.decideReq=async function(id,status){
     // shift permanently 'claimed', nothing assigned, no audit entry, and neither record fixable
     // from the UI. Mirror decideSwap: catch, release what we took, tell the admin, still log.
     try{
-      const cur=(mk===curYM)?cellOf(r.user,dd):((await getDoc(monthRef(mk))).data()?.days?.[dd]?.[r.user]||{});
-      let patch=null;
-      if(r.type==='shift'||r.type==='claim'){ const kind=catalog.shifts?.[r.shiftId]?.kind==='call'?'call':'day'; patch={...cur,day:null,call:null,off:false,[kind]:r.shiftId}; } // [M-18] cur spread FIRST, then defaults+assignment, so an approved shift clears any existing off:true instead of leaving the user both OFF and assigned
-      if(r.type==='dayoff') patch={...cur,day:null,call:null,off:true}; // nulls AFTER cur so an approved day-off actually clears any existing shift/call (not both at once)
-      if(r.type==='nocall') patch={...{day:null,off:false},...cur,call:null};
-      if(patch) await mergeFields(monthRef(mk),{['days.'+dd+'.'+r.user]:patch});
+      // ══ [52] DEFECT 2 CLOSED HERE ══
+      // This block used to write {...cur, day:null, call:null, off:false, [kind]:id}. It
+      // cleared BOTH slots and set one, so approving a call request silently deleted an
+      // existing day shift — no warning, no confirmation, and no audit entry naming what
+      // was taken away. §8: "No shift can ever just be replaced."
+      // Now each branch says exactly what it does to what is already there, and the audit
+      // entry names it.
+      const lbl=id=>catalog.shifts?.[id]?.label||id;
+      let applied='';
+      if(r.type==='shift'||r.type==='claim'){
+        // ADD. Removes nothing. The off flag IS cleared — leaving someone both off and
+        // assigned helps no one — and the audit says so rather than doing it quietly.
+        let wasOff=false, already=false;
+        await mutateCell(mk,dd,r.user,st=>{
+          wasOff=st.off; already=st.shifts.some(x=>x.s===r.shiftId);
+          return {shifts:already?st.shifts:[...st.shifts,{s:r.shiftId,via:(r.type==='claim'?'open':'request')}],off:false};
+        });
+        applied=(already?'they already held ':'added ')+lbl(r.shiftId)
+          +(wasOff?', and cleared their day-off flag':'')+'. Nothing else on that day was touched.';
+      }
+      else if(r.type==='dayoff'){
+        // Removing their shifts IS the point of the request, not a side effect — but it is
+        // named in the audit, which is exactly what defect 2 was missing.
+        let removed=[];
+        await mutateCell(mk,dd,r.user,st=>{ removed=st.shifts.map(x=>x.s); return {shifts:[],off:true}; });
+        applied='marked them off'+(removed.length?' and REMOVED '+removed.map(lbl).join(', '):' (they held nothing that day)');
+      }
+      else if(r.type==='nocall'){
+        // [52] "No call" now means the OVERNIGHT-CALL TAG — the list the admin set (§27) —
+        // not "whatever sat in the call slot". Same correction §25 made everywhere else:
+        // the tag is the truth, never `kind`. Eye Call is the reason (07:30-15:30, in the
+        // call family, not overnight call).
+        const on=overnightSet(); let removed=[];
+        await mutateCell(mk,dd,r.user,st=>{
+          removed=st.shifts.filter(x=>on.has(x.s)).map(x=>x.s);
+          if(!removed.length) return null;
+          return {shifts:st.shifts.filter(x=>!on.has(x.s)),off:st.off};
+        });
+        applied=removed.length?('removed '+removed.map(lbl).join(', ')):'nothing to remove — they had no overnight call that day';
+      }
+      if(applied) auditLog('cell.apply','Request approved for '+displayName(r.user)+' on '+r.date+' — '+applied);
       // (The open-shift claim transaction now runs BEFORE this assignment — see [AUDIT #7]
       // above. Winning the shift is what authorises the write, not the other way round.)
     }catch(applyErr){
@@ -1503,24 +1687,31 @@ window.decideSwap=async function(id,status){
         const chain=[[a,b,s.legs[0]],[b,c,s.legs[1]],[c,a,s.legs[2]]];
         for(const [giver,receiver,leg] of chain){
           const mk=leg.date.slice(0,7), dd=leg.date.slice(8);
-          const snap=await getDoc(monthRef(mk)); const dayMap=snap.data()?.days?.[dd]||{};
-          const g=dayMap[giver]||{day:null,call:null,off:false}, r=dayMap[receiver]||{day:null,call:null,off:false};
           const k=leg.part==='call'?'call':'day';
-          await mergeFields(monthRef(mk),{
-            ['days.'+dd+'.'+receiver]:{...{day:null,call:null,off:false},...r,[k]:g[k]??null},
-            ['days.'+dd+'.'+giver]:{...{day:null,call:null,off:false},...g,[k]:null},
-          });
+          // [52] Move the ACTUAL shifts the giver holds of that kind — add to the receiver,
+          // then remove from the giver. Two named operations. The old version copied a slot
+          // wholesale, which overwrote anything the receiver already had in it.
+          const snap=await getDoc(monthRef(mk)); const dayMap=snap.data()?.days?.[dd]||{};
+          const moving=shiftsOf(dayMap[giver]).filter(x=>kindOfShift(x)===k);
+          for(const sid of moving){
+            await mutateCell(mk,dd,receiver,st=>st.shifts.some(x=>x.s===sid)?null:({shifts:[...st.shifts,{s:sid,via:'swap'}],off:st.off}));
+            await mutateCell(mk,dd,giver,st=>({shifts:st.shifts.filter(x=>x.s!==sid),off:st.off}));
+          }
         }
       } else {
         const mk=s.date.slice(0,7), dd=s.date.slice(8);
-        const snap=await getDoc(monthRef(mk)); const dayMap=snap.data()?.days?.[dd]||{};
-        const a=dayMap[s.from]||{day:null,call:null,off:false}, b=dayMap[s.to]||{day:null,call:null,off:false};
         const k=s.part==='call'?'call':'day';
-        const av=a[k]??null, bv=b[k]??null;
-        await mergeFields(monthRef(mk),{
-          ['days.'+dd+'.'+s.from]:{...{day:null,call:null,off:false},...a,[k]:bv},
-          ['days.'+dd+'.'+s.to]:  {...{day:null,call:null,off:false},...b,[k]:av},
-        });
+        // [52] An exchange of the shifts each side holds OF THAT KIND. Whatever either of
+        // them holds of the OTHER kind is left alone — previously the slot copy could wipe it.
+        const snap=await getDoc(monthRef(mk)); const dayMap=snap.data()?.days?.[dd]||{};
+        const aMove=shiftsOf(dayMap[s.from]).filter(x=>kindOfShift(x)===k);
+        const bMove=shiftsOf(dayMap[s.to]).filter(x=>kindOfShift(x)===k);
+        const swapInto=(keepOut,bringIn)=>st=>({
+          shifts:[...st.shifts.filter(x=>keepOut.indexOf(x.s)<0),
+                  ...bringIn.filter(id=>!st.shifts.some(y=>y.s===id)).map(id=>({s:id,via:'swap'}))],
+          off:st.off});
+        await mutateCell(mk,dd,s.from,swapInto(aMove,bMove));
+        await mutateCell(mk,dd,s.to,  swapInto(bMove,aMove));
       }
     }catch(e){
       applyErr=e;
@@ -2337,8 +2528,7 @@ function renderStats(){
     const c={}; let off=0, vd=0;
     for(let d=1;d<=nDays;d++){
       const dd=pad(d), cell=cellOf(u,dd);
-      if(cell.day) c[cell.day]=(c[cell.day]||0)+1;
-      if(cell.call) c[cell.call]=(c[cell.call]||0)+1;
+      for(const id of shiftsOf(cell)) c[id]=(c[id]||0)+1;
       if(cell.off) off++;
       if(vac[u+'|'+curYM+'-'+dd]) vd++;
     }
@@ -2375,8 +2565,7 @@ async function renderStatsYear(){
     for(const u of names){
       for(let d=1;d<=nDays;d++){
         const dd=pad(d), cell=days[dd]?.[u]||{};
-        if(cell.day) counts[u][cell.day]=(counts[u][cell.day]||0)+1;
-        if(cell.call) counts[u][cell.call]=(counts[u][cell.call]||0)+1;
+        for(const id of shiftsOf(cell)) counts[u][id]=(counts[u][id]||0)+1;
         if(cell.off) offCounts[u]++;
         if(vac[u+'|'+mk+'-'+dd]) vacCounts[u]++;
       }
@@ -2416,7 +2605,7 @@ function dashCoverage(){
     const dd=pad(d);
     const cell=monthData.days?.[dd]||{};
     const counts={};
-    for(const u in cell){ const c=cell[u]; if(c.day) counts[c.day]=(counts[c.day]||0)+1; if(c.call) counts[c.call]=(counts[c.call]||0)+1; }
+    for(const u in cell) for(const id of shiftsOf(cell[u])) counts[id]=(counts[id]||0)+1;
     let dayFilled=0; for(const [id,s] of list) dayFilled+=Math.min(counts[id]||0,s.capacity||1);
     filled+=dayFilled; total+=perDayCapacity;
   }
@@ -2452,7 +2641,7 @@ function renderDash(){
   document.getElementById('dashUserSub').textContent=names.length?(noFte?(noFte+' of '+names.length+' user(s) have no FTE set here.'):'Every user has an FTE set.'):'No users yet.';
 }
 
-function renderAll(){ renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); renderUsersLock(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); renderReports(); }
+function renderAll(){ if(cellSel) renderCellModal(); renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); renderUsersLock(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); renderReports(); }
 
 // ── Call-fairness baseline table (users × call shifts) ──
 function renderBaseline(){
@@ -2765,8 +2954,7 @@ async function collectRange(start,end,users){
         const dayMap=days[pad(d)]||{};
         for(const u of users){
           const cell=dayMap[u]; if(!cell) continue;
-          for(const sid of [cell.day,cell.call]){
-            if(!sid) continue;
+          for(const sid of shiftsOf(cell)){
             counts[u][sid]=(counts[u][sid]||0)+1;
             if(on.has(sid)) dates[u].push({d:dt,sid});
           }

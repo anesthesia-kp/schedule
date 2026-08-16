@@ -141,9 +141,10 @@ tbody tr:nth-child(even){background:var(--s2)}
     </div>
     <div id="groupBlocks"></div>
     <div class="dead">
-      <b>Two things here need your ruling, not my guess (§22).</b><br>
-      1. The current dropdown offers <b>Both (MD &amp; CRNA)</b>. Is that a third role, or a person who is in two groups? Defect 21 already flags that the hardcoded three-option list collides with the groups model.<br>
-      2. <b>“Counts toward fairness” lives on the group</b> per §26 — <i>“set on the group, not hard-coded.”</i> Build 51 shipped that switch <b>per person</b> as an interim (§35), which already records that it moves onto the group when stage 4 lands, with the per-person value becoming an override rather than a second source of truth. Confirm that is still what you want before it moves.
+      <b>Both open questions were answered on 16 Aug — §42 and §43.</b><br><br>
+      <b>1. “Both” is a shift property</b> (§42). A person is an MD or a CRNA, never both; a shift is MD only, CRNA only, or Both. Resolved above.<br><br>
+      <b>2. The group sets who counts toward averages, and a person may override</b> (§43). Claude argued against the override — §19 warns against two places that can answer the same question — and was overruled.<br>
+      <b>The override was accepted on one condition, and it is part of the ruling:</b> it must be <b>visible everywhere it matters</b>, never a quiet difference between two screens. On the person (the third column above), on the group (Dr. Eli Moreau is ticked in <i>Locum</i> and marked <i>overridden to count</i>), and <b>inside the report</b>, where §29 already requires the pool and the exclusions to be printed by name. One answer with visible exceptions — not two answers that disagree.
     </div>
   </div>
 </div>
@@ -153,6 +154,9 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const TAGS={overnight:'Overnight call',late:'Late shifts',pedi:'Pediatric shifts',icu:'ICU shifts'};
 const TAG_READY={overnight:true,late:false,pedi:false,icu:false};   // late/pedi/icu have no times yet
 const PEOPLE=['Dr. Alan Reyes','Dr. Bea Okafor','Dr. Chen Lindqvist','Dr. Dana Baptiste','Dr. Eli Moreau','Dr. Farah Nakamura'];
+// §43 — the group decides, a person may override. INVENTED example of one override, shown
+// so the visibility requirement is on screen rather than described.
+const OVERRIDE={'Dr. Eli Moreau':'Locum'};
 const GROUPS={
   pedi:{label:'Pediatric', members:['Dr. Chen Lindqvist','Dr. Eli Moreau'], fairness:true},
   ob:{label:'Obstetric', members:['Dr. Alan Reyes','Dr. Farah Nakamura'], fairness:true},
@@ -277,16 +281,17 @@ function drawConf(){
 function drawWho(){
   document.getElementById('groupBlocks').innerHTML=`
     <div style="margin-top:14px;padding-top:11px;border-top:1px solid var(--b1)">
-      <div style="font-weight:800;font-size:13px">Primary role <span class="pill">single choice</span></div>
-      <table><thead><tr><th>Person</th><th>Role</th><th>FTE</th></tr></thead><tbody>${
-        PEOPLE.map((p,i)=>`<tr><td><b>${esc(p)}</b></td><td><select class="sel" style="font-size:12px"><option${i%3?'':' selected'}>MD</option><option${i%3?' selected':''}>CRNA</option><option>Both (MD &amp; CRNA)</option></select></td><td class="mini">invented</td></tr>`).join('')
+      <div style="font-weight:800;font-size:13px">Role <span class="pill">MD or CRNA — never both</span></div>
+      <div class="mini" style="margin:5px 0 2px">Owner, 16 Aug (§42): <i>“Both means that both MDs and CRNAs do the shift. MDs are always different users from CRNAs however.”</i> So <b>Both</b> lives on the <b>shift</b>, meaning either may cover it — not on the person. That finally makes a shift’s <code>role</code> field do something: defect 23 records that it is stored and filtered today but never once compared to a person.</div>
+      <table><thead><tr><th>Person</th><th>Role</th><th>Counts toward averages?</th></tr></thead><tbody>${
+        PEOPLE.map((p,i)=>`<tr><td><b>${esc(p)}</b></td><td><select class="sel" style="font-size:12px"><option${i%3?'':' selected'}>MD</option><option${i%3?' selected':''}>CRNA</option></select></td><td class="mini">${OVERRIDE[p]?'<b style="color:#92400e">counts toward averages — overrides '+esc(OVERRIDE[p])+'</b>':'follows their groups'}</td></tr>`).join('')
       }</tbody></table>
     </div>`
     + Object.entries(GROUPS).map(([k,g])=>`
     <div style="margin-top:14px;padding-top:11px;border-top:1px solid var(--b1)">
       <div style="font-weight:800;font-size:13px">${esc(g.label)}
         <span class="pill" style="background:${g.fairness?'#ecfdf5':'#fef2f2'};color:${g.fairness?'#065f46':'#991b1b'}">${g.fairness?'counts toward fairness':'OUT of the fairness pool'}</span></div>
-      <div class="tagpick">${PEOPLE.map(p=>`<span class="tp${g.members.includes(p)?' on':''}" onclick="togMember('${k}','${p.replace(/'/g,"\\'")}')">${g.members.includes(p)?'✓ ':''}${esc(p)}</span>`).join('')}</div>
+      <div class="tagpick">${PEOPLE.map(p=>`<span class="tp${g.members.includes(p)?' on':''}" onclick="togMember('${k}','${p.replace(/'/g,"\\'")}')">${g.members.includes(p)?'✓ ':''}${esc(p)}${(g.members.includes(p)&&!g.fairness&&OVERRIDE[p])?' <span style="color:#92400e;font-size:10px">· overridden to count</span>':''}</span>`).join('')}</div>
     </div>`).join('');
 }
 window.togMember=(k,p)=>{ const a=GROUPS[k].members, i=a.indexOf(p); i>=0?a.splice(i,1):a.push(p); drawWho(); };

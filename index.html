@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 26;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 27;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -618,6 +618,19 @@ function syncQuickViewMonths(){
     }));
   });
 }
+// [52] THE ASSIGNMENT MODEL — read side. A cell is { a:[{s,by,at,via}], off }, and `a` is
+// the truth whenever present. The legacy {day, call} pair is read only for cells written
+// before build 52 and is NEVER merged with `a` — two sources for one answer is what §19
+// warns against. There is no migration: old months are read through this for ever.
+// This page never writes an assignment, so it needs the reader half only.
+function shiftEntries(cell){
+  if(!cell) return [];
+  if(Array.isArray(cell.a)) return cell.a.filter(x=>x&&x.s);
+  return [cell.day,cell.call].filter(Boolean).map(s=>({s,via:'legacy'}));
+}
+function shiftsOf(cell){ return shiftEntries(cell).map(x=>x.s); }
+window.shiftsOf=shiftsOf;   // module scope is invisible to inline handlers and to tests
+
 // Colored chip per assignment — colors come from the shift catalog (QGenda-style).
 function chip(id){
   const s=catalog.shifts?.[id]||{}; const bg=s.color||(s.kind==='call'?'#ede9fe':'#fef9c3');
@@ -627,8 +640,7 @@ function cellHtml(u,dk,vac){
   const c=cellOf(u,dk); const bits=[];
   if(vac[u+'|'+dk]) bits.push('<span style="display:inline-block;background:#bbf7d0;color:#065f46;border-radius:4px;padding:0 4px;font-weight:800">VAC</span>');
   if(c.off) bits.push('<span style="display:inline-block;background:#e2e8f0;color:#475569;border-radius:4px;padding:0 4px;font-weight:700">OFF</span>');
-  if(c.day) bits.push(chip(c.day));
-  if(c.call) bits.push(chip(c.call));
+  for(const id of shiftsOf(c)) bits.push(chip(id));   // [52] a list, however many
   return bits.join('<br>')||'<span style="color:var(--b2)">·</span>';
 }
 

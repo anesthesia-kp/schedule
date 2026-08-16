@@ -29,21 +29,35 @@ dailysched/people:  { AR: { role: 'MD' } }              ← one primary role, si
 dailysched/groups:  { pedi: { label:'Pediatric', members:['AR','CL'], fairness:true } }
 ```
 
-* **Role is single-choice** — §10 calls MD vs CRNA *primary*. Defect 21 notes the current
-  hardcoded MD / CRNA / Both three-option list collides with this; the list becomes data.
+* **Role is single-choice, and there are two of them: MD or CRNA.** Owner, 16 Aug (§42):
+  *"MDs are always different users from CRNAs."* Nobody is both.
+* **`Both` belongs on the SHIFT, not the person** — it means either an MD or a CRNA may
+  cover that shift. This makes the shift's `role` field mean something for the first time:
+  defect 23 records that it is currently decorative, stored and filtered but **never
+  compared to a person**. With people carrying a role it becomes a real eligibility
+  constraint — you may only be given a shift marked for your role or marked *Both* — and
+  defect 23 closes by *using* the field rather than deleting it. Defect 21 resolves the same
+  way: `MD / CRNA / Both` is correct on a shift; it is the list of **person** roles that
+  must be data rather than baked in (§11).
 * **Groups are named sets of people, and a person may be in any number** — pediatric,
   obstetric, admin, call/non-call, per diem, locums, *"and probably more"*. Admin-created,
   not a fixed list in code, not a tree.
 * **This is the same control as shift lists**, which are named sets of shifts. One tick-list
   pattern, used for tags (shipped in 51), for request targets, and now for people.
 * **`fairness` on the group is where §26 lands** — per diem and locums are excluded from the
-  balancing maths, *"set on the group, not hard-coded"*. Build 51 shipped that switch
-  **per person** as an interim (§35), and §35 already records that it moves onto the group
-  when stage 4 arrives, with the per-person value becoming an override rather than a second
-  source of truth (§19's lesson).
+  balancing maths, *"set on the group, not hard-coded"*. **The group sets it and a person may
+  override** (§43). Claude argued against the override on §19 grounds — two places that can
+  answer the same question is exactly the shape that ruling warns about — and was overruled.
 
-**Open, needs the owner:** is `Both (MD & CRNA)` a third role, or a person in two groups?
-The current dropdown offers it. Not decided here.
+  **The override is accepted on one condition, which is part of the ruling and not optional:
+  it must be visible everywhere it matters.** On the person (*"In Per diem, which does not
+  count toward averages — individually overridden to count"*), on the group (listing members
+  whose individual setting disagrees with it), and **inside the report**, where §29 already
+  requires the method and the exclusions to be printed. One answer with visible exceptions,
+  not two answers that quietly disagree. The per-person switch that shipped in build 51
+  becomes the override; the group becomes the source.
+
+**Both questions this section previously left open are now answered** — §42 and §43.
 
 ---
 
