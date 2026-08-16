@@ -435,3 +435,128 @@ Firebase, no real data, every invented value labelled (§22).
 
 **Vacation Auction: on hold until Monday** (owner, 16 Aug). Schedule work continues; the
 cardinal rule does not relax while it is quiet.
+
+---
+
+## FILE HYGIENE — `_archive/`, and the .gitignore trap (16 Aug)
+
+The owner asked that obsolete files stop piling up in `~/Documents/GitHub`, and that
+nothing be destroyed: *"placed into a to delete folder or archive folder for when a file
+might be useful in the future."*
+
+**`~/Documents/GitHub/_archive/`** is the answer. It sits **outside every repo**, so
+GitHub never serves it and GitHub Desktop never shows it, but every byte is still on
+disk. `_archive/README.md` lists what moved, what stayed, and why. Read it before
+archiving anything else.
+
+**The test that decides.** A file moves only after grepping the whole GitHub folder and
+confirming no live page, no test suite, and no current handoff document reads it. If
+unsure, it stays. Three things looked like junk and were kept: `0c0fd0a8….html`
+(schedule), `2nd-admin-page-234asld.html` and `a5696c46….html` (auction) are **live
+redirects for old admin URLs**, not hash junk — my first guess that they were Google
+verification files was wrong.
+
+**Worth knowing about the auction repo:** it is a public GitHub Pages site, so
+`build265-staged/` … `build267-staged/` were *serving* three superseded copies of the
+admin console at guessable live URLs. Archiving them took those URLs off the internet.
+`build268-staged/` and `build269-staged/` stay — 269 is live.
+
+### ⚠️ THE TRAP: `.gitignore` does not apply to files git already tracks
+
+The `schedule` repo had **no `.gitignore` at all**, so seven `.claude-commit-msg*.txt`
+files and `.DS_Store` had been committed to a public repo. Adding the rule does **not**
+untrack them. Worse: writing a fresh file at a tracked path turns a clean deletion into a
+modification, and the cleanup silently does not happen — which is exactly what happened
+here on the first attempt.
+
+`git rm --cached` would fix it, but **the bridge must never mutate a git index** (see the
+lock-file section above). The workaround that needs no git command:
+
+1. leave the tracked path **absent** so it stays `D` in the owner's commit;
+2. write this build's message to a name that is *not* tracked and *is* matched by the new
+   rule — `.claude-commit-msg-hk.txt`;
+3. after the owner commits, the path is untracked, `.gitignore` takes over, and the normal
+   `.claude-commit-msg.txt` is safe again.
+
+Always verify with `git --no-optional-locks -C <repo> check-ignore -v <file>`. It prints
+the rule and line number that matched; silence with exit 1 means **not** ignored.
+
+---
+
+## Build 59 / 28 — FILED, NOT PUSHED — one document per DAY (§47)
+
+`dailysched/sched_YYYY-MM/days/{DD}`. See DECISIONS §47/47a/47b/47c for the rulings and
+`.claude-commit-msg-59.txt` for what shipped. Battery: 482 assertions, 12 suites, green.
+
+**What a fresh session most needs to know:**
+
+- `readMonth(ym)` returns `{days, legacy}` and is the ONLY correct way to read a month.
+  `dayRef(mk,dd)` / `daysCol(mk)` address the new storage; `monthRef(mk)` is now the
+  MARKER and BACKUP, not the data. Never read `monthRef().days` directly again.
+- The in-memory shape is unchanged — `{DD: {user: cell}}` — which is why the split
+  touched 16 call sites and nothing downstream.
+- `monthLegacy` describes the month ON SCREEN only. Do not use it to guard a write to
+  another month; `mutateCell` already re-checks inside its transaction (§47c).
+- The fake Firestore now models subcollections. `writeBatch` deliberately checks every
+  staged write for a denial BEFORE applying any — do not "simplify" that, the atomicity
+  test would then pass for the wrong reason.
+
+**Settled, no longer owed.** build52-test and build53-test had their FIXTURES moved
+(where data is seeded and read — no assertion changed). Their honesty checks were then
+executed against builds 51/26 and 52/27, pulled out of git history: **3 pass / 40 fail**
+and **8 pass / 21 fail** respectively. The fixture moves did not weaken them.
+
+## RUNNING EITHER BATTERY FROM A CLOUD SESSION — the bit that is not obvious
+
+Both batteries run fine in a cloud session once the files are staged. The trap is the
+HONESTY CHECKS, and it wasted several runs before it was understood:
+
+> A suite reads the CURRENT build from the repo (`ROOT`), and the PREVIOUS build from
+> `/mnt/user-data/uploads/GitHub/...` — the staged copy. Stage the current build to both
+> and every honesty check compares a build to ITSELF and fails. Those failures look
+> exactly like regressions and are not.
+
+So: copy the repo to a working dir for `ROOT`, and stage the *older* bytes to the uploads
+path. Every suite skips its honesty block cleanly when the baseline is absent
+(`if (PRE) { … }`), so leaving it out is honest; feeding it the current build is not.
+
+Historical bytes come out of git read-only, which is safe over the bridge:
+
+    git --no-optional-locks show <sha>:admin/index.html > _to_delete/hist/adminNN.html
+
+`git log --format=%h` plus a `grep -o 'var BUILD = [0-9]*'` over each commit finds the
+shas. Schedule suites take `PRE_ADMIN=` / `PRE_STAFF=`; the auction's take `PREFIX_SRC=`,
+except `test-audit-fixes.mjs`, whose schedule baseline path (`PRE2S`) is HARDCODED to
+`/mnt/user-data/uploads/GitHub/schedule/admin/index.html` and has no env override.
+
+**AUCTION BATTERY, RUN ON BUILD 59 — 14 suites, 1,075 assertions, ALL GREEN.**
+(audit-fixes 334 · backup-restore 177 · p4-rounds 154 · high-fixes 128 · delta-fixes 91 ·
+fairplay 48 · zero-results 28 · round-months 25 · reopen-smartlock 23 · never-events 20 ·
+send-inflight-guard 17 · lead-admin 16 · priority-inversion 10 · engine-fuzz 4.)
+Baselines used: schedule admin 46 (`898535a`, genuinely pre the duplicate-login-email fix)
+for the schedule twin; the auction's own pre-126 staff baseline was NOT available, so those
+four honesty assertions skipped — an auction-session job, unrelated to build 59.
+The #7 open-shift block, which broke on builds 50 and 52, is green on 59.
+
+**Transferring files when staging is blocked.** `device_stage_files` failed with
+`untrusted_device` three times this session. `SendUserFile` → `device_commit_files` still
+worked and is byte-exact (verified by md5 both directions). To get a file OFF the device
+when staging is down: file the new version to a scratch folder, `diff -u new old` there,
+print the diff gzip+base64 in ~12 KB chunks, and reassemble — verify with md5 at every
+step. A single large blob printed through `device_bash` LOSES BYTES; a 29 KB one arrived
+386 bytes short. Chunk it and check it.
+
+## Next actions, in order
+
+1. **Owner pushes build 59/28 + the housekeeping** (both are in the same commit; message
+   at `schedule/.claude-commit-msg-59.txt` and `tests/.claude-commit-msg-59.txt`), and the
+   auction repo's housekeeping-only commit (`vacation-kp.github.io/.claude-commit-msg.txt`).
+2. **Run the AUCTION battery on the owner's machine** — 14 suites. Build 59 changed the
+   schedule admin page and the auction suites read it. Every anchor was checked by hand
+   and all survive, but that is not the same as running them.
+3. **Convert the existing months** in the live admin once pushed — the banner's button.
+4. **The defect sweep**: defect 1 (approval bypasses eligibility/capacity/vacation/
+   collision checks), defect 3 (swap apply not atomic — build 59 narrowed it but did not
+   close it), defect 12 (renderAll destroys unsaved typing in the Users grid), defect 7.
+5. **Request types** (designed, approved, unblocked).
+6. **Stage 4** — roles + groups, which unblocks stage 5 (rules + conflict report, §44).

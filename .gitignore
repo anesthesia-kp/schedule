@@ -1,0 +1,8 @@
+# macOS Finder junk — never commit.
+.DS_Store
+
+# Local-only: the pending commit message Claude writes for GitHub Desktop to
+# pre-fill. Never committed or pushed. (These were tracked up to build 58 by
+# mistake; the old ones live in ../_archive/schedule/commit-messages/.)
+.claude-commit-msg.txt
+.claude-commit-msg-*.txt

@@ -790,3 +790,35 @@ that ruling warns about. It is allowed here on the same condition as §43: an ov
 be **visible** — a removed federal holiday and an added local one are both shown as
 deliberate changes, never as a silent difference between what the code computes and what
 the calendar says.
+
+---
+
+## §47 — DONE, build 59. How it actually came out.
+
+The ruling was "split the month document into a subcollection, NOW, while there is no
+real data." Built. `dailysched/sched_YYYY-MM/days/{DD}`, one document per day.
+
+Three things were decided during the build that the ruling did not cover, and they are
+binding from here:
+
+**47a — An unconverted month is READ-ONLY, not merged.** The tempting alternative was to
+read both places and merge. That gives one question two sources of truth, which is what
+§19 forbids, and it makes a half-and-half month possible. So: `sched_YYYY-MM.v2 === true`
+means the day records are the truth (even when empty); days present without the marker
+means unconverted, shown in full but locked, with a banner and a Convert button.
+
+**47b — Converting COPIES; the old record is kept as the backup.** It is not moved and
+not deleted. Deleting the old month documents is a separate decision for a later day, once
+there has been real data in the new shape for a while. The copy is ONE batch — all of it
+or none of it — because a half-copied month leaves the uncopied days invisible.
+
+**47c — The lock is checked inside the write's own transaction, never from a flag.**
+The on-screen "is this month converted" flag describes the month you are LOOKING at.
+Request approval and swap apply both write to other months. A cached answer is wrong for
+exactly the cases that matter, so `mutateCell` re-reads the month marker inside its own
+transaction before writing anything.
+
+Also settled here: **Clear Month must write the v2 marker alongside the deletions.**
+Without it, clearing empties the day records, the reader falls back to the old document,
+and every assignment just cleared comes back. That is a general shape worth remembering —
+whenever "empty" and "look somewhere else" are both possible, something must say which.

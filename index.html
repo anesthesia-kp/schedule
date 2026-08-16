@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 27;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 28;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -380,7 +380,7 @@ table.grid .wkend{background:var(--s3)}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, collection, getDoc, setDoc, updateDoc, arrayUnion, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ── Firebase — same project as the Vacation Auction, but ALL scheduling data
@@ -403,7 +403,34 @@ const eligRef     = doc(db,"dailysched","eligibility");
 const requestsRef = doc(db,"dailysched","requests");
 const swapsRef    = doc(db,"dailysched","swaps");
 const openRef     = doc(db,"dailysched","openShifts"); // admin-posted unfilled shifts users can apply for
+// [59 · §47] A month is now one document PER DAY: dailysched/sched_YYYY-MM/days/{DD}.
+// The old single document survives as the marker and the backup — sched_YYYY-MM.v2===true
+// means the subcollection is the truth, even when it is empty.
+//
+// This page NEVER writes an assignment, so it needs the reader half only. But it must read
+// BOTH shapes, and that is not politeness: if a month has not been converted yet, reading
+// only the new location would show every doctor an empty month. "Nothing is scheduled" and
+// "it is filed somewhere else" look identical on screen and mean opposite things.
 const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);
+const daysCol     = mk=>collection(db,"dailysched","sched_"+mk,"days");
+function daysFromSnap(qs){
+  const days={};
+  qs.forEach(d=>{ const v=d.data(); if(v && Object.keys(v).length) days[d.id]=v; });
+  return days;
+}
+// Subscribes to both places and hands back whichever is authoritative, re-deciding on
+// every update. Returns an unsubscribe for the pair.
+function watchMonth(ym, cb){
+  let legacyDays=null, subDays={};
+  const emit=()=>cb({days:legacyDays||subDays});
+  const a=onSnapshot(monthRef(ym),snap=>{
+    const md=snap.exists()?snap.data():null;
+    legacyDays=(md&&md.days&&Object.keys(md.days).length&&md.v2!==true)?md.days:null;
+    emit();
+  });
+  const b=onSnapshot(daysCol(ym),qs=>{ subDays=daysFromSnap(qs); emit(); });
+  return ()=>{ try{a();}catch(_){} try{b();}catch(_){} };
+}
 const auditRef    = doc(db,"dailysched","auditLog"); // shared with admin's Audit Log page — write-only from here
 
 // vacations — READ-ONLY: shared roster + approved vacation weeks
@@ -558,7 +585,7 @@ function setMonth(ym){
   syncQuickViewMonths();   // [26] independent of the month being browsed
   if(unsubMonth) unsubMonth();
   monthData={days:{}};
-  unsubMonth=onSnapshot(monthRef(ym),snap=>{ monthData=snap.exists()?snap.data():{days:{}}; if(!monthData.days)monthData.days={}; renderAll(); });
+  unsubMonth=watchMonth(ym,m=>{ monthData=m; renderAll(); });
   renderAll();
 }
 window.moveMonth=function(dir){
@@ -611,11 +638,7 @@ function syncQuickViewMonths(){
   qvUnsubs.forEach(u=>{ try{u();}catch(e){} });
   qvUnsubs=[]; qvData={};
   months.forEach(ym=>{
-    qvUnsubs.push(onSnapshot(monthRef(ym),snap=>{
-      qvData[ym]=snap.exists()?snap.data():{days:{}};
-      if(!qvData[ym].days) qvData[ym].days={};
-      renderAll();
-    }));
+    qvUnsubs.push(watchMonth(ym,m=>{ qvData[ym]=m; renderAll(); }));
   });
 }
 // [52] THE ASSIGNMENT MODEL — read side. A cell is { a:[{s,by,at,via}], off }, and `a` is

@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 58;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 59;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -326,6 +326,27 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
            They are testing tools, not daily work, and this is a page people use every day. -->
       <a onclick="nav('simulator',document.querySelector('nav a[onclick*=simulator]'))"
          style="font-size:11.5px;color:var(--t2);cursor:pointer;text-decoration:underline">🎲 Auto-populate and Clear Month moved to Testing →</a>
+    </div>
+    <!-- [59 · §47] Shown ONLY while the month on screen is still stored the old way.
+         It is a lock, not a nag: everything below is read-only until Convert is pressed. -->
+    <div id="legacyBanner" class="card" style="display:none;padding:12px 14px;margin-bottom:10px;border:2px solid #f59e0b;background:#fffbeb">
+      <div style="font-size:13px;font-weight:800;color:#92400e">⚠️ <span id="legacyMonthName">This month</span> is stored in the old format — it is read-only until you convert it</div>
+      <div style="font-size:12px;color:#92400e;margin-top:6px;line-height:1.5">
+        Assignments used to live in one document per month. They now live in one document <b>per day</b>, so
+        that a month can hold the whole group without hitting Firestore's size limit, and so two people
+        editing different weeks stop fighting over the same record.
+        <br><br>
+        <b>Nothing is deleted by converting.</b> It copies the month across in a single step — either all of
+        it lands or none of it does — and the old record is kept exactly as it is, as a backup.
+        <br><br>
+        Everything below is showing you the real, current assignments. You just can't change them until this
+        month has moved across.
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-primary" style="font-size:13px" onclick="convertThisMonth()">📦 Convert <span id="legacyBtnMonth">this month</span></button>
+        <button class="btn btn-ghost" style="font-size:12px" onclick="convertAllMonths()">Convert every month I can find…</button>
+        <span id="legacyBusy" style="font-size:12px;color:#92400e"></span>
+      </div>
     </div>
     <div class="card" style="padding:10px 14px;margin-bottom:10px">
       <div style="font-size:12px;color:var(--t2)"><b>Call fairness:</b> fairness is measured on a <b>rolling 12-month average</b> — the last 12 months of the actual saved schedule, plus each person's starting baseline below. This feeds the <b>fairness view</b> on the Reports page and the simulator's distribution. The baseline stays here because it is real fairness data, not a testing tool.</div>
@@ -838,7 +859,7 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, setDoc, updateDoc, deleteField, getDoc, arrayUnion, arrayRemove, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, collection, setDoc, updateDoc, deleteDoc, deleteField, getDoc, getDocs, writeBatch, arrayUnion, arrayRemove, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const app = initializeApp({
@@ -860,7 +881,109 @@ const swapsRef    = doc(db,"dailysched","swaps");
 const openRef     = doc(db,"dailysched","openShifts");
 const totalsRef   = doc(db,"dailysched","callTotals"); // legacy counter — no longer used for fairness (see windowShiftCounts)
 const callBaselineRef = doc(db,"dailysched","callBaseline"); // {user:{shiftId:n}} admin-set STARTING baseline (prior call not yet in the schedule)
-const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);
+// ══════════════════════════════════════════════════════════════════════════════
+// [59] WHERE A MONTH LIVES — one document PER DAY.  DECISIONS §47.
+//
+// Until build 58 a whole month was one document: dailysched/sched_YYYY-MM with
+// days[DD][user]. Two things were wrong with that, and only one of them is size.
+//
+//   1. SIZE. Firestore's hard ceiling is 1 MiB per document. 60 anaesthesiologists
+//      × 31 days = 1,860 cells, and a cell now carries who assigned it and when
+//      (§8's {a:[{s,by,at,via}]}). At ~120 bytes a cell that is ~220 KB for a plain
+//      month — same order as the limit, not comfortably below it. The failure mode
+//      is the bad kind: the month silently stops saving once it is full.
+//
+//   2. CONTENTION, which bites long before size does. EVERY cell edit rewrote and
+//      re-broadcast the ENTIRE month. Two admins editing different weeks fought
+//      over one document, and mutateCell's transaction retried against it.
+//
+// Now: dailysched/sched_YYYY-MM/days/{DD} — one document per day, {<initials>:cell}.
+// ~7 KB a day, and the 1st and the 20th never contend. A month view costs 31
+// document reads instead of 1, which at this scale is nothing.
+//
+// ── HOW A MONTH'S FORMAT IS DECIDED (there is exactly one answer, never two) ──
+// The month document survives as a MARKER and a backup:
+//
+//   sched_YYYY-MM.v2 === true   →  the subcollection is the truth. Always. Even
+//                                  when it is empty, which is what stops Clear
+//                                  Month from resurrecting pre-split data.
+//   no month doc, or no days    →  nothing to convert; the subcollection is the truth.
+//   days present, v2 not set    →  an UNCONVERTED month. It is shown READ-ONLY
+//                                  behind a banner until the owner presses Convert.
+//
+// Read-only is deliberate. Merging the two shapes would give one question two
+// sources of truth, which §19 exists to forbid, and a split-brain month is far
+// worse than an afternoon of not being able to type into one.
+//
+// Converting COPIES. It never deletes the old document — that is the backup, and
+// deleting it is a separate decision for a later day. It writes in ONE batch, so a
+// month is never half-converted; a partial copy would leave the uncopied days
+// invisible, which is the worst thing this build could possibly do.
+// ══════════════════════════════════════════════════════════════════════════════
+const monthRef    = mk=>doc(db,"dailysched","sched_"+mk);          // the pre-59 doc: marker + backup
+const daysCol     = mk=>collection(db,"dailysched","sched_"+mk,"days");
+const dayRef      = (mk,dd)=>doc(db,"dailysched","sched_"+mk,"days",dd);
+// A query snapshot -> the same {DD:{user:cell}} shape every caller above already
+// speaks, so the split stops here and nothing downstream had to change.
+function daysFromSnap(qs){
+  const days={};
+  qs.forEach(d=>{ const v=d.data(); if(v && Object.keys(v).length) days[d.id]=v; });
+  return days;
+}
+// Reads a month WHATEVER format it is in. Returns {days, legacy}. `legacy:true`
+// means it came from the old single document and has not been converted — callers
+// that only count assignments (reports, fairness) do not care and should just use
+// `days`; the ones that WRITE must refuse. Throws on a real read failure, because a
+// month that cannot be read must never be reported as an empty one (see collectRange).
+async function readMonth(ym){
+  const mSnap=await getDoc(monthRef(ym));
+  const md=mSnap.exists()?mSnap.data():null;
+  if(md && md.days && Object.keys(md.days).length && md.v2!==true) return {days:md.days,legacy:true};
+  const qs=await getDocs(daysCol(ym));
+  return {days:daysFromSnap(qs),legacy:false};
+}
+// Reads ONE day. THROWS on an unconverted month rather than handing back its cells:
+// every caller of this goes on to write, and a caller that got the old month's data and
+// then wrote into the new one would produce precisely the split this build prevents.
+async function readDay(ym,dd){
+  const m=await readMonth(ym);
+  if(m.legacy) throw new Error(ym+' is still in the old storage format. Convert it before changing assignments in it.');
+  return m.days[dd]||{};
+}
+// Which of these months are unconverted — so an operation spanning several months can
+// refuse up front, by name, instead of failing partway through.
+async function legacyAmong(yms){
+  const out=[];
+  for(const ym of [...new Set(yms)]) { try{ if((await readMonth(ym)).legacy) out.push(ym); }catch(_){} }
+  return out.sort();
+}
+// One batch, so a month is never half-converted. Copies; never deletes the old document.
+// Returns the number of days written.
+async function convertMonth(ym){
+  const mSnap=await getDoc(monthRef(ym));
+  const md=mSnap.exists()?mSnap.data():null;
+  if(!md || !md.days || !Object.keys(md.days).length){
+    // Nothing to copy. Still mark it, so the answer to "which format is this month in"
+    // is recorded rather than re-derived differently by some later reader.
+    await mergeFields(monthRef(ym),{v2:true});
+    return 0;
+  }
+  if(md.v2===true) return 0;                       // already converted — re-pressing is a no-op, not a re-copy
+  const batch=writeBatch(db);
+  let n=0;
+  for(const dd of Object.keys(md.days)){
+    const cells=md.days[dd];
+    if(!cells || !Object.keys(cells).length) continue;
+    batch.set(dayRef(ym,dd),cells);
+    n++;
+  }
+  // The marker goes in the SAME batch as the day documents. If it were a second write,
+  // a failure between the two would leave a month whose days exist in both places with
+  // nothing saying which is authoritative — and both readers would be defensible.
+  batch.set(monthRef(ym),{v2:true},{merge:true});
+  await batch.commit();
+  return n;
+}
 const schedFteRef = doc(db,"dailysched","fteMap"); // THIS SITE's own FTE per user — totally separate from the Vacation Auction's FTE doc; the same person can carry a different number on each site. Never read from or written to the auction's fteMap — no seeding, no syncing, no fallback to it.
 const auditRef    = doc(db,"dailysched","auditLog"); // {log:[{id,ts,admin,action,detail}]} — who changed what, when
 // [51] Reports. Both live in dailysched — this site's own data. NEITHER may ever move to a
@@ -1190,9 +1313,84 @@ function setMonth(ym){
   curYM=ym;
   if(unsubMonth) unsubMonth();
   monthData={days:{}};
-  unsubMonth=onSnapshot(monthRef(ym),snap=>{ monthData=snap.exists()?snap.data():{days:{}}; if(!monthData.days)monthData.days={}; renderAll(); });
+  // [59] TWO listeners now: the day subcollection, and the old month document —
+  // which is still watched because it carries the v2 marker that says which of the
+  // two is the truth. Watching only the subcollection would show an unconverted
+  // month as empty, and "empty" and "stored somewhere else" must never look alike.
+  monthLegacy=false;
+  let legacyDays=null, subDays={};
+  const recombine=()=>{
+    monthLegacy=!!legacyDays;
+    monthData={days:legacyDays||subDays};
+    renderAll();
+  };
+  const unsubA=onSnapshot(monthRef(ym),snap=>{
+    const md=snap.exists()?snap.data():null;
+    legacyDays=(md&&md.days&&Object.keys(md.days).length&&md.v2!==true)?md.days:null;
+    recombine();
+  });
+  const unsubB=onSnapshot(daysCol(ym),qs=>{ subDays=daysFromSnap(qs); recombine(); });
+  unsubMonth=()=>{ try{unsubA();}catch(_){}; try{unsubB();}catch(_){} };
   renderAll();
 }
+// True while the month on screen is still in the pre-59 single-document format.
+// Every writer checks this. It is not a warning — it is a lock (see monthLockRefuse).
+let monthLegacy=false;
+function monthLockRefuse(){
+  if(!monthLegacy) return false;
+  schedToast('This month is still in the old storage format. Convert it first — the banner above the grid has the button.','err');
+  return true;
+}
+window.monthIsLegacy=()=>monthLegacy;   // HANDOFF trap 1: module scope is invisible to inline onclick= and to tests
+
+function renderLegacyBanner(){
+  const b=document.getElementById('legacyBanner'); if(!b) return;
+  b.style.display=monthLegacy?'block':'none';
+  if(!monthLegacy) return;
+  const [y,m]=curYM.split('-').map(Number);
+  const nm=MS[m-1]+' '+y;
+  const a=document.getElementById('legacyMonthName'); if(a) a.textContent=nm;
+  const c=document.getElementById('legacyBtnMonth');  if(c) c.textContent=nm;
+}
+window.convertThisMonth=async function(){
+  const ym=curYM, [y,m]=ym.split('-').map(Number);
+  const busy=document.getElementById('legacyBusy');
+  if(!confirm('Convert '+MS[m-1]+' '+y+' to the new storage format?\n\nEvery assignment is copied to one record per day, in a single step — all of it or none of it. The old record is KEPT as a backup and nothing is deleted.')) return;
+  if(busy) busy.textContent='Converting…';
+  try{
+    const n=await convertMonth(ym);
+    auditLog('month.convert','Converted '+MS[m-1]+' '+y+' to per-day storage — '+n+' day record(s) written; the old month record was kept as a backup');
+    if(busy) busy.textContent='';
+    schedToast('Converted '+MS[m-1]+' '+y+' — '+n+' day'+(n===1?'':'s')+' moved across. You can edit it now.','ok');
+  }catch(e){
+    if(busy) busy.textContent='';
+    // Nothing landed — the batch is atomic. Say so, because "it failed" and "it half
+    // worked" call for very different next moves from the owner.
+    schedToast('Conversion FAILED and nothing was changed — '+((e&&e.code)||(e&&e.message)||'unknown error')+'. '+MS[m-1]+' '+y+' is exactly as it was.','err');
+  }
+};
+// Sweeps a window around the current year rather than claiming to find "every" month —
+// Firestore cannot list documents by prefix from the client, so an exhaustive search is
+// not available. The range searched is stated out loud instead of implied.
+window.convertAllMonths=async function(){
+  const y0=Number(curYM.split('-')[0]);
+  const from=y0-2, to=y0+2;
+  const yms=[];
+  for(let y=from;y<=to;y++) for(let m=1;m<=12;m++) yms.push(y+'-'+pad(m));
+  const busy=document.getElementById('legacyBusy');
+  if(busy) busy.textContent='Looking through '+from+'–'+to+'…';
+  const bad=await legacyAmong(yms);
+  if(!bad.length){ if(busy) busy.textContent=''; alert('Nothing to convert.\n\nEvery month from January '+from+' to December '+to+' is already in the new format.\n\n(Months outside that range are not searched — Firestore cannot list them from here. Open one and use the button on its banner.)'); return; }
+  if(!confirm('Convert '+bad.length+' month'+(bad.length===1?'':'s')+' to the new format?\n\n'+bad.join(', ')+'\n\nEach one is copied in a single step and its old record is kept as a backup. Nothing is deleted.\n\nOnly '+from+'–'+to+' was searched.')){ if(busy) busy.textContent=''; return; }
+  const done=[], failed=[];
+  for(const ym of bad){
+    if(busy) busy.textContent='Converting '+ym+'…';
+    try{ await convertMonth(ym); done.push(ym); }catch(e){ failed.push(ym+' ('+((e&&e.code)||(e&&e.message)||'error')+')'); }
+  }
+  if(busy) busy.textContent='';
+  auditLog('month.convertAll','Converted '+done.length+' month(s) to per-day storage: '+(done.join(', ')||'none')+(failed.length?' — FAILED: '+failed.join(', '):''));
+  alert('Converted '+done.length+' of '+bad.length+' month(s).'+(done.length?'\n\n✅ '+done.join(', '):'')+(failed.length?'\n\n⛔ These failed and were left EXACTLY as they were — nothing was half-written:\n'+failed.join('\n'):''));
+};
 window.moveMonth=function(dir){ const [y,m]=curYM.split('-').map(Number); setMonth(ymKey(new Date(y,m-1+dir,1))); };
 window.moveYear=function(dir){ const [y,m]=curYM.split('-').map(Number); setMonth(ymKey(new Date(y+dir,m-1,1))); };
 window.gotoToday=function(){ setMonth(ymKey(new Date())); };
@@ -1260,27 +1458,42 @@ window.shiftsOf=shiftsOf; window.shiftEntries=shiftEntries; window.holdsShift=ho
 // mergeFields write had exactly that hole. `fn` gets {shifts:[entries], off} and returns
 // the same shape, or null to abort and write nothing.
 async function mutateCell(ym,dd,u,fn){
-  let result=null;
+  let result=null, blocked=false;
   await runTransaction(db, async (tx)=>{
-    result=null;                                  // reset per attempt — this closure re-runs on conflict
-    const ref=monthRef(ym);
+    result=null; blocked=false;                   // reset per attempt — this closure re-runs on conflict
+    // [59] Is this month still unconverted? Asked HERE, against fresh data inside the
+    // transaction, rather than from the monthLegacy flag — that flag describes the month
+    // on screen, and mutateCell is also called for other months by the swap apply and by
+    // request approval. A stale answer would write a new-format cell into an old-format
+    // month and split it in two, which is exactly the state this build exists to prevent.
+    // Firestore requires every read before every write, so this goes first.
+    const mSnap=await tx.get(monthRef(ym));
+    const md=mSnap.exists()?mSnap.data():null;
+    if(md && md.days && Object.keys(md.days).length && md.v2!==true){ blocked=true; return; }
+    // The transaction is now scoped to ONE DAY, not the whole month. Editing the 3rd no
+    // longer contends with anyone editing the 20th — that is the contention half of §47,
+    // and it is the half that bites first, long before the size limit does.
+    const ref=dayRef(ym,dd);
     const snap=await tx.get(ref);
     const exists=snap.exists();
-    const cur=(exists&&snap.data().days&&snap.data().days[dd]&&snap.data().days[dd][u])||{};
+    const cur=(exists&&snap.data()[u])||{};
     const next=fn({shifts:shiftEntries(cur),off:!!cur.off});
     if(!next) return;                             // guard failed on fresh data — no-op
     const cell={
       a:next.shifts.map(x=>({s:x.s,by:x.by||_currentAdminEmail||'unknown',at:x.at||Date.now(),via:x.via||'manual'})),
       off:!!next.off,
     };
-    // updateDoc honours a dotted path and REPLACES the value there — which is what drops
-    // the legacy day/call keys in the same write that converts the cell. setDoc+merge
-    // silently ignores dotted paths (confirmed against production; see the catalog
-    // migration's comment), so it cannot be used here.
-    if(exists) tx.update(ref,{['days.'+dd+'.'+u]:cell});
-    else       tx.set(ref,{days:{[dd]:{[u]:cell}}},{merge:true});
+    // updateDoc REPLACES the value at the named field — which is what drops the legacy
+    // day/call keys in the same write that converts the cell. setDoc+merge would deep-
+    // merge them back in, so it cannot be used for the update path.
+    if(exists) tx.update(ref,{[u]:cell});
+    else       tx.set(ref,{[u]:cell},{merge:true});
     result=cell;
   });
+  if(blocked){
+    schedToast(ym+' is still in the old storage format and cannot be edited until it is converted — see the banner above the grid.','err');
+    return null;
+  }
   return result;
 }
 // Three operations, and none of them is "replace". Replacing is remove-then-add, said out
@@ -1455,13 +1668,14 @@ window.cmToggleOff=async function(){
 };
 window.cmClearAll=async function(){
   if(!cellSel) return;
+  if(monthLockRefuse()) return;
   const {u,dd}=cellSel;
   const held=shiftsOf(cellOf(u,dd)).map(x=>catalog.shifts?.[x]?.label||x);
   if(!confirm('Remove everything for '+displayName(u)+' on '+curYM+'-'+dd+'?\n\n'
     +(held.length?'This removes: '+held.join(', ')+'\n\n':'There are no shifts to remove.\n\n')
     +'The day-off flag is cleared too.')) return;
   try{
-    await mergeFields(monthRef(curYM),{['days.'+dd+'.'+u]:deleteField()});
+    await mergeFields(dayRef(curYM,dd),{[u]:deleteField()});
     auditLog('cell.clear','Cleared '+displayName(u)+'’s whole day on '+curYM+'-'+dd+(held.length?' — removed '+held.join(', '):''));
     renderCellModal();
   }catch(e){ schedToast('Could not clear it: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); }
@@ -1502,7 +1716,7 @@ async function windowShiftCounts(endYm, priorMonths, cache){
     const d=new Date(ey, em-1-k, 1);
     const ym=d.getFullYear()+'-'+pad(d.getMonth()+1);
     let days = (cache && cache[ym]!==undefined) ? cache[ym] : null;
-    if(days===null){ try{ const snap=await getDoc(monthRef(ym)); days=(snap.exists()&&snap.data().days)||{}; }catch(_){ days={}; } if(cache) cache[ym]=days; }
+    if(days===null){ try{ days=(await readMonth(ym)).days; }catch(_){ days={}; } if(cache) cache[ym]=days; }
     for(const dd in days) for(const u in days[dd]) for(const id of shiftsOf(days[dd][u])) counts[u+'|'+id]=(counts[u+'|'+id]||0)+1;
   }
   return counts;
@@ -1559,6 +1773,7 @@ function rehearsalRefuse(){
 
 window.autoPopulate=async function(){
   if(rehearsalRefuse()) return;
+  if(monthLockRefuse()) return;                    // [59] never fill an unconverted month
   const [y,m]=curYM.split('-').map(Number);
   const nDays=new Date(y,m,0).getDate();
   if(!confirm('Auto-populate '+MS[m-1]+' '+y+'?\n\nFills every empty slot for every shift in the catalog using eligibility + even call distribution. Existing assignments are kept. Users see changes immediately.')) return;
@@ -1599,9 +1814,10 @@ window.autoPopulate=async function(){
   // [M-20] Write ONLY the cells we filled, as a targeted field patch, instead of a
   // full-month setDoc — a whole-month write would revert any change another admin/tab
   // made during the multi-second fairness read above.
-  const patch={};
-  for(const key in changed){ const [dd,u]=key.split('.'); patch['days.'+dd+'.'+u]=days[dd][u]; }
-  if(Object.keys(patch).length) await mergeFields(monthRef(curYM),patch);
+  // [59] Grouped BY DAY, one write per day document that actually changed.
+  const byDay={};
+  for(const key in changed){ const [dd,u]=key.split('.'); (byDay[dd]=byDay[dd]||{})[u]=days[dd][u]; }
+  for(const dd in byDay) await mergeFields(dayRef(curYM,dd),byDay[dd]);
   auditLog('autopopulate.month','Auto-populated '+MS[m-1]+' '+y+' — '+filled+' assignments'+(unfillable.length?', '+unfillable.length+' unfillable':''));
   alert('Auto-populate complete — '+filled+' assignments made.'+(unfillable.length?'\n\n⚠️ Could not fill (no eligible user):\n'+unfillable.slice(0,15).join('\n')+(unfillable.length>15?'\n…and '+(unfillable.length-15)+' more':''):''));
 };
@@ -1618,12 +1834,17 @@ window.autoPopulateYear=async function(){
   if(!confirm('Auto-populate ALL 12 months of '+year+' (January–December)?\n\nRuns the same fill as Auto-Populate Month, one month at a time in order, keeping existing assignments and balancing call fairness across the whole year. This can take a few seconds and writes to all 12 months.')) return;
   const vac=vacationDays();
   const _cache={}; // ym -> days; updated as we fill each month so later rolling windows see this run's fresh fills
+  const skippedLegacy=[]; // [59] months still in the pre-split format — skipped, and named at the end
   let grandFilled=0; const grandUnfillable=[];
   for(let m=1;m<=12;m++){
     const ym=year+'-'+pad(m);
     const nDays=new Date(year,m,0).getDate();
     let days = (_cache[ym]!==undefined) ? _cache[ym] : {};
-    if(_cache[ym]===undefined){ try{ const snap=await getDoc(monthRef(ym)); if(snap.exists()&&snap.data().days) days=JSON.parse(JSON.stringify(snap.data().days)); }catch(_){} }
+    let ymLegacy=false;
+    if(_cache[ym]===undefined){ try{ const m=await readMonth(ym); days=JSON.parse(JSON.stringify(m.days)); ymLegacy=m.legacy; }catch(_){} }
+    // [59] An unconverted month is skipped, not written into, and it is NAMED at the end —
+    // silently passing over four months of a year would read as "the year is done".
+    if(ymLegacy){ skippedLegacy.push(ym); continue; }
     // Rolling 12-month window (prior 11 months + baseline), reusing the cache so this
     // year-run's already-filled earlier months count toward later months' fairness.
     const counts= await windowShiftCounts(ym, 11, _cache);
@@ -1650,20 +1871,34 @@ window.autoPopulateYear=async function(){
       }
     }
     // [M-20] targeted patch — only this run's fills, never a whole-month overwrite.
-    const patch={};
-    for(const key in changed){ const [dd,u]=key.split('.'); patch['days.'+dd+'.'+u]=days[dd][u]; }
-    if(Object.keys(patch).length) await mergeFields(monthRef(ym),patch);
+    // [59] Grouped BY DAY, one write per day document that actually changed.
+    const byDay={};
+    for(const key in changed){ const [dd,u]=key.split('.'); (byDay[dd]=byDay[dd]||{})[u]=days[dd][u]; }
+    for(const dd in byDay) await mergeFields(dayRef(ym,dd),byDay[dd]);
     _cache[ym]=days; // so later months' rolling windows include this month's fresh fills
   }
   auditLog('autopopulate.year','Auto-populated all of '+year+' — '+grandFilled+' assignments'+(grandUnfillable.length?', '+grandUnfillable.length+' unfillable':''));
-  alert('Auto-populate year complete for '+year+' — '+grandFilled+' assignments made across all 12 months.'+(grandUnfillable.length?'\n\n⚠️ Could not fill (no eligible user) — '+grandUnfillable.length+' slot(s):\n'+grandUnfillable.slice(0,15).join('\n')+(grandUnfillable.length>15?'\n…and '+(grandUnfillable.length-15)+' more':''):''));
+  alert('Auto-populate year complete for '+year+' — '+grandFilled+' assignments made across '+(12-skippedLegacy.length)+' of 12 months.'
+    // [59] Skipped months are named, not quietly passed over. "Complete" while four months
+    // were never touched is the kind of true-sounding sentence that costs a day to unpick.
+    +(skippedLegacy.length?'\n\n⏭️ SKIPPED — still in the old storage format, nothing was written to '+(skippedLegacy.length>1?'these months':'this month')+':\n'+skippedLegacy.join(', ')+'\n\nOpen each one in Schedule and press Convert, then run this again.':'')+(grandUnfillable.length?'\n\n⚠️ Could not fill (no eligible user) — '+grandUnfillable.length+' slot(s):\n'+grandUnfillable.slice(0,15).join('\n')+(grandUnfillable.length>15?'\n…and '+(grandUnfillable.length-15)+' more':''):''));
 };
 window.clearMonth=async function(){
   if(rehearsalRefuse()) return;
+  if(monthLockRefuse()) return;
   const [y,m]=curYM.split('-').map(Number);
   if(!confirm('Clear ALL assignments for '+MS[m-1]+' '+y+'? Vacation weeks stay (they come from the auction). This cannot be undone.')) return;
-  await setDoc(monthRef(curYM),{days:{}});
-  auditLog('month.clear','Cleared ALL assignments for '+MS[m-1]+' '+y);
+  // [59] Clearing is now DELETING the day documents, not blanking one field. The v2
+  // marker is written too, and that is the load-bearing part: without it a cleared month
+  // has an empty subcollection, readMonth falls back to the old document, and every
+  // assignment the owner just cleared reappears. Setting the marker says "the
+  // subcollection is the truth here" even when the truthful answer is nothing.
+  const qs=await getDocs(daysCol(curYM));
+  const batch=writeBatch(db);
+  qs.forEach(d=>batch.delete(dayRef(curYM,d.id)));
+  batch.set(monthRef(curYM),{v2:true},{merge:true});
+  await batch.commit();
+  auditLog('month.clear','Cleared ALL assignments for '+MS[m-1]+' '+y+' — '+qs.size+' day document(s) removed');
 };
 
 // ── Requests ──
@@ -1869,6 +2104,21 @@ window.decideSwap=async function(id,status){
   // part of this commit, so a mid-apply crash can leave "approved" with only some legs moved;
   // that case is surfaced (toast + audit marker) rather than silently swallowed. Full
   // swap-status+schedule single-commit atomicity is deferred.
+  // [59] Refuse BEFORE the status flip if any month this swap touches is unconverted.
+  // The apply below is a follow-on write, not part of the status commit (see the note
+  // above), so approving first and discovering the problem second would leave the swap
+  // marked approved with nothing moved.
+  if(status==='approved'){
+    const pre=(swaps.list||[]).find(x=>x.id===id);
+    if(pre){
+      const yms=pre.type==='3way'?(pre.legs||[]).map(l=>String(l.date).slice(0,7)):[String(pre.date).slice(0,7)];
+      const bad=await legacyAmong(yms.filter(Boolean));
+      if(bad.length){
+        schedToast('Cannot approve this swap: '+bad.join(', ')+(bad.length>1?' are':' is')+' still in the old storage format. Convert '+(bad.length>1?'them':'it')+' first — Schedule → the banner above the grid.','err');
+        return;
+      }
+    }
+  }
   let s=null;
   const wrote=await txUpdateList(swapsRef, cur=>{
     const item=cur.find(x=>x.id===id);
@@ -1891,7 +2141,7 @@ window.decideSwap=async function(id,status){
           // [52] Move the ACTUAL shifts the giver holds of that kind — add to the receiver,
           // then remove from the giver. Two named operations. The old version copied a slot
           // wholesale, which overwrote anything the receiver already had in it.
-          const snap=await getDoc(monthRef(mk)); const dayMap=snap.data()?.days?.[dd]||{};
+          const dSnap=await readDay(mk,dd); const dayMap=dSnap;
           const moving=shiftsOf(dayMap[giver]).filter(x=>kindOfShift(x)===k);
           for(const sid of moving){
             await mutateCell(mk,dd,receiver,st=>st.shifts.some(x=>x.s===sid)?null:({shifts:[...st.shifts,{s:sid,via:'swap'}],off:st.off}));
@@ -1903,7 +2153,7 @@ window.decideSwap=async function(id,status){
         const k=s.part==='call'?'call':'day';
         // [52] An exchange of the shifts each side holds OF THAT KIND. Whatever either of
         // them holds of the OTHER kind is left alone — previously the slot copy could wipe it.
-        const snap=await getDoc(monthRef(mk)); const dayMap=snap.data()?.days?.[dd]||{};
+        const dSnap=await readDay(mk,dd); const dayMap=dSnap;
         const aMove=shiftsOf(dayMap[s.from]).filter(x=>kindOfShift(x)===k);
         const bMove=shiftsOf(dayMap[s.to]).filter(x=>kindOfShift(x)===k);
         const swapInto=(keepOut,bringIn)=>st=>({
@@ -3469,13 +3719,13 @@ async function renderStatsYear(){
   g.innerHTML='';
   const vac=vacationDays();
   const monthKeys=[]; for(let m=1;m<=12;m++) monthKeys.push(y+'-'+pad(m));
-  const snaps=await Promise.all(monthKeys.map(mk=>getDoc(monthRef(mk)).catch(()=>null)));
+  const months=await Promise.all(monthKeys.map(mk=>readMonth(mk).catch(()=>null)));
   if(statsMode!=='year'||Number(curYM.split('-')[0])!==y) return; // navigated away mid-fetch
   const counts={}, offCounts={}, vacCounts={};
   for(const u of names){ counts[u]={}; offCounts[u]=0; vacCounts[u]=0; }
   monthKeys.forEach((mk,i)=>{
     const [my,mm]=mk.split('-').map(Number);
-    const days=snaps[i]?.data?.()?.days||{};
+    const days=months[i]?.days||{};
     const nDays=new Date(my,mm,0).getDate();
     for(const u of names){
       for(let d=1;d<=nDays;d++){
@@ -3639,7 +3889,7 @@ function renderDash(){
   document.getElementById('dashUserSub').textContent=names.length?(noFte?(noFte+' of '+names.length+' user(s) have no FTE set here.'):'Every user has an FTE set.'):'No users yet.';
 }
 
-function renderAll(){ if(cellSel) renderCellModal(); renderRehearsal(); renderCatLock(); renderCoverage(); renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); renderUsersLock(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); renderReports(); }
+function renderAll(){ if(cellSel) renderCellModal(); renderLegacyBanner(); renderRehearsal(); renderCatLock(); renderCoverage(); renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); renderUsersLock(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); renderReports(); }
 
 // ── Call-fairness baseline table (users × call shifts) ──
 function renderBaseline(){
@@ -3942,7 +4192,7 @@ async function collectRange(start,end,users){
   while(cur<=last){
     const ym=ymKey(cur);
     let days=null;
-    try{ const snap=await getDoc(monthRef(ym)); days=(snap.exists()&&snap.data().days)||{}; }
+    try{ days=(await readMonth(ym)).days; }
     catch(e){ failed.push(ym); days=null; }
     if(days){
       const nDays=new Date(cur.getFullYear(),cur.getMonth()+1,0).getDate();
