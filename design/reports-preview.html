@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Schedule — Reports (preview)</title>
+<style>
+:root{--bg:#f4f7fa;--s1:#fff;--s2:#f8fafc;--s3:#eef2f7;--b1:#e3e9f0;--b2:#cbd5e1;
+      --t1:#1e293b;--t2:#5b6b7c;--t3:#94a3b8;--blue:#2563eb;--green:#059669;--red:#dc2626;--yellow:#b45309}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;padding:16px 20px}
+.page-title{font-size:18px;font-weight:800}
+.page-sub{font-size:12px;color:var(--t2);margin-top:3px;max-width:92ch;line-height:1.55}
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:14px 16px;margin-top:12px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.card-title{font-size:12px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.btn{border:1px solid var(--b2);background:var(--s1);color:var(--t1);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer}
+.btn:hover{background:var(--s3)}
+.btn.on,.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn-sm{font-size:11.5px;padding:3px 9px;border-radius:6px}
+.sel,.inp{border:1px solid var(--b2);border-radius:8px;padding:6px 9px;font-size:13px;background:var(--s1)}
+.lbl{font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fake{background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:700;margin-top:12px}
+.tagpick{display:flex;flex-wrap:wrap;gap:5px}
+.tp{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--b2);background:var(--s1);border-radius:999px;
+  padding:3px 11px 3px 8px;font-size:12px;font-weight:700;cursor:pointer}
+.tp.on{border-color:#7c3aed;background:#f5f3ff;color:#5b21b6;box-shadow:0 0 0 2px rgba(124,58,237,.14)}
+.tp .m{font-family:'SF Mono',Consolas,monospace;font-size:10.5px;color:var(--t2);font-weight:600}
+.tp.on .m{color:#7c3aed}
+.preview-frame{border:1px solid var(--b2);border-radius:10px;overflow:hidden;margin-top:10px;background:#fff}
+.preview-bar{background:var(--s3);border-bottom:1px solid var(--b1);padding:5px 12px;font-size:11px;font-weight:700;color:var(--t2)}
+iframe{width:100%;height:720px;border:0;display:block}
+.note{font-size:11.5px;color:var(--t2);margin-top:6px;line-height:1.5}
+</style>
+</head>
+<body>
+
+<div class="page-title">📈 Reports <span style="font-size:11px;font-weight:800;background:var(--s3);color:var(--t2);border-radius:999px;padding:2px 10px;vertical-align:middle;margin-left:6px">ADMIN ONLY</span></div>
+<div class="page-sub">Preview. Reports open in their own tab using the <b>Vacation Auction's report stylesheet, lifted verbatim</b>, so both sites produce visually identical paperwork.</div>
+
+<div class="fake">⚠️ EVERY NAME AND NUMBER BELOW IS INVENTED. None of it is your data.</div>
+
+<div class="card">
+  <div class="card-title">Which shifts count as overnight call?</div>
+  <div class="tagpick" id="tagpick"></div>
+  <div class="note"><b>Admin sets this — nothing is derived.</b> Started with your three: Call 24, Call 16, OB PM. The report cannot work it out on its own. Crossing midnight would sweep in <b>RCH-ICU B</b>, a night ICU shift. The call family would include <b>Eye Call</b> (07:30–15:30) and <b>Call 12 AM</b> (07:30–19:30), which are daytime. So it is a list you set — the first of the admin-defined tags, and editable like everything else. Everything left unticked is simply not overnight call, whatever its name or hours suggest.</div>
+</div>
+
+<div class="card">
+  <div class="card-title">1 · Period</div>
+  <div class="row">
+    <button class="btn btn-sm"    data-p="day"     onclick="setP('day',this)">Day</button>
+    <button class="btn btn-sm on" data-p="month"   onclick="setP('month',this)">Month</button>
+    <button class="btn btn-sm"    data-p="quarter" onclick="setP('quarter',this)">Quarter</button>
+    <button class="btn btn-sm"    data-p="year"    onclick="setP('year',this)">Year</button>
+    <button class="btn btn-sm"    data-p="range"   onclick="setP('range',this)">Custom range</button>
+    <span style="width:1px;height:20px;background:var(--b2)"></span>
+    <span id="periodCtl" class="row"></span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">2 · Which doctor</div>
+  <div class="row">
+    <span class="lbl">Doctor</span>
+    <select class="sel" style="font-size:12px" id="whoSel" onchange="setWho(this.value)"></select>
+    <span style="width:1px;height:20px;background:var(--b2)"></span>
+    <label style="font-size:12.5px;font-weight:700;color:var(--t2);display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="batch" onchange="setBatch(this.checked)"> Produce one for <b>every doctor</b>
+    </label>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">3 · Output</div>
+  <div class="row">
+    <button class="btn btn-primary" onclick="render()">👁 Open report</button>
+    <button class="btn" onclick="alert('In the real build: a styled .xlsx laid out like the report.')">📊 Excel</button>
+    <button class="btn" onclick="alert('In the real build: opens the report and calls print().')">🖨 PDF / print</button>
+  </div>
+  <div class="preview-frame">
+    <div class="preview-bar">▸ what the opened tab looks like <span id="pvWhich" style="color:var(--blue)"></span></div>
+    <iframe id="pv"></iframe>
+  </div>
+</div>
+
+<script>
+const REPORT_CSS=`
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:24px;color:#0f172a}
+  h1{margin:0 0 4px 0;font-size:20px}
+  .stamp{color:#587690;font-size:12px;margin-bottom:16px}
+  .phase-badge{display:inline-block;background:#1d4ed8;color:#fff;font-size:15px;font-weight:800;letter-spacing:.02em;padding:4px 16px;border-radius:10px;margin-left:10px;vertical-align:middle}
+  .wk{margin-bottom:16px;break-inside:avoid}
+  .wk-head{font-weight:700;font-size:13px;background:#0f2744;color:#fff;padding:5px 10px;border-radius:6px 6px 0 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .wk-head .fte{margin-left:12px;font-weight:600;font-size:11px;background:rgba(255,255,255,.14);padding:2px 9px;border-radius:10px}
+  table{border-collapse:collapse;width:auto;min-width:50%;font-size:12px}
+  th,td{border:1px solid #e2e8f0;padding:6px 26px 6px 10px;text-align:left;white-space:nowrap}
+  th{background:#f8fafc;font-weight:600}
+  tbody tr:nth-child(even){background:#fafafa}
+  .chip{color:#fff;font-weight:700;font-size:10px;padding:2px 8px;border-radius:10px;white-space:nowrap}
+  .sec{font-weight:800;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#0f2744;margin:14px 0 6px}
+  .callrow td{background:#f5f3ff!important}
+  @media print { body { margin: 12mm } }`;
+
+// ── invented sample data ─────────────────────────────────────────────────────
+// Owner, 16 Aug: "The shifts that count will be specified as call shifts by admin.
+// You don't know those yet. You can start with call 16 call 24 and OB PM."
+// Only those three are ticked. Nothing else is assumed — an untagged shift is simply
+// not overnight call, however much its name or its hours suggest otherwise.
+const CANDIDATES=[
+ ['CALL24','Call 24','07:30–07:30',true],
+ ['CALL16','Call 16','15:30–07:30',true],
+ ['OBPM','OB PM','19:30–07:30',true],
+ ['CALL12PM','Call 12 PM','19:30–07:30',false],
+ ['CALL8','Call 8','23:30–07:30',false],
+ ['C2PA','C2PA','15:30–07:30',false],
+ ['C2AP','C2AP','15:30–07:30',false],
+ ['PCVCALL','PCV Call','07:30–07:30',false],
+ ['RCHB','RCH-ICU B','19:30–07:30',false],
+ ['EYE','Eye Call','07:30–15:30',false],
+ ['CALL12AM','Call 12 AM','07:30–19:30',false],
+];
+const OVERNIGHT=new Set(CANDIDATES.filter(c=>c[3]).map(c=>c[0]));
+
+const SHIFTNAME={CALL24:'Call 24',CALL16:'Call 16',CALL12PM:'Call 12 PM',OBPM:'OB PM',CALL8:'Call 8',
+  C2PA:'C2PA',C2AP:'C2AP',PCVCALL:'PCV Call',RCHB:'RCH-ICU B',EYE:'Eye Call',CALL12AM:'Call 12 AM',
+  D10:'D10',D:'D',ADMIN_AM:'Admin AM',ADMIN_PM:'Admin PM',PEDI_AM:'Pedi AM',PEDI_PM:'Pedi PM',
+  AP_MD:'AP (MD)',ICU3:'ICU3',RCHA:'RCH-ICU A'};
+
+const PEOPLE=[
+ {id:'CL',name:'Dr. Chen Lindqvist',fte:0.8,role:'MD',groups:'Pediatric · call-taking',
+  counts:{CALL24:4,CALL16:2,OBPM:1,EYE:2,D10:6,PEDI_AM:3,PEDI_PM:3,ADMIN_PM:1},
+  callDates:[['Wed 5 Aug','Call 24'],['Sat 8 Aug','Call 16'],['Wed 12 Aug','Call 24'],
+             ['Fri 21 Aug','OB PM'],['Sat 22 Aug','Call 16'],['Wed 26 Aug','Call 24'],['Sun 30 Aug','Call 24']]},
+ {id:'AR',name:'Dr. Alan Reyes',fte:1.0,role:'MD',groups:'Obstetric · call-taking',
+  counts:{CALL24:3,CALL16:3,OBPM:2,CALL12AM:1,D10:7,D:2,AP_MD:2,ADMIN_AM:1},
+  callDates:[['Mon 3 Aug','Call 16'],['Thu 6 Aug','OB PM'],['Tue 11 Aug','Call 24'],
+             ['Sun 16 Aug','Call 16'],['Thu 20 Aug','Call 24'],['Tue 25 Aug','OB PM'],
+             ['Fri 28 Aug','Call 16'],['Mon 31 Aug','Call 24']]},
+ {id:'BO',name:'Dr. Bea Okafor',fte:0.6,role:'CRNA',groups:'Per diem',excluded:'per diem',
+  counts:{CALL16:1,D10:5,ADMIN_AM:2,ADMIN_PM:2,ICU3:1},
+  callDates:[['Sat 15 Aug','Call 16']]},
+ {id:'DB',name:'Dr. Dana Baptiste',fte:1.0,role:'MD',groups:'ICU · call-taking',
+  counts:{CALL24:2,RCHB:4,D10:4,ICU3:5,RCHA:3},
+  callDates:[['Sun 9 Aug','Call 24'],['Sun 23 Aug','Call 24']]},
+ {id:'EM',name:'Dr. Eli Moreau',fte:0.8,role:'CRNA',groups:'Pediatric · locum',excluded:'locum',
+  counts:{CALL16:2,CALL8:1,PEDI_AM:6,PEDI_PM:5,D10:3},
+  callDates:[['Tue 4 Aug','Call 16'],['Wed 19 Aug','Call 8'],['Thu 27 Aug','Call 16']]},
+ {id:'FN',name:'Dr. Farah Nakamura',fte:1.0,role:'MD',groups:'Obstetric',
+  counts:{CALL24:3,OBPM:3,CALL16:1,D10:6,D:3,AP_MD:1},
+  callDates:[['Fri 7 Aug','OB PM'],['Mon 10 Aug','Call 24'],['Sat 14 Aug','Call 24'],
+             ['Tue 18 Aug','OB PM'],['Sun 24 Aug','Call 16'],['Fri 29 Aug','OB PM'],['Sun 31 Aug','Call 24']]},
+];
+
+let P='month', WHO='CL', BATCH=false;
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const periodLabel=()=>({day:'Monday 17 August 2026',month:'August 2026',quarter:'Q3 2026 (Jul–Sep)',
+  year:'2026',range:'1 – 31 August 2026'}[P]);
+
+window.setP=(v,b)=>{P=v;document.querySelectorAll('[data-p]').forEach(x=>x.classList.toggle('on',x===b));drawPeriod();render();};
+window.setWho=v=>{WHO=v;render();};
+window.setBatch=v=>{BATCH=v;document.getElementById('whoSel').disabled=v;render();};
+window.togTag=id=>{OVERNIGHT.has(id)?OVERNIGHT.delete(id):OVERNIGHT.add(id);drawTags();render();};
+
+function drawTags(){
+  document.getElementById('tagpick').innerHTML=CANDIDATES.map(([id,l,t])=>
+    '<span class="tp'+(OVERNIGHT.has(id)?' on':'')+'" onclick="togTag(\''+id+'\')">'
+    +(OVERNIGHT.has(id)?'✓ ':'')+esc(l)+'<span class="m">'+esc(t)+'</span></span>').join('');
+}
+function drawPeriod(){
+  const sel=o=>'<select class="sel" style="font-size:12px">'+o.map(x=>'<option>'+x+'</option>').join('')+'</select>';
+  const M=['August','September','October','November','December','January','February','March','April','May','June','July'];
+  document.getElementById('periodCtl').innerHTML =
+      P==='day'?'<input class="inp" type="date" value="2026-08-17" style="font-size:12px">'
+    : P==='month'?sel(M)+sel([2026,2027])
+    : P==='quarter'?sel(['Q3 (Jul–Sep)','Q4 (Oct–Dec)','Q1 (Jan–Mar)','Q2 (Apr–Jun)'])+sel([2026,2027])
+    : P==='year'?sel([2026,2027])
+    : '<input class="inp" type="date" value="2026-08-01" style="font-size:12px"> <span class="lbl">to</span> <input class="inp" type="date" value="2026-08-31" style="font-size:12px">';
+}
+document.getElementById('whoSel').innerHTML=PEOPLE.map(p=>'<option value="'+p.id+'">'+esc(p.name)+'</option>').join('');
+
+// ── FTE-adjusted expectations (owner ruling, 16 Aug) ─────────────────────────
+// "FTE must be considered in numbers should be adjusted for FTE. That should be
+//  specified in the report. Locum's and per diem are excluded."
+//
+// So the comparison is NOT a flat mean. The POOL is everyone except per diem and
+// locums. From the pool we take a rate PER 1.0 FTE, and each doctor's expectation
+// is that rate times their own FTE. A 0.6 FTE is compared against 0.6 of the load,
+// not against the same number as a full-timer.
+//
+// People outside the pool still get a full report and still get an expectation —
+// they just do not influence the rate, and their block says so.
+const POOL=()=>PEOPLE.filter(p=>!p.excluded);
+const poolFTE=()=>POOL().reduce((a,p)=>a+p.fte,0);
+const totalShifts=p=>Object.values(p.counts).reduce((a,b)=>a+b,0);
+const totalCalls=p=>Object.entries(p.counts).filter(([k])=>OVERNIGHT.has(k)).reduce((a,[,v])=>a+v,0);
+
+// rate per 1.0 FTE, across the pool
+const ratePerFTE=fn=>{ const f=poolFTE(); return f?POOL().reduce((a,p)=>a+fn(p),0)/f:0; };
+const rateShift=sid=>ratePerFTE(p=>p.counts[sid]||0);
+const rateCalls=()=>ratePerFTE(totalCalls);
+const rateAll  =()=>ratePerFTE(totalShifts);
+// what THIS person would be expected to do at their own FTE
+const expShift=(p,sid)=>rateShift(sid)*p.fte;
+const expCalls=p=>rateCalls()*p.fte;
+const expAll  =p=>rateAll()*p.fte;
+
+function diffChip(v,exp){
+  const d=v-exp;
+  if(Math.abs(d)<0.5) return '<span class="chip" style="background:#64748b">as expected</span>';
+  const col=d>0?'#b45309':'#0e7490';
+  return '<span class="chip" style="background:'+col+'">'+(d>0?'+':'')+d.toFixed(1)+'</span>';
+}
+
+function personBlock(p){
+  // 1 · counts, CALLS FIRST
+  const ids=Object.keys(p.counts);
+  const calls=ids.filter(i=>OVERNIGHT.has(i)).sort((a,b)=>p.counts[b]-p.counts[a]);
+  const rest =ids.filter(i=>!OVERNIGHT.has(i)).sort((a,b)=>p.counts[b]-p.counts[a]);
+  const row=(sid,isCall)=>{
+    const v=p.counts[sid], e=expShift(p,sid);
+    return `<tr class="${isCall?'callrow':''}"><td>${isCall?'🌙 ':''}<b>${esc(SHIFTNAME[sid]||sid)}</b></td>
+      <td style="text-align:right"><b>${v}</b></td><td style="text-align:right">${e.toFixed(1)}</td>
+      <td>${diffChip(v,e)}</td></tr>`;
+  };
+  const callTot=totalCalls(p), shiftTot=totalShifts(p);
+  let h=`<div class="wk"><div class="wk-head">${esc(p.name)}
+      <span class="fte">FTE ${p.fte} · ${esc(p.role)} · ${esc(p.groups)}</span>
+      <span class="fte">${shiftTot} shifts · ${callTot} overnight call</span></div>`;
+
+  h+=`<div class="sec">Shifts worked — overnight call first</div>
+    <table><thead><tr><th>Shift</th><th style="text-align:right">Did</th>
+      <th style="text-align:right">Expected at FTE ${p.fte}</th><th>vs expected</th></tr></thead><tbody>`
+    +(calls.length?calls.map(s=>row(s,true)).join('')
+      :`<tr class="callrow"><td colspan="4" style="color:#64748b">No overnight call in this period.</td></tr>`)
+    +`<tr><td><b>All overnight call</b></td><td style="text-align:right"><b>${callTot}</b></td>
+       <td style="text-align:right">${expCalls(p).toFixed(1)}</td><td>${diffChip(callTot,expCalls(p))}</td></tr>`
+    +rest.map(s=>row(s,false)).join('')
+    +`<tr><td><b>All shifts</b></td><td style="text-align:right"><b>${shiftTot}</b></td>
+       <td style="text-align:right">${expAll(p).toFixed(1)}</td><td>${diffChip(shiftTot,expAll(p))}</td></tr>`
+    +`</tbody></table>`;
+
+  // 2 · every overnight call, dated
+  const cd=p.callDates.filter(([,s])=>[...OVERNIGHT].some(o=>SHIFTNAME[o]===s));
+  h+=`<div class="sec">Every overnight call in this period — ${cd.length}</div>
+    <table><thead><tr><th>#</th><th>Date</th><th>Shift</th></tr></thead><tbody>`
+    +(cd.length?cd.map(([d,s],i)=>`<tr><td>${i+1}</td><td><b>${esc(d)}</b></td><td>🌙 ${esc(s)}</td></tr>`).join('')
+      :`<tr><td colspan="3" style="color:#64748b">None.</td></tr>`)
+    +`</tbody></table>`;
+
+  // 3 · compared with the group, FTE-adjusted
+  const pool=POOL(), nEx=PEOPLE.length-pool.length;
+  const perFTE=v=>p.fte?(v/p.fte):0;
+  const poolPerFTE=pool.map(x=>totalCalls(x)/x.fte);
+  const rankPool=[...pool].sort((a,b)=>totalCalls(b)/b.fte-totalCalls(a)/a.fte).findIndex(x=>x.id===p.id)+1;
+  h+=`<div class="sec">Compared with the group — adjusted for FTE</div>
+    <table><thead><tr><th></th><th style="text-align:right">Did</th>
+      <th style="text-align:right">Expected at FTE ${p.fte}</th><th style="text-align:right">Per 1.0 FTE — them</th>
+      <th style="text-align:right">Per 1.0 FTE — group</th><th>Difference</th></tr></thead><tbody>
+      <tr><td><b>Overnight call</b></td><td style="text-align:right"><b>${callTot}</b></td>
+        <td style="text-align:right">${expCalls(p).toFixed(1)}</td>
+        <td style="text-align:right">${perFTE(callTot).toFixed(1)}</td>
+        <td style="text-align:right">${rateCalls().toFixed(1)}</td>
+        <td>${diffChip(callTot,expCalls(p))}</td></tr>
+      <tr><td><b>All shifts</b></td><td style="text-align:right"><b>${shiftTot}</b></td>
+        <td style="text-align:right">${expAll(p).toFixed(1)}</td>
+        <td style="text-align:right">${perFTE(shiftTot).toFixed(1)}</td>
+        <td style="text-align:right">${rateAll().toFixed(1)}</td>
+        <td>${diffChip(shiftTot,expAll(p))}</td></tr>
+    </tbody></table>
+    <div style="font-size:11px;color:#587690;margin-top:7px;line-height:1.5">
+      <b>How these numbers are worked out.</b> The group rate is taken <b>per 1.0 FTE</b>
+      across the ${pool.length} doctors in the comparison pool (${poolFTE().toFixed(1)} FTE in total), and each
+      doctor's expectation is that rate multiplied by their own FTE — so a ${p.fte} FTE is
+      measured against ${p.fte===1?'a full':(p.fte*100).toFixed(0)+'% of a full'} load, not against a full-timer's.
+      <b>Per diem and locums are excluded from the pool</b>${nEx?` (${nEx} excluded: `+PEOPLE.filter(x=>x.excluded).map(x=>esc(x.name.replace('Dr. ',''))+' — '+x.excluded).join(', ')+')':''}.
+      ${p.excluded?`<br><b style="color:#991b1b">${esc(p.name)} is ${p.excluded}, so they are shown here but do not affect the group rate.</b>`
+                  :`Standing: <b>${rankPool} of ${pool.length}</b> in the pool by overnight call per 1.0 FTE.`}
+    </div>`;
+  return h+'</div>';
+}
+
+function subjectName(){ return BATCH?`Every doctor (${PEOPLE.length})`:PEOPLE.find(p=>p.id===WHO).name; }
+function render(){
+  document.getElementById('pvWhich').textContent='— '+subjectName()+' · '+periodLabel();
+  const list=BATCH?PEOPLE:[PEOPLE.find(p=>p.id===WHO)];
+  const body=list.map(personBlock).join(BATCH?'<div style="break-before:page;height:18px"></div>':'');
+  document.getElementById('pv').srcdoc=`<!doctype html><html><head><title>Daily Schedule — Shift counts &amp; calls</title>
+    <style>${REPORT_CSS}</style></head><body>
+    <h1>Daily Schedule — Shift counts &amp; calls<span class="phase-badge">${periodLabel()}</span></h1>
+    <div class="stamp">${esc(subjectName())} · snapshot 16 Aug 2026, 10:14 AM · overnight call = ${OVERNIGHT.size} tagged shift${OVERNIGHT.size===1?'':'s'} · <b>all comparisons FTE-adjusted, per diem and locums excluded</b> · <b style="color:#991b1b">SAMPLE DATA — every name and number here is invented</b></div>
+    ${body}</body></html>`;
+}
+drawTags(); drawPeriod(); render();
+</script>
+</body>
+</html>

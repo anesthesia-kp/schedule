@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shift Eligibility — readability preview</title>
+<style>
+:root{
+  --bg:#f4f7fa; --s1:#ffffff; --s2:#f8fafc; --s3:#eef2f7;
+  --b1:#e3e9f0; --b2:#cbd5e1;
+  --t1:#1e293b; --t2:#5b6b7c; --t3:#94a3b8;
+  --blue:#2563eb; --green:#059669; --red:#dc2626;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;padding:18px 22px}
+.page-title{font-size:18px;font-weight:800}
+.page-sub{font-size:12px;color:var(--t2);margin-top:3px;max-width:70ch;line-height:1.5}
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:14px 16px;margin-top:14px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.btn{border:1px solid var(--b2);background:var(--s1);color:var(--t1);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer}
+.btn:hover{background:var(--s3)}
+.btn.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.sel,.inp{border:1px solid var(--b2);border-radius:8px;padding:6px 9px;font-size:13px;background:var(--s1);color:var(--t1)}
+.switcher{display:flex;gap:8px;align-items:center;margin-top:12px}
+
+/* ══ SHARED ══ */
+.wrapscroll{overflow:auto;max-height:70vh;border:1px solid var(--b1);border-radius:10px;background:var(--s1)}
+
+/* ══ BEFORE — today's grid ══ */
+table.old{border-collapse:collapse;font-size:11px}
+table.old th,table.old td{border:1px solid var(--b1);padding:2px 3px;text-align:center;white-space:nowrap}
+table.old th{background:var(--s2);font-size:10px;color:var(--t2)}
+table.old .stick1{position:sticky;left:0;z-index:2;background:var(--s1);border-right:2px solid var(--b2);text-align:left;font-weight:700}
+table.old th.stick1{background:var(--s2);z-index:3}
+
+/* ══ AFTER — proposed grid ══ */
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.toolbar .lbl{font-size:11px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.05em}
+.famchips{display:flex;flex-wrap:wrap;gap:5px}
+.famchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--b2);background:var(--s1);
+  border-radius:999px;padding:3px 10px 3px 5px;font-size:12px;font-weight:700;cursor:pointer;color:var(--t1)}
+.famchip:hover{background:var(--s3)}
+.famchip .sw{width:11px;height:11px;border-radius:3px;border:1px solid rgba(15,23,42,.18);flex:none}
+.famchip .n{font-size:10.5px;color:var(--t2);font-weight:700}
+.famchip.on{border-color:var(--blue);box-shadow:0 0 0 2px rgba(37,99,235,.16);background:#eff6ff}
+.famchip.on .n{color:var(--blue)}
+
+table.nu{border-collapse:separate;border-spacing:0;font-size:11px}
+table.nu th,table.nu td{padding:0;text-align:center}
+
+/* sticky user column */
+.nu .uh{position:sticky;left:0;z-index:6;background:var(--s1);border-right:2px solid var(--b2);
+  text-align:left;padding:3px 10px 3px 9px;min-width:186px;max-width:186px}
+.nu thead .uh{z-index:8;background:var(--s2)}
+.nu .uname{font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--t1)}
+.nu .ucount{font-size:10px;color:var(--t3);font-weight:700;margin-top:1px;display:flex;align-items:center;gap:5px}
+.nu .ubar{height:3px;border-radius:2px;background:var(--s3);flex:1;overflow:hidden;max-width:74px}
+.nu .ubar i{display:block;height:100%;background:var(--blue);border-radius:2px}
+
+/* sticky header rows */
+.nu thead th{position:sticky;background:var(--s2);z-index:5}
+.nu thead tr.fam th{top:0;height:24px}
+.nu thead tr.lab th{top:24px;height:104px}
+
+/* family band */
+.famband{font-size:10.5px;font-weight:800;letter-spacing:.03em;color:#1e293b;
+  border-left:2px solid rgba(15,23,42,.25);border-bottom:1px solid var(--b1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px}
+.fambtns{display:inline-flex;gap:2px;margin-left:6px;vertical-align:middle}
+.fambtns button{border:none;background:rgba(255,255,255,.62);border-radius:4px;font-size:9.5px;
+  font-weight:800;padding:1px 5px;cursor:pointer;line-height:1.5;color:#334155}
+.fambtns button:hover{background:#fff}
+
+/* rotated shift labels */
+.labcell{border-left:1px solid var(--b1);border-bottom:1px solid var(--b2);vertical-align:bottom;
+  padding-bottom:5px;width:25px;min-width:25px;max-width:25px}
+.labcell.famstart{border-left:2px solid rgba(15,23,42,.25)}
+.labtxt{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:10.5px;
+  font-weight:700;color:var(--t1);max-height:80px;overflow:hidden;margin:0 auto;cursor:default}
+.labn{font-size:9px;color:var(--t3);font-weight:700;margin-top:3px}
+
+/* cells */
+.nu tbody tr:nth-child(even) td.c{background-image:linear-gradient(rgba(15,23,42,.028),rgba(15,23,42,.028))}
+.nu tbody tr:nth-child(even) .uh{background:#fbfcfe}
+td.c{border-left:1px solid var(--b1);border-bottom:1px solid var(--b1);width:25px;min-width:25px;
+  height:23px;cursor:pointer;position:relative}
+td.c.famstart{border-left:2px solid rgba(15,23,42,.2)}
+td.c .m{position:absolute;inset:2px;border-radius:3px;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:900;color:#0f172a;line-height:1}
+td.c.no .m{background:transparent;color:transparent}
+td.c.no::after{content:'';position:absolute;left:50%;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;
+  border-radius:50%;background:#dbe2ea}
+td.c:hover .m{outline:2px solid var(--blue);outline-offset:-1px}
+/* crosshair */
+.nu tbody tr.rowhi .uh{background:#eff6ff}
+.nu tbody tr.rowhi td.c{background-image:linear-gradient(rgba(37,99,235,.075),rgba(37,99,235,.075))}
+td.c.colhi{background-image:linear-gradient(rgba(37,99,235,.075),rgba(37,99,235,.075))}
+th.labcell.colhi{background:#eff6ff}
+th.labcell.colhi .labtxt{color:var(--blue)}
+
+.legend{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:9px;font-size:11.5px;color:var(--t2)}
+.legend .k{display:inline-flex;align-items:center;gap:6px}
+.legend .box{width:17px;height:17px;border-radius:4px;border:1px solid var(--b1);display:inline-flex;
+  align-items:center;justify-content:center;font-size:10px;font-weight:900;color:#0f172a}
+.empty{padding:26px;text-align:center;color:var(--t3);font-size:13px;font-weight:600}
+.note{font-size:11.5px;color:var(--t2);margin-top:8px;line-height:1.55}
+.count{font-size:11.5px;color:var(--t2);font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="page-title">Shift Eligibility — readability preview</div>
+<div class="page-sub">Real catalog: <b id="nShift">…</b> shifts across <b id="nFam">…</b> families, <b id="nUser">…</b> users, with sample eligibility. Toggle between today's grid and the proposed one. Nothing here is connected to Firebase — clicking cells only changes this preview.</div>
+
+<div class="switcher">
+  <button class="btn" id="btnOld" onclick="setView('old')">Current design</button>
+  <button class="btn on" id="btnNew" onclick="setView('new')">Proposed</button>
+  <span class="count" id="viewNote"></span>
+</div>
+
+<!-- ══════════ CURRENT ══════════ -->
+<div class="card" id="viewOld" style="display:none">
+  <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <button class="btn">Allow all</button> <button class="btn">Disallow all</button>
+    <span style="width:1px;height:20px;background:var(--b2)"></span>
+    <span style="font-size:11px;color:var(--t2);font-weight:700">By family, for every user:</span>
+    <select class="sel" style="font-size:12px"><option>No family</option></select>
+    <button class="btn" style="font-size:12px;color:var(--green)">Allow</button>
+    <button class="btn" style="font-size:12px;color:var(--red)">Disallow</button>
+  </div>
+  <div class="wrapscroll"><table class="old" id="oldGrid"></table></div>
+  <div class="note">One column per shift in <code>order</code>, families interleaved, <code>nowrap</code> headers — about 7,000px wide. No boundaries, no counts, nothing to hold your place across 40 rows.</div>
+</div>
+
+<!-- ══════════ PROPOSED ══════════ -->
+<div class="card" id="viewNew">
+  <div class="toolbar">
+    <span class="lbl">Family</span>
+    <div class="famchips" id="famChips"></div>
+  </div>
+  <div class="toolbar" style="margin-bottom:12px">
+    <span class="lbl">Type</span>
+    <button class="btn on" data-kind="" onclick="setKind('',this)" style="font-size:12px;padding:4px 10px">All</button>
+    <button class="btn" data-kind="day" onclick="setKind('day',this)" style="font-size:12px;padding:4px 10px">Day</button>
+    <button class="btn" data-kind="call" onclick="setKind('call',this)" style="font-size:12px;padding:4px 10px">Call</button>
+    <span style="width:1px;height:20px;background:var(--b2)"></span>
+    <input class="inp" id="qShift" placeholder="Find a shift…" style="font-size:12px;width:150px" oninput="draw()">
+    <input class="inp" id="qUser" placeholder="Find a person…" style="font-size:12px;width:150px" oninput="draw()">
+    <label style="font-size:12px;font-weight:700;color:var(--t2);display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+      <input type="checkbox" id="hideEmpty" onchange="draw()"> Hide shifts nobody can do
+    </label>
+    <button class="btn" style="font-size:12px;padding:4px 10px" onclick="resetFilters()">Reset</button>
+  </div>
+
+  <div class="wrapscroll" id="newWrap"><table class="nu" id="newGrid"></table><div class="empty" id="newEmpty" style="display:none">Nothing matches those filters.</div></div>
+
+  <div class="legend">
+    <span class="k"><span class="box" style="background:#bfdbfe">✓</span> allowed — block is the family colour</span>
+    <span class="k"><span class="box" style="background:#fff">·</span> not allowed</span>
+    <span class="k">click a cell to toggle · hover for a crosshair · <b id="showing"></b></span>
+  </div>
+  <div class="note">Columns grouped and colour-banded by family, labels turned vertical (25px per column instead of ~70px), the person column and both header rows pinned, per-person and per-shift counts, and filters so you work on one family at a time instead of all <span id="nShift2">104</span> at once.</div>
+</div>
+
+<script>
+// ── Real families and catalog, lifted from schedule/admin/index.html ──
+const FAMILY_PRESETS={
+  ob:{label:'OB / Obstetric',color:'#fde68a'},
+  ap:{label:'AP coverage',color:'#bfdbfe'},
+  call:{label:'Call',color:'#ddd6fe'},
+  icu:{label:'ICU',color:'#99f6e4'},
+  pedi:{label:'Pediatric',color:'#fbcfe8'},
+  pcv:{label:'P / PCV',color:'#bbf7d0'},
+  admin:{label:'Admin / other',color:'#e2e8f0'},
+  dshift:{label:'D-shift',color:'#fef9c3'},
+};
+const RAW=[
+ ['OBD','OBD','day','ob',1],['D10','D10','day','dshift',2],['AP_CRNA','AP (CRNA)','day','ap',3],
+ ['AP_MD','AP (MD)','day','ap',4],['CALL16','Call 16','call','call',10],['CALL24','Call 24','call','call',11],
+ ['OBPM','OB PM','call','call',12],['4_TO_8','4 to 8','day','dshift',20],['6_TO_8','6 to 8','day','dshift',21],
+ ['AP_PLUS','AP+','day','ap',22],['AP_PLUS_MD','AP+ (MD)','day','ap',23],['PA','PA','day','ap',24],
+ ['OBAP','OBAP','day','ob',25],['OBPA','OBPA','day','ob',26],['EV','EV','day','dshift',27],
+ ['CH','CH','day','dshift',28],['C2PA','C2PA','call','call',29],['C2AP','C2AP','call','call',30],
+ ['EYE_CALL','Eye Call','call','call',31],['CALL8','Call 8','call','call',32],['CALL12AM','Call 12 AM','call','call',33],
+ ['CALL12PM','Call 12 PM','call','call',34],['NICU9_PLUS','NICU9+','day','icu',35],['RC0_PLUS','RC0+','day','icu',36],
+ ['R9_5','R9/5','day','icu',38],['R10','R10','day','icu',39],['R11_PLUS','R11+','day','icu',40],
+ ['RFL','RFL','day','icu',41],['RB_MD','RB MD','day','icu',42],['RBL_8','RBL 8','day','icu',43],
+ ['CV8_PLUS','CV8+','day','icu',44],['PAIN','Pain','day','admin',45],['ADMIN','Admin','day','admin',46],
+ ['ADMIN_AM','Admin AM','day','admin',47],['ADMIN_PM','Admin PM','day','admin',48],
+ ['OAK_ICU_SWING','Oak ICU Swing','day','icu',49],['ICU3','ICU3','day','icu',50],['ICU7A12','ICU7A12','day','icu',51],
+ ['ICU7A8','ICU7A8','day','icu',52],['ICU7B12','ICU7B12','day','icu',53],['ICU7B8','ICU7B8','day','icu',54],
+ ['ICU7C12','ICU7C12','day','icu',55],['ICU7C8','ICU7C8','day','icu',56],['RCH_ICU_A','RCH-ICU A','day','icu',57],
+ ['RCH_ICU_B','RCH-ICU B','day','icu',58],['TCC','TCC','day','admin',59],['PEDI_ADMIN','Pedi Admin','day','pedi',60],
+ ['PEDI_ADMIN_AM','Pedi Admin AM','day','pedi',61],['PEDI_ADMIN_PM','Pedi Admin PM','day','pedi',62],
+ ['PEDI_AM','Pedi AM','day','pedi',63],['PEDI_PM','Pedi PM','day','pedi',64],['PEDI_CHARGE','Pedi Charge','day','pedi',65],
+ ['PEDI_FLOAT','Pedi Float','day','pedi',66],['MRI1','MRI1','day','pedi',67],['NORA','NORA','day','pedi',68],
+ ['NORA2','NORA2','day','pedi',69],['PURPLE_ROOM','Purple Room','day','pedi',70],['P1','P1','day','pcv',71],
+ ['P2','P2','day','pcv',72],['P3','P3','day','pcv',73],['P4','P4','day','pcv',74],['PCV1','PCV 1','day','pcv',75],
+ ['PCV2','PCV 2','day','pcv',76],['PCV3','PCV 3','day','pcv',77],['PCV_CALL','PCV Call','call','call',78],
+ ['PEDI_CARDIAC','Pedi Cardiac','day','pedi',79],['LEARNER','Learner','day','admin',80],['SIMA','SIMA','day','admin',81],
+ ['MD_SAT_D','MD Sat D','day','dshift',82],['PODIATRY','Podiatry','day','pedi',83],['ORIENT','Orient','day','admin',84],
+ ['AIC','AIC','day','admin',85],['APS','APS','day','admin',86],['D_PM','D pm','day','dshift',87],
+ ['PACU_MD','PACU MD','day','dshift',88],['OFL','OFL','day','dshift',89],['D','D','day','dshift',90],
+ ['PEDI_B','Pedi B','day','pedi',91],['SMOB_URO','SMOB Uro','day','dshift',92],['D10_PLUS','D10+','day','dshift',93],
+ ['D10_FLOAT','D10 Float','day','dshift',94],['D10_FLOAT2','D10Float2','day','dshift',95],['CVPM','CVpm','day','dshift',96],
+ ['D6','D6','day','dshift',97],['CRNA_SWING','CRNA Swing','day','ap',98],['D_AM','D am','day','dshift',99],
+ ['D_11_7_30','11-7:30','day','dshift',100],['OUT_OF_OR_D10','Out of OR D10','day','dshift',101],
+ ['D_IR','D-IR','day','dshift',102],['P1_TASKS','P1 Tasks','day','pcv',103],['AVAILABLE','Available','day','admin',104],
+];
+const SHIFTS=RAW.map(([id,label,kind,family,order])=>({id,label,kind,family,order}));
+const FAM_ORDER=['call','ob','ap','dshift','icu','pedi','pcv','admin'];
+
+// ── Sample roster ──
+const FIRST=['Alan','Bea','Chen','Dana','Eli','Farah','Greg','Hana','Ivan','Jo','Kira','Luis','Mona','Nate','Omar','Priya','Quinn','Rosa','Sam','Tara','Uma','Vik','Wes','Xena','Yuri','Zoe','Ada','Bo','Cody','Dee','Emre','Fay','Gil','Hugo','Ines','Jack','Kate','Liam','Mia','Noor'];
+const LAST=['Reyes','Okafor','Lindqvist','Baptiste','Moreau','Nakamura','Whitfield','Adeyemi','Sorensen','Kaur','Delgado','Ferreira','Haddad','Novak','Petrov','Rasmussen','Silva','Tanaka','Ustinov','Varga','Weiss','Yilmaz','Zhang','Abbas','Bianchi','Costa','Dumont','Ellis','Fischer','Gallo','Horvath','Iqbal','Jensen','Kowalski','Larsen','Mbeki','Nilsen','Ortiz','Pereira','Quintana'];
+let rs=987654321;
+const rnd=()=>{rs^=rs<<13;rs^=rs>>>17;rs^=rs<<5;return ((rs>>>0)/4294967296);};
+const USERS=FIRST.map((f,i)=>({u:(f[0]+LAST[i][0]+(i<10?'':String(i))).toUpperCase().slice(0,4),name:'Dr. '+f+' '+LAST[i]}));
+
+// Plausible eligibility: everyone does Call + D-shift; specialties are selective.
+const ELIG={};
+for(const {u} of USERS){
+  ELIG[u]={};
+  const spec={};
+  for(const f of FAM_ORDER) spec[f]= (f==='call'||f==='dshift') ? .92 : (f==='admin'? .55 : (rnd()<.34 ? .85 : .06));
+  for(const s of SHIFTS) ELIG[u][s.id]= rnd() < spec[s.family];
+}
+
+// ── State ──
+let famFilter='', kindFilter='';
+const allowed=(u,id)=>ELIG[u]?.[id]===true;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const famColor=f=>FAMILY_PRESETS[f]?.color||'#e2e8f0';
+const famLabel=f=>FAMILY_PRESETS[f]?.label||'No family';
+
+document.getElementById('nShift').textContent=SHIFTS.length;
+document.getElementById('nShift2').textContent=SHIFTS.length;
+document.getElementById('nFam').textContent=FAM_ORDER.length;
+document.getElementById('nUser').textContent=USERS.length;
+
+// ══ CURRENT DESIGN ══
+function drawOld(){
+  const sh=[...SHIFTS].sort((a,b)=>a.order-b.order);
+  let h='<tr><th class="stick1">User</th><th>Bulk by family</th>'+sh.map(s=>'<th>'+esc(s.label)+'</th>').join('')+'</tr>';
+  let r='';
+  for(const {u,name} of USERS){
+    r+='<tr><td class="stick1">'+esc(name)+'</td>'
+      +'<td style="white-space:nowrap"><select class="sel" style="font-size:10px;padding:2px 4px;width:100px"><option>No family</option></select> '
+      +'<button class="btn" style="font-size:10px;padding:2px 6px;color:var(--green)">✓</button>'
+      +'<button class="btn" style="font-size:10px;padding:2px 6px;color:var(--red)">✗</button></td>'
+      +sh.map(s=>'<td><input type="checkbox" '+(allowed(u,s.id)?'checked':'')+'></td>').join('')+'</tr>';
+  }
+  document.getElementById('oldGrid').innerHTML=h+r;
+}
+
+// ══ PROPOSED ══
+function drawChips(){
+  const el=document.getElementById('famChips');
+  const counts={};
+  for(const s of SHIFTS) counts[s.family]=(counts[s.family]||0)+1;
+  let h='<span class="famchip'+(famFilter===''?' on':'')+'" onclick="setFam(\'\')"><span class="sw" style="background:linear-gradient(135deg,#ddd6fe,#99f6e4,#fbcfe8)"></span>All<span class="n">'+SHIFTS.length+'</span></span>';
+  for(const f of FAM_ORDER){
+    h+='<span class="famchip'+(famFilter===f?' on':'')+'" onclick="setFam(\''+f+'\')">'
+      +'<span class="sw" style="background:'+famColor(f)+'"></span>'+esc(famLabel(f))
+      +'<span class="n">'+(counts[f]||0)+'</span></span>';
+  }
+  el.innerHTML=h;
+}
+window.setFam=f=>{famFilter=(famFilter===f?'':f);drawChips();draw();};
+window.setKind=(k,btn)=>{kindFilter=k;[...document.querySelectorAll('[data-kind]')].forEach(b=>b.classList.toggle('on',b===btn));draw();};
+window.resetFilters=()=>{famFilter='';kindFilter='';document.getElementById('qShift').value='';document.getElementById('qUser').value='';
+  document.getElementById('hideEmpty').checked=false;
+  [...document.querySelectorAll('[data-kind]')].forEach(b=>b.classList.toggle('on',b.dataset.kind===''));
+  drawChips();draw();};
+
+function visibleShifts(){
+  const q=document.getElementById('qShift').value.trim().toLowerCase();
+  const hideEmpty=document.getElementById('hideEmpty').checked;
+  let list=SHIFTS.filter(s=>
+    (!famFilter||s.family===famFilter) &&
+    (!kindFilter||s.kind===kindFilter) &&
+    (!q||s.label.toLowerCase().includes(q)));
+  if(hideEmpty) list=list.filter(s=>USERS.some(({u})=>allowed(u,s.id)));
+  // group by family, families in a fixed clinical order, shifts by their catalog order
+  return list.sort((a,b)=>{
+    const fa=FAM_ORDER.indexOf(a.family), fb=FAM_ORDER.indexOf(b.family);
+    return fa!==fb ? fa-fb : a.order-b.order;
+  });
+}
+function visibleUsers(){
+  const q=document.getElementById('qUser').value.trim().toLowerCase();
+  return USERS.filter(({u,name})=>!q||name.toLowerCase().includes(q)||u.toLowerCase().includes(q));
+}
+
+function draw(){
+  const sh=visibleShifts(), us=visibleUsers();
+  const g=document.getElementById('newGrid');
+  const emptyEl=document.getElementById('newEmpty');
+  if(!sh.length||!us.length){
+    g.innerHTML=''; emptyEl.style.display='';
+    document.getElementById('showing').textContent='';
+    return;
+  }
+  emptyEl.style.display='none';
+  // family bands
+  const bands=[];
+  for(const s of sh){
+    const last=bands[bands.length-1];
+    if(last&&last.f===s.family) last.n++; else bands.push({f:s.family,n:1});
+  }
+  let head='<thead><tr class="fam"><th class="uh"></th>';
+  for(const b of bands){
+    head+='<th class="famband" colspan="'+b.n+'" style="background:'+famColor(b.f)+'" title="'+esc(famLabel(b.f))+' — '+b.n+' shift'+(b.n===1?'':'s')+'">'
+      +esc(famLabel(b.f))
+      +'<span class="fambtns"><button onclick="bulkFam(\''+b.f+'\',true)" title="Allow every '+esc(famLabel(b.f))+' shift for everyone shown">✓ all</button>'
+      +'<button onclick="bulkFam(\''+b.f+'\',false)" title="Disallow every '+esc(famLabel(b.f))+' shift for everyone shown">✗ all</button></span>'
+      +'</th>';
+  }
+  head+='</tr><tr class="lab"><th class="uh"><div class="uname" style="font-size:11px;color:var(--t2)">Person</div>'
+     +'<div class="ucount" style="color:var(--t3)">eligible / '+sh.length+' shown</div></th>';
+  let fseen='';
+  for(const s of sh){
+    const start=s.family!==fseen; fseen=s.family;
+    const n=us.filter(({u})=>allowed(u,s.id)).length;
+    head+='<th class="labcell'+(start?' famstart':'')+'" data-col="'+esc(s.id)+'" title="'+esc(s.label)+' · '+esc(famLabel(s.family))+' · '+s.kind+' · '+n+' of '+us.length+' eligible">'
+      +'<div class="labtxt">'+esc(s.label)+'</div><div class="labn">'+n+'</div></th>';
+  }
+  head+='</tr></thead>';
+
+  let body='<tbody>';
+  for(const {u,name} of us){
+    const n=sh.filter(s=>allowed(u,s.id)).length;
+    const pct=sh.length?Math.round(n/sh.length*100):0;
+    body+='<tr data-row="'+esc(u)+'"><td class="uh"><div class="uname" title="'+esc(name)+'">'+esc(name)+'</div>'
+      +'<div class="ucount"><span>'+n+'</span><span class="ubar"><i style="width:'+pct+'%"></i></span></div></td>';
+    let f2='';
+    for(const s of sh){
+      const start=s.family!==f2; f2=s.family;
+      const on=allowed(u,s.id);
+      body+='<td class="c'+(on?'':' no')+(start?' famstart':'')+'" data-col="'+esc(s.id)+'" data-u="'+esc(u)+'"'
+        +' title="'+esc(name)+' · '+esc(s.label)+' — '+(on?'allowed':'not allowed')+' (click to '+(on?'disallow':'allow')+')">'
+        +'<span class="m" style="background:'+(on?famColor(s.family):'transparent')+'">'+(on?'✓':'')+'</span></td>';
+    }
+    body+='</tr>';
+  }
+  body+='</tbody>';
+  g.innerHTML=head+body;
+  const total=us.reduce((a,{u})=>a+sh.filter(s=>allowed(u,s.id)).length,0);
+  document.getElementById('showing').textContent=us.length+' people × '+sh.length+' shifts · '+total+' allowed';
+}
+
+// crosshair + toggle (delegated, so a redraw never orphans a listener)
+document.addEventListener('mouseover',e=>{
+  const td=e.target.closest('#newGrid td.c, #newGrid th.labcell');
+  document.querySelectorAll('#newGrid .colhi').forEach(el=>el.classList.remove('colhi'));
+  document.querySelectorAll('#newGrid tr.rowhi').forEach(el=>el.classList.remove('rowhi'));
+  if(!td) return;
+  const col=td.dataset.col;
+  if(col) document.querySelectorAll('#newGrid [data-col="'+CSS.escape(col)+'"]').forEach(el=>el.classList.add('colhi'));
+  const tr=td.closest('tr'); if(tr&&tr.dataset.row) tr.classList.add('rowhi');
+});
+document.addEventListener('click',e=>{
+  const td=e.target.closest('#newGrid td.c'); if(!td) return;
+  const u=td.dataset.u, id=td.dataset.col;
+  ELIG[u][id]=!allowed(u,id);
+  draw();
+});
+window.bulkFam=(f,val)=>{
+  for(const {u} of visibleUsers()) for(const s of SHIFTS) if(s.family===f) ELIG[u][s.id]=val;
+  draw();
+};
+
+window.setView=v=>{
+  document.getElementById('viewOld').style.display = v==='old'?'':'none';
+  document.getElementById('viewNew').style.display = v==='new'?'':'none';
+  document.getElementById('btnOld').classList.toggle('on',v==='old');
+  document.getElementById('btnNew').classList.toggle('on',v==='new');
+  document.getElementById('viewNote').textContent = v==='old'
+    ? 'scroll right — it keeps going for about 7,000px'
+    : '';
+  if(v==='old') drawOld();
+};
+
+drawChips(); draw(); drawOld();
+</script>
+</body>
+</html>

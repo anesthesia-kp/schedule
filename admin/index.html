@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 48;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 49;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -71,14 +71,6 @@
   --mono:'SF Mono',Consolas,Menlo,monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-/* Demo notice — this schedule site is not in live use. Fixed so it stays visible while
-   scrolling; body gets matching padding (border-box keeps min-height:100vh honest, so no
-   extra scrollbar). z-index sits above #authGate so the notice shows on the gate too. */
-:root{--demo-h:26px}
-.demo-banner{position:fixed;top:0;left:0;right:0;z-index:100001;background:#b91c1c;color:#fff;
-  font-size:12.5px;font-weight:700;letter-spacing:.01em;text-align:center;padding:5px 12px;
-  line-height:1.3;box-shadow:0 1px 4px rgba(0,0,0,.28)}
-body{padding-top:var(--demo-h)}
 body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;display:flex;min-height:100vh}
 nav{width:200px;background:var(--s1);border-right:1px solid var(--b1);padding:16px 0;flex-shrink:0}
 nav .brand{font-size:12px;font-weight:800;letter-spacing:.1em;color:var(--t2);padding:0 18px 12px}
@@ -110,6 +102,69 @@ table.grid td.cell:hover{outline:2px solid var(--blue)}
 table.grid .wkend{background:var(--s3)}
 table.grid .stick1{position:sticky;left:0;z-index:2;background:var(--s1);border-right:2px solid var(--b2)}
 table.grid th.stick1{background:var(--s2);z-index:3}
+
+/* ── Shift Eligibility grid [build 49] ──────────────────────────────────────
+   The old grid was one column per shift in catalog `order`, families interleaved,
+   nowrap headers — ~4,000px wide at the seeded catalog size, with nothing to hold
+   your place across 40 rows. This one groups columns by family under a coloured
+   band, turns the labels vertical (25px per column instead of ~70px), pins both
+   header rows and the person column, and adds counts + filters. Same data, same
+   writes (dailysched/eligibility only) — presentation only. */
+.eg-wrap{overflow:auto;max-height:72vh;border:1px solid var(--b1);border-radius:10px;background:var(--s1)}
+.eg-chips{display:flex;flex-wrap:wrap;gap:5px}
+.eg-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--b2);background:var(--s1);
+  border-radius:999px;padding:3px 10px 3px 5px;font-size:12px;font-weight:700;cursor:pointer;color:var(--t1)}
+.eg-chip:hover{background:var(--s3)}
+.eg-chip .sw{width:11px;height:11px;border-radius:3px;border:1px solid rgba(15,23,42,.18);flex:none}
+.eg-chip .n{font-size:10.5px;color:var(--t2);font-weight:700}
+.eg-chip.on{border-color:var(--blue);box-shadow:0 0 0 2px rgba(37,99,235,.16);background:#eff6ff}
+.eg-chip.on .n{color:var(--blue)}
+table.eg{border-collapse:separate;border-spacing:0;font-size:11px}
+table.eg th,table.eg td{padding:0;text-align:center}
+.eg .uh{position:sticky;left:0;z-index:6;background:var(--s1);border-right:2px solid var(--b2);
+  text-align:left;padding:3px 10px 3px 9px;min-width:186px;max-width:186px}
+.eg thead .uh{z-index:8;background:var(--s2)}
+.eg .uname{font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--t1)}
+.eg .ucount{font-size:10px;color:var(--t3);font-weight:700;margin-top:1px;display:flex;align-items:center;gap:5px}
+.eg .ubar{height:3px;border-radius:2px;background:var(--s3);flex:1;overflow:hidden;max-width:74px}
+.eg .ubar i{display:block;height:100%;background:var(--blue);border-radius:2px}
+.eg thead th{position:sticky;background:var(--s2);z-index:5}
+.eg thead tr.fam th{top:0;height:24px}
+.eg thead tr.lab th{top:24px;height:104px}
+.eg-band{font-size:10.5px;font-weight:800;letter-spacing:.03em;color:#1e293b;
+  border-left:2px solid rgba(15,23,42,.25);border-bottom:1px solid var(--b1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px}
+.eg-bandbtns{display:inline-flex;gap:2px;margin-left:6px;vertical-align:middle}
+.eg-bandbtns button{border:none;background:rgba(255,255,255,.62);border-radius:4px;font-size:9.5px;
+  font-weight:800;padding:1px 5px;cursor:pointer;line-height:1.5;color:#334155}
+.eg-bandbtns button:hover{background:#fff}
+.eg-lab{border-left:1px solid var(--b1);border-bottom:1px solid var(--b2);vertical-align:bottom;
+  padding-bottom:5px;width:25px;min-width:25px;max-width:25px}
+.eg-lab.fst{border-left:2px solid rgba(15,23,42,.25)}
+.eg-labtxt{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:10.5px;
+  font-weight:700;color:var(--t1);max-height:80px;overflow:hidden;margin:0 auto}
+.eg-labn{font-size:9px;color:var(--t3);font-weight:700;margin-top:3px}
+.eg tbody tr:nth-child(even) td.eg-c{background-image:linear-gradient(rgba(15,23,42,.028),rgba(15,23,42,.028))}
+.eg tbody tr:nth-child(even) .uh{background:#fbfcfe}
+td.eg-c{border-left:1px solid var(--b1);border-bottom:1px solid var(--b1);width:25px;min-width:25px;
+  height:23px;cursor:pointer;position:relative}
+td.eg-c.fst{border-left:2px solid rgba(15,23,42,.2)}
+td.eg-c .m{position:absolute;inset:2px;border-radius:3px;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:900;color:#0f172a;line-height:1}
+td.eg-c.no::after{content:'';position:absolute;left:50%;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;
+  border-radius:50%;background:#dbe2ea}
+td.eg-c:hover .m{outline:2px solid var(--blue);outline-offset:-1px}
+td.eg-c.busy{opacity:.45}
+.eg tbody tr.rowhi .uh{background:#eff6ff}
+.eg tbody tr.rowhi td.eg-c{background-image:linear-gradient(rgba(37,99,235,.075),rgba(37,99,235,.075))}
+td.eg-c.colhi{background-image:linear-gradient(rgba(37,99,235,.075),rgba(37,99,235,.075))}
+th.eg-lab.colhi{background:#eff6ff}
+th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
+.eg-legend{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:9px;font-size:11.5px;color:var(--t2)}
+.eg-legend .k{display:inline-flex;align-items:center;gap:6px}
+.eg-legend .box{width:17px;height:17px;border-radius:4px;border:1px solid var(--b1);display:inline-flex;
+  align-items:center;justify-content:center;font-size:10px;font-weight:900;color:#0f172a}
+.eg-empty{padding:26px;text-align:center;color:var(--t3);font-size:13px;font-weight:600}
 .rowline{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px dashed var(--b1);font-size:13px;flex-wrap:wrap}
 .status-pending{color:var(--yellow)} .status-approved{color:var(--green)} .status-denied{color:var(--red)}
 .mono{font-family:var(--mono)}
@@ -131,8 +186,6 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 </style>
 </head>
 <body>
-<div class="demo-banner">⚠️ This site is a non-functional example of a scheduling site.</div>
-
 <nav>
   <div class="brand">SCHEDULER ADMIN</div>
   <a onclick="nav('dash',this)" class="on">📊 Dashboard</a>
@@ -307,17 +360,34 @@ table.grid th.stick1{background:var(--s2);z-index:3}
   <!-- ELIGIBILITY -->
   <div class="panel" id="panel-elig">
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Shift Eligibility</div>
-    <div class="page-sub" style="margin-bottom:12px">Which shifts each user may be assigned. Auto-populate and cell assignment both respect this. Unchecked = not allowed.</div>
+    <div class="page-sub" style="margin-bottom:12px">Which shifts each user may be assigned. Auto-populate and cell assignment both respect this. Empty = not allowed.</div>
     <div class="card" style="padding:10px 12px">
-      <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <button class="btn" onclick="eligAll(true)">Allow all</button> <button class="btn" onclick="eligAll(false)">Disallow all</button>
-        <span style="width:1px;height:20px;background:var(--b2)"></span>
-        <span style="font-size:11px;color:var(--t2);font-weight:700">By family, for every user:</span>
-        <select class="sel" id="eligFamilySel" style="font-size:12px"></select>
-        <button class="btn btn-success" style="font-size:12px" onclick="eligFamily(true)">Allow</button>
-        <button class="btn btn-danger" style="font-size:12px" onclick="eligFamily(false)">Disallow</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <span style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.05em">Family</span>
+        <div class="eg-chips" id="eligFamChips"></div>
       </div>
-      <div style="overflow-x:auto"><table class="grid" id="eligGrid"></table></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <span style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.05em">Type</span>
+        <button class="btn btn-primary" data-eligkind="" style="font-size:12px;padding:4px 10px" onclick="setEligKind('')">All</button>
+        <button class="btn" data-eligkind="day" style="font-size:12px;padding:4px 10px" onclick="setEligKind('day')">Day</button>
+        <button class="btn" data-eligkind="call" style="font-size:12px;padding:4px 10px" onclick="setEligKind('call')">Call</button>
+        <span style="width:1px;height:20px;background:var(--b2)"></span>
+        <input class="inp" id="eligQShift" placeholder="Find a shift…" style="font-size:12px;width:148px" oninput="renderElig()">
+        <input class="inp" id="eligQUser" placeholder="Find a person…" style="font-size:12px;width:148px" oninput="renderElig()">
+        <label style="font-size:12px;font-weight:700;color:var(--t2);display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" id="eligHideEmpty" onchange="renderElig()"> Hide shifts nobody can do
+        </label>
+        <span style="width:1px;height:20px;background:var(--b2)"></span>
+        <button class="btn" style="font-size:12px;padding:4px 10px" onclick="resetEligFilters()">Reset filters</button>
+        <button class="btn" style="font-size:12px;padding:4px 10px" onclick="eligAll(true)">Allow all</button>
+        <button class="btn" style="font-size:12px;padding:4px 10px" onclick="eligAll(false)">Disallow all</button>
+      </div>
+      <div class="eg-wrap"><table class="eg" id="eligGrid"></table><div class="eg-empty" id="eligEmpty" style="display:none"></div></div>
+      <div class="eg-legend">
+        <span class="k"><span class="box" style="background:#bfdbfe">✓</span> allowed — block is the family colour</span>
+        <span class="k"><span class="box" style="background:#fff">·</span> not allowed</span>
+        <span class="k">click a cell to toggle · hover for a crosshair · <b id="eligShowing"></b></span>
+      </div>
     </div>
   </div>
 
@@ -1663,57 +1733,213 @@ window.removeSchedUser=async function(u){
   auditLog('user.remove','Removed user '+u+' from the shared roster');
 };
 
-// ── Eligibility ──
+// ── Eligibility [build 49 · readability rebuild] ────────────────────────────
+// Presentation only. The write paths are byte-for-byte the same idea as build 48:
+// dotted "user.shiftId" keys into dailysched/eligibility via mergeFields, so a
+// change never disturbs eligibility for any shift it didn't name. What changed is
+// that the reader can now find anything: columns grouped by family under a coloured
+// band, vertical labels (25px/column instead of ~70px), pinned header + person
+// column, per-person and per-shift counts, and filters.
+let _eligFam='';      // '' = all families ('__none' = the no-family group)
+let _eligKind='';     // '' | 'day' | 'call'
+const NOFAM='__none';
+const eligFamKeyOf=s=>(s.family||'')||NOFAM;
+const eligFamLabelOf=k=>k===NOFAM?'No family':(catalog.families?.[k]?.label||k);
+const eligFamColorOf=k=>k===NOFAM?'#e2e8f0':(catalog.families?.[k]?.color||'#e2e8f0');
+
+// Families ordered by where their shifts actually sit in the catalog, so the
+// admin's own ordering carries through instead of being alphabetised over.
+function eligFamilyOrder(){
+  const seen=new Map();
+  for(const [,s] of shiftList()){
+    const k=eligFamKeyOf(s), o=(s.order??99);
+    if(!seen.has(k)||o<seen.get(k)) seen.set(k,o);
+  }
+  return [...seen.entries()].sort((a,b)=>a[1]-b[1]).map(([k])=>k);
+}
+function renderEligChips(){
+  const el=document.getElementById('eligFamChips'); if(!el) return;
+  const counts={};
+  for(const [,s] of shiftList()){ const k=eligFamKeyOf(s); counts[k]=(counts[k]||0)+1; }
+  const total=shiftList().length;
+  let h='<span class="eg-chip'+(_eligFam===''?' on':'')+'" onclick="setEligFam(\'\')">'
+    +'<span class="sw" style="background:linear-gradient(135deg,#ddd6fe,#99f6e4,#fbcfe8)"></span>All<span class="n">'+total+'</span></span>';
+  for(const k of eligFamilyOrder()){
+    h+='<span class="eg-chip'+(_eligFam===k?' on':'')+'" onclick="setEligFam(\''+esc(k)+'\')">'
+      +'<span class="sw" style="background:'+esc(eligFamColorOf(k))+'"></span>'+esc(eligFamLabelOf(k))
+      +'<span class="n">'+(counts[k]||0)+'</span></span>';
+  }
+  el.innerHTML=h;
+}
+window.setEligFam=function(k){ _eligFam=(_eligFam===k?'':k); renderElig(); };
+window.setEligKind=function(k){
+  _eligKind=k;
+  document.querySelectorAll('[data-eligkind]').forEach(b=>{
+    const on=b.getAttribute('data-eligkind')===k;
+    b.classList.toggle('btn-primary',on);
+  });
+  renderElig();
+};
+window.resetEligFilters=function(){
+  _eligFam=''; _eligKind='';
+  const q1=document.getElementById('eligQShift'), q2=document.getElementById('eligQUser'),
+        he=document.getElementById('eligHideEmpty');
+  if(q1) q1.value=''; if(q2) q2.value=''; if(he) he.checked=false;
+  setEligKind('');
+};
+function eligVisibleShifts(){
+  const qEl=document.getElementById('eligQShift');
+  const q=(qEl?qEl.value:'').trim().toLowerCase();
+  const heEl=document.getElementById('eligHideEmpty');
+  const hideEmpty=!!(heEl&&heEl.checked);
+  let list=shiftList().filter(([,s])=>
+    (!_eligFam||eligFamKeyOf(s)===_eligFam) &&
+    (!_eligKind||s.kind===_eligKind) &&
+    (!q||String(s.label||'').toLowerCase().includes(q)));
+  if(hideEmpty) list=list.filter(([id])=>names.some(u=>allowed(u,id)));
+  const ord=eligFamilyOrder();
+  return list.sort((a,b)=>{
+    const fa=ord.indexOf(eligFamKeyOf(a[1])), fb=ord.indexOf(eligFamKeyOf(b[1]));
+    return fa!==fb ? fa-fb : (a[1].order??99)-(b[1].order??99);
+  });
+}
+function eligVisibleUsers(){
+  const qEl=document.getElementById('eligQUser');
+  const q=(qEl?qEl.value:'').trim().toLowerCase();
+  return names.filter(u=>!q||String(displayName(u)).toLowerCase().includes(q)||String(u).toLowerCase().includes(q));
+}
 function renderElig(){
   const g=document.getElementById('eligGrid'); if(!g) return;
-  const famSel=document.getElementById('eligFamilySel');
-  if(famSel){ const cur=famSel.value; famSel.innerHTML=familyOptionsHtml(''); if([...famSel.options].some(o=>o.value===cur)) famSel.value=cur; }
-  const shifts=shiftList();
-  let head='<tr><th class="stick1" style="text-align:left">User</th><th>Bulk by family</th>'+shifts.map(([id,s])=>'<th>'+esc(s.label)+'</th>').join('')+'</tr>';
-  let rows='';
-  for(const u of names){
-    rows+='<tr><td class="stick1" style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
-      +'<td style="white-space:nowrap"><select class="sel" style="font-size:10px;padding:2px 4px;width:100px" id="eligFamRow_'+esc(u)+'">'+familyOptionsHtml('')+'</select> '
-      +'<button class="btn btn-ghost" style="font-size:10px;padding:2px 6px;color:var(--green)" title="Allow every shift in this family for '+esc(u)+'" onclick="eligFamilyForUser(\''+esc(u)+'\',true)">✓</button>'
-      +'<button class="btn btn-ghost" style="font-size:10px;padding:2px 6px;color:var(--red)" title="Disallow every shift in this family for '+esc(u)+'" onclick="eligFamilyForUser(\''+esc(u)+'\',false)">✗</button></td>'
-      +shifts.map(([id])=>'<td><input type="checkbox" '+(allowed(u,id)?'checked':'')+' onchange="setElig(\''+esc(u)+'\',\''+esc(id)+'\',this.checked)"></td>').join('')+'</tr>';
+  renderEligChips();
+  const emptyEl=document.getElementById('eligEmpty');
+  const showEl=document.getElementById('eligShowing');
+  const sh=eligVisibleShifts(), us=eligVisibleUsers();
+  if(!sh.length||!us.length){
+    g.innerHTML='';
+    if(emptyEl){ emptyEl.style.display=''; emptyEl.textContent=shiftList().length?'Nothing matches those filters.':'No shifts in the catalog yet — add some in Shift Catalog.'; }
+    if(showEl) showEl.textContent='';
+    return;
   }
-  g.innerHTML=head+rows;
+  if(emptyEl) emptyEl.style.display='none';
+  // contiguous family bands across the visible columns
+  const bands=[];
+  for(const [,s] of sh){
+    const k=eligFamKeyOf(s), last=bands[bands.length-1];
+    if(last&&last.k===k) last.n++; else bands.push({k,n:1});
+  }
+  let head='<thead><tr class="fam"><th class="uh"></th>';
+  for(const b of bands){
+    head+='<th class="eg-band" colspan="'+b.n+'" style="background:'+esc(eligFamColorOf(b.k))+'"'
+      +' title="'+esc(eligFamLabelOf(b.k))+' — '+b.n+' shift'+(b.n===1?'':'s')+' shown">'
+      +esc(eligFamLabelOf(b.k))
+      +'<span class="eg-bandbtns">'
+      +'<button onclick="eligBandBulk(\''+esc(b.k)+'\',true)" title="Allow every '+esc(eligFamLabelOf(b.k))+' shift for everyone shown">✓ all</button>'
+      +'<button onclick="eligBandBulk(\''+esc(b.k)+'\',false)" title="Disallow every '+esc(eligFamLabelOf(b.k))+' shift for everyone shown">✗ all</button>'
+      +'</span></th>';
+  }
+  head+='</tr><tr class="lab"><th class="uh">'
+     +'<div class="uname" style="font-size:11px;color:var(--t2)">Person</div>'
+     +'<div class="ucount" style="color:var(--t3)">eligible / '+sh.length+' shown</div></th>';
+  let fseen=null;
+  for(const [id,s] of sh){
+    const k=eligFamKeyOf(s), first=k!==fseen; fseen=k;
+    const n=us.filter(u=>allowed(u,id)).length;
+    head+='<th class="eg-lab'+(first?' fst':'')+'" data-eligcol="'+esc(id)+'"'
+      +' title="'+esc(s.label)+' · '+esc(eligFamLabelOf(k))+' · '+esc(s.kind||'')+' · '+n+' of '+us.length+' eligible">'
+      +'<div class="eg-labtxt">'+esc(s.label)+'</div><div class="eg-labn">'+n+'</div></th>';
+  }
+  head+='</tr></thead>';
+  let body='<tbody>';
+  for(const u of us){
+    const n=sh.filter(([id])=>allowed(u,id)).length;
+    const pct=sh.length?Math.round(n/sh.length*100):0;
+    const dn=displayName(u);
+    body+='<tr data-eligrow="'+esc(u)+'"><td class="uh"><div class="uname" title="'+esc(dn)+'">'+esc(dn)+'</div>'
+      +'<div class="ucount"><span>'+n+'</span><span class="ubar"><i style="width:'+pct+'%"></i></span></div></td>';
+    let f2=null;
+    for(const [id,s] of sh){
+      const k=eligFamKeyOf(s), first=k!==f2; f2=k;
+      const on=allowed(u,id);
+      body+='<td class="eg-c'+(on?'':' no')+(first?' fst':'')+'" data-eligcol="'+esc(id)+'" data-eligu="'+esc(u)+'"'
+        +' title="'+esc(dn)+' · '+esc(s.label)+' — '+(on?'allowed':'not allowed')+' (click to '+(on?'disallow':'allow')+')">'
+        +'<span class="m" style="background:'+(on?esc(eligFamColorOf(k)):'transparent')+'">'+(on?'✓':'')+'</span></td>';
+    }
+    body+='</tr>';
+  }
+  body+='</tbody>';
+  g.innerHTML=head+body;
+  if(showEl){
+    const total=us.reduce((a,u)=>a+sh.filter(([id])=>allowed(u,id)).length,0);
+    showEl.textContent=us.length+' people × '+sh.length+' shifts · '+total+' allowed';
+  }
 }
+// The filter controls call renderElig() from inline oninput/onchange attributes,
+// which resolve against the GLOBAL scope — and this whole file is a type="module"
+// script, so a plain `function renderElig` is invisible to them. Expose it, the
+// way every other handler on this page already is.
+window.renderElig=renderElig;
+
+// Crosshair + click-to-toggle are delegated on document, so a re-render (which
+// happens on every Firestore snapshot) can never orphan a listener.
+document.addEventListener('mouseover',function(e){
+  const g=document.getElementById('eligGrid'); if(!g) return;
+  const cell=e.target&&e.target.closest?e.target.closest('#eligGrid td.eg-c, #eligGrid th.eg-lab'):null;
+  g.querySelectorAll('.colhi').forEach(el=>el.classList.remove('colhi'));
+  g.querySelectorAll('tr.rowhi').forEach(el=>el.classList.remove('rowhi'));
+  if(!cell) return;
+  const col=cell.getAttribute('data-eligcol');
+  if(col&&window.CSS&&CSS.escape) g.querySelectorAll('[data-eligcol="'+CSS.escape(col)+'"]').forEach(el=>el.classList.add('colhi'));
+  const tr=cell.closest('tr'); if(tr&&tr.getAttribute('data-eligrow')) tr.classList.add('rowhi');
+});
+document.addEventListener('click',function(e){
+  const td=e.target&&e.target.closest?e.target.closest('#eligGrid td.eg-c'):null;
+  if(!td) return;
+  const u=td.getAttribute('data-eligu'), id=td.getAttribute('data-eligcol');
+  if(!u||!id) return;
+  setElig(u,id,!allowed(u,id));
+});
 window.setElig=async function(u,id,val){
-  await mergeFields(eligRef,{[u+'.'+id]:val});
+  // Optimistic paint: the old grid used a native checkbox that flipped instantly;
+  // a div does not, so without this every click feels laggy until the snapshot
+  // round-trips. The listener overwrites `elig` with server truth either way, and
+  // a failed write is rolled back and announced rather than left looking saved.
+  const before=allowed(u,id);
+  if(!elig[u]) elig[u]={};
+  elig[u][id]=val;
+  renderElig();
+  try{
+    await mergeFields(eligRef,{[u+'.'+id]:val});
+  }catch(err){
+    elig[u][id]=before; renderElig();
+    schedToast((err&&err.code==='permission-denied')
+      ?'Only a Daily Schedule admin can change eligibility'
+      :'Could not save that change — please try again','err');
+    return;
+  }
   auditLog('elig.set',(val?'Allowed':'Disallowed')+' '+(catalog.shifts?.[id]?.label||id)+' for '+displayName(u));
 };
 window.eligAll=async function(val){
-  if(!confirm((val?'Allow':'Disallow')+' EVERY shift for EVERY user?')) return;
+  if(!confirm((val?'Allow':'Disallow')+' EVERY shift for EVERY user?\n\nThis ignores the filters above and covers the whole catalog and the whole roster.')) return;
   const patch={};
   for(const u of names){ patch[u]={}; for(const [id] of shiftList()) patch[u][id]=val; }
   await setDoc(eligRef,patch,{merge:true});
   auditLog('elig.bulk',(val?'Allowed':'Disallowed')+' every shift for every user');
 };
-// One click to allow/disallow every shift in a family — for one user's row,
-// or (eligFamily) for every user at once. Uses mergeFields with one dotted
-// "user.shiftId" key per affected shift, so it never disturbs eligibility for
-// any shift outside that family.
-window.eligFamilyForUser=async function(u,val){
-  const fkey=document.getElementById('eligFamRow_'+u).value;
-  const ids=shiftList().filter(([,s])=>(s.family||'')===fkey).map(([id])=>id);
-  if(!ids.length) return;
-  const patch={}; for(const id of ids) patch[u+'.'+id]=val;
-  await mergeFields(eligRef,patch);
-  const famLabel=fkey?(catalog.families?.[fkey]?.label||fkey):'no-family';
-  auditLog('elig.bulk',(val?'Allowed':'Disallowed')+' every '+famLabel+' shift ('+ids.length+') for '+displayName(u));
-};
-window.eligFamily=async function(val){
-  const fkey=document.getElementById('eligFamilySel').value;
-  const ids=shiftList().filter(([,s])=>(s.family||'')===fkey).map(([id])=>id);
-  if(!ids.length) return;
-  const famLabel=fkey?(catalog.families?.[fkey]?.label||fkey):'shifts with no family';
-  if(!confirm((val?'Allow':'Disallow')+' every '+famLabel+' shift for EVERY user?')) return;
+// One click to allow/disallow a whole family, from that family's header band.
+// Scope is deliberately WHAT YOU CAN SEE: the people currently listed (the
+// person filter applies) × every shift in that family. Dotted "user.shiftId"
+// keys, so eligibility for any shift outside the family is never touched.
+window.eligBandBulk=async function(fkey,val){
+  const ids=shiftList().filter(([,s])=>eligFamKeyOf(s)===fkey).map(([id])=>id);
+  const us=eligVisibleUsers();
+  if(!ids.length||!us.length) return;
+  const label=eligFamLabelOf(fkey);
+  const who=us.length===names.length?'EVERY user':('the '+us.length+' user'+(us.length===1?'':'s')+' currently shown');
+  if(!confirm((val?'Allow':'Disallow')+' all '+ids.length+' '+label+' shift'+(ids.length===1?'':'s')+' for '+who+'?')) return;
   const patch={};
-  for(const u of names) for(const id of ids) patch[u+'.'+id]=val;
+  for(const u of us) for(const id of ids) patch[u+'.'+id]=val;
   await mergeFields(eligRef,patch);
-  auditLog('elig.bulk',(val?'Allowed':'Disallowed')+' every '+famLabel+' shift for EVERY user');
+  auditLog('elig.bulk',(val?'Allowed':'Disallowed')+' every '+label+' shift ('+ids.length+') for '+who);
 };
 
 // ── Catalog ──

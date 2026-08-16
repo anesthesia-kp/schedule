@@ -1,0 +1,45 @@
+schedule admin 49 / staff 25 — eligibility rebuild, banner off, foundations + reports designed
+
+Shift Eligibility was one column per shift in catalog order, families interleaved,
+~4,000px wide with nothing to hold your place across the roster. Rebuilt:
+
+  · contiguous colour-banded families, bulk allow/disallow moved into each band
+    (replacing one dropdown per row)
+  · vertical shift labels — 25px per column instead of ~70px
+  · person column and both header rows pinned; row striping; hover crosshair
+  · per-person and per-shift eligibility counts
+  · filters: family · day/call · find-a-shift · find-a-person · hide shifts nobody can do
+  · colour-block cells with a tick rather than bare checkboxes, painted optimistically
+    and rolled back with a plain-language toast if the write is refused
+
+Presentation only. The write paths are unchanged in kind: dotted "user.shiftId" keys
+into dailysched/eligibility via mergeFields, so a change never disturbs eligibility for
+a shift it did not name.
+
+Demo banner removed from both pages (staff 25).
+
+DOCS (new)
+  NEXT-CHAT-START-PROMPT.md  session start prompt; leads with the rule that the live
+                             Vacation Auction takes absolute priority over this site
+  HANDOFF.md                 current state, what the two sites share, why they belong in
+                             separate chat sessions, and the traps a fresh session hits
+  DECISIONS.md               29 owner rulings — several overruling Claude. Do not re-litigate
+  TODO.md                    open questions, 9-stage roadmap, 30 evidence-anchored defects
+  SCHEDULE-FOUNDATIONS-SPEC.md  shifts, compatibility, people/rules, assignment model
+  design/                    4 mockups + shift-times.xlsx (proposed times for all 91
+                             shifts, flagged confirmed-by-owner vs estimated-by-Claude)
+
+GATES (all executed, not asserted)
+  sched/elig-test.mjs            33/33 driving the real admin page in headless Chromium
+                                 against an in-memory Firestore that records every write
+  honesty --pre vs build 48      9 failures, none vacuous
+  tests-schedule-isolation.mjs   9 failures on 48 and 9 on 49 — ZERO new writes to the
+                                 Vacation Auction. Mutation-tested; aborts on parser desync
+  FTE independence               5/5 — the two sites keep separate FTE, pinned by test
+  shift-editor harness           52/52
+  reports harness                36/36
+
+No Firebase console step — firestore.rules unchanged.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01J8KrjL25w16iZ553P2WhPH

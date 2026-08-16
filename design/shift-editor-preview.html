@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shift Catalog — times, demand & compatibility (preview)</title>
+<style>
+:root{
+  --bg:#f4f7fa; --s1:#fff; --s2:#f8fafc; --s3:#eef2f7;
+  --b1:#e3e9f0; --b2:#cbd5e1;
+  --t1:#1e293b; --t2:#5b6b7c; --t3:#94a3b8;
+  --blue:#2563eb; --green:#059669; --red:#dc2626; --yellow:#b45309;
+  --mono:'SF Mono',Consolas,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;padding:16px 20px}
+.page-title{font-size:18px;font-weight:800}
+.page-sub{font-size:12px;color:var(--t2);margin-top:3px;max-width:80ch;line-height:1.55}
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:14px 16px;margin-top:12px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.btn{border:1px solid var(--b2);background:var(--s1);color:var(--t1);border-radius:8px;padding:6px 12px;font-size:13px;font-weight:700;cursor:pointer}
+.btn:hover{background:var(--s3)}
+.btn.on,.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn-primary:hover{background:#1d4ed8}
+.btn-danger{background:#fee2e2;border-color:#fca5a5;color:var(--red)}
+.btn-sm{font-size:11.5px;padding:3px 8px;border-radius:6px}
+.sel,.inp{border:1px solid var(--b2);border-radius:8px;padding:6px 9px;font-size:13px;background:var(--s1);color:var(--t1)}
+.lbl{font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;display:block}
+.tabs{display:flex;gap:6px;margin-top:12px}
+.pane{display:none} .pane.on{display:block}
+
+/* ── catalog list + detail ── */
+.split{display:grid;grid-template-columns:288px 1fr;gap:14px;align-items:start}
+.list{border:1px solid var(--b1);border-radius:10px;background:var(--s1);max-height:640px;overflow:auto}
+.famhdr{position:sticky;top:0;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  padding:5px 10px;border-bottom:1px solid var(--b1);z-index:1}
+.srow{display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--s3);font-size:12.5px}
+.srow:hover{background:var(--s2)}
+.srow.on{background:#eff6ff;box-shadow:inset 3px 0 0 var(--blue)}
+.srow .nm{font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srow .tm{font-family:var(--mono);font-size:10.5px;color:var(--t2)}
+.srow .warn{color:var(--yellow);font-weight:800;font-size:11px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px}
+.hint{font-size:11.5px;color:var(--t2);margin-top:4px;line-height:1.5}
+.pill{display:inline-block;border-radius:999px;padding:1px 8px;font-size:10.5px;font-weight:800}
+.pill-warn{background:#fef3c7;color:#92400e}
+.pill-ok{background:#d1fae5;color:#065f46}
+.pill-off{background:var(--s3);color:var(--t2)}
+
+/* ── demand rules ── */
+.rule{display:flex;flex-wrap:wrap;gap:7px;align-items:center;padding:8px;border:1px solid var(--b1);
+  border-radius:9px;background:var(--s2);margin-bottom:7px}
+.rule .ord{width:19px;height:19px;border-radius:50%;background:var(--b2);color:#fff;font-size:10.5px;
+  font-weight:800;display:flex;align-items:center;justify-content:center;flex:none}
+.rule.last{border-color:#bfdbfe;background:#eff6ff}
+
+/* ── 60-day preview ── */
+.pv{display:flex;flex-wrap:wrap;gap:2px;margin-top:8px}
+.pvd{width:29px;height:38px;border-radius:5px;border:1px solid var(--b1);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;font-size:9px;line-height:1.15;background:var(--s1);position:relative}
+.pvd .dow{color:var(--t3);font-weight:700}
+.pvd .n{font-size:13px;font-weight:900}
+.pvd.zero{background:var(--s2)} .pvd.zero .n{color:var(--t3);font-weight:700}
+.pvd.hol{border-color:#fca5a5;background:#fff5f5}
+.pvd.hol::after{content:'★';position:absolute;top:-1px;right:2px;font-size:8px;color:var(--red)}
+.pvd.wknd{background:#f5f7fa}
+.pvmark{font-size:11px;color:var(--t2);margin-top:6px}
+
+/* ── compatibility ── */
+table.cp{border-collapse:collapse;width:100%;font-size:12.5px}
+table.cp th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--t2);
+  padding:6px 8px;border-bottom:1px solid var(--b2)}
+table.cp td{padding:5px 8px;border-bottom:1px solid var(--s3)}
+table.cp tr:hover td{background:var(--s2)}
+.mono{font-family:var(--mono);font-size:11.5px;color:var(--t2)}
+.stat{display:inline-flex;flex-direction:column;gap:1px;padding:8px 14px;border:1px solid var(--b1);
+  border-radius:10px;background:var(--s1);min-width:112px}
+.stat b{font-size:20px;font-weight:900;line-height:1}
+.stat span{font-size:10.5px;color:var(--t2);font-weight:700}
+.stats{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:12px}
+
+/* ── confirm dialog ── */
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:99;padding:16px}
+.modal.on{display:flex}
+.mcard{background:var(--s1);border-radius:14px;max-width:520px;width:100%;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.4);max-height:84vh;overflow:auto}
+.mcard h3{font-size:16px;margin-bottom:4px}
+.dif{font-size:12.5px;padding:6px 0;border-top:1px dashed var(--b1);display:flex;gap:8px}
+.dif .k{color:var(--t2);min-width:104px;font-weight:700}
+.was{color:var(--t3);text-decoration:line-through}
+.lockbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-radius:10px;padding:9px 13px;margin-top:12px;font-size:13px;font-weight:700}
+.lockbar.locked{background:#f1f5f9;border:1px solid var(--b2);color:var(--t2)}
+.lockbar.open{background:#fffbeb;border:1px solid #fcd34d;color:#92400e}
+.lockbar .who{font-weight:600;font-size:11.5px;opacity:.85}
+.bulkbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:#eff6ff;border:1px solid #bfdbfe;
+  border-radius:9px;padding:7px 10px;margin-bottom:8px;font-size:12.5px;font-weight:700;color:#1e40af}
+.selchk{flex:none;margin:0}
+table.dt{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:8px}
+table.dt th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--t2);padding:4px 6px;border-bottom:1px solid var(--b2)}
+table.dt td{padding:4px 6px;border-bottom:1px solid var(--s3)}
+.dis{opacity:.55;pointer-events:none}
+.was{color:var(--t3);text-decoration:line-through}
+.now{font-weight:800}
+</style>
+</head>
+<body>
+
+<div class="page-title">Shift Catalog — times, demand &amp; compatibility</div>
+<div class="page-sub">Preview only, nothing is connected. Everything you see is admin-editable: no shift time, day pattern, location, holiday behaviour or approved pairing is written in code. Pick a shift on the left to edit it.</div>
+
+<div class="tabs">
+  <button class="btn on" id="t1" onclick="tab(1)">Shift editor</button>
+  <button class="btn" id="t2" onclick="tab(2)">Compatibility</button>
+  <button class="btn" id="t3" onclick="tab(3)">Setup progress</button>
+</div>
+
+<!-- ══════════ 1 · SHIFT EDITOR ══════════ -->
+<div class="pane on" id="p1">
+<div id="lockbar-catalog"></div>
+<div class="card">
+<div class="split">
+  <div>
+    <input class="inp" id="q" placeholder="Find a shift…" style="width:100%;margin-bottom:8px" oninput="drawList()">
+    <div class="bulkbar" id="bulkbar" style="display:none"></div>
+    <div class="list" id="list"></div>
+  </div>
+  <div id="detail"></div>
+</div>
+</div>
+</div>
+
+<!-- ══════════ 2 · COMPATIBILITY ══════════ -->
+<div class="pane" id="p2">
+<div id="lockbar-compat"></div>
+<div class="card">
+  <div class="stats" id="cpStats"></div>
+  <div class="page-sub" style="margin-bottom:10px">
+    Every possible pair of shifts, filtered down automatically. Overlapping times or different locations are
+    <b>impossible</b> and can never be approved. What's left is what you actually decide on — tick a pair to
+    approve holding both on one day. Unticked isn't forbidden, it just warns.
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+    <button class="btn btn-sm on" data-cf="candidate" onclick="setCF('candidate')">Needs a decision</button>
+    <button class="btn btn-sm" data-cf="approved" onclick="setCF('approved')">Approved</button>
+    <button class="btn btn-sm" data-cf="impossible" onclick="setCF('impossible')">Impossible</button>
+    <span class="hint" id="cpNote"></span>
+  </div>
+  <div style="max-height:480px;overflow:auto"><table class="cp" id="cpTable"></table></div>
+</div>
+</div>
+
+<!-- ══════════ 3 · SETUP PROGRESS ══════════ -->
+<div class="pane" id="p3">
+<div class="card">
+  <div class="stats" id="spStats"></div>
+  <div class="page-sub" style="margin-bottom:10px">
+    Work that's outstanding, so it drains visibly instead of sitting as a silent gap. A shift with no times
+    can't be checked for overlap, so it warns against everything until you fill them in.
+  </div>
+  <div style="max-height:460px;overflow:auto"><table class="cp" id="spTable"></table></div>
+</div>
+</div>
+
+<!-- confirm -->
+<div class="modal" id="cm"><div class="mcard" id="cmBody"></div></div>
+
+<script>
+// ───────── families (admin-editable in the real app) ─────────
+const FAM={
+  call:{label:'Call',color:'#ddd6fe'}, ob:{label:'OB / Obstetric',color:'#fde68a'},
+  ap:{label:'AP coverage',color:'#bfdbfe'}, icu:{label:'ICU',color:'#99f6e4'},
+  pedi:{label:'Pediatric',color:'#fbcfe8'}, pcv:{label:'P / PCV',color:'#bbf7d0'},
+  admin:{label:'Admin / other',color:'#e2e8f0'}, dshift:{label:'D-shift',color:'#fef9c3'},
+};
+const FAMORDER=['call','ob','ap','dshift','icu','pedi','pcv','admin'];
+const LOCS=[['','— not set —'],['oak','Oakland'],['rich','Richmond']];
+
+// ───────── shifts. `starts/ends` deliberately unset on most, to show the
+//           migration state honestly rather than pretending it's done. ─────────
+const S=[
+ // ── Times below are ONLY what the owner specified 15 Aug 2026, applied literally:
+ //    all D shifts start 07:30 and run 8h · D10 runs 10h · AP runs 12h · every PM
+ //    shift starts 15:30 (its end is NOT yet specified, so it is left blank).
+ //    Corrected 15 Aug: admin is an exception — nothing admin runs past 17:30, so
+ //    Admin AM 07:30-11:30 and Admin PM 13:30-17:30. D pm 11:30-15:30, CVpm 13:30-17:30.
+ //    Nothing else has been guessed. There are no default times in code — a blank
+ //    shift stays blank until an admin sets it.
+ //
+ //    DEMAND RULES ARE ALL EMPTY ON PURPOSE. An earlier version of this preview
+ //    carried invented rules ("Pedi Cardiac twice a month", "Admin AM 2 people")
+ //    that were mine, not the owner's, and read as though they were real data.
+ //    Nothing is demanded here until the owner says so. Use the demo button to
+ //    see the mechanism with clearly-labelled fake rules.
+ // ── call ── owner has not specified call times yet
+ ['CALL24','Call 24','call','call','','','oak',[]],
+ ['CALL16','Call 16','call','call','','','oak',[]],
+ ['CALL8','Call 8','call','call','','','oak',[]],
+ ['CALL12AM','Call 12 AM','call','call','','','oak',[]],
+ ['CALL12PM','Call 12 PM','call','call','15:30','','oak',[]],
+ ['OBPM','OB PM','call','call','15:30','','oak',[]],
+ ['EYE_CALL','Eye Call','call','call','07:30','15:30','oak',[]],
+ ['PCV_CALL','PCV Call','call','call','','','oak',[]],
+ // ── OB ──
+ ['OBD','OBD','ob','day','','','oak',[]],
+ ['OBAP','OBAP','ob','day','','','oak',[]],
+ ['OBPA','OBPA','ob','day','','','oak',[]],
+ // ── AP · 12 hours from 07:30 ──
+ ['AP_CRNA','AP (CRNA)','ap','day','07:30','19:30','oak',[]],
+ ['AP_MD','AP (MD)','ap','day','07:30','19:30','oak',[]],
+ ['AP_PLUS','AP+','ap','day','07:30','19:30','oak',[]],
+ ['PA','PA','ap','day','','','oak',[]],
+ ['CRNA_SWING','CRNA Swing','ap','day','','','oak',[]],
+ // ── D-shift · 8 hours from 07:30, except D10 (10h) ──
+ ['D','D','dshift','day','07:30','15:30','oak',[]],
+ ['D_IR','D-IR','dshift','day','07:30','15:30','oak',[]],
+ ['MD_SAT_D','MD Sat D','dshift','day','07:30','15:30','oak',[]],
+ ['D10','D10','dshift','day','07:30','17:30','oak',[]],
+ ['D10_PLUS','D10+','dshift','day','07:30','17:30','oak',[]],
+ ['D10_FLOAT','D10 Float','dshift','day','07:30','17:30','oak',[]],
+ ['OUT_OF_OR_D10','Out of OR D10','dshift','day','07:30','17:30','oak',[]],
+ ['D_PM','D pm','dshift','day','11:30','15:30','oak',[]],
+ ['CVPM','CVpm','dshift','day','13:30','17:30','oak',[]],
+ // labels that carry their own times — owner's blanket rules don't resolve these
+ ['D6','D6','dshift','day','','','oak',[]],
+ ['D_AM','D am','dshift','day','','','oak',[]],
+ ['D_11_7_30','11-7:30','dshift','day','','','oak',[]],
+ ['FOUR_TO_8','4 to 8','dshift','day','','','oak',[]],
+ ['SIX_TO_8','6 to 8','dshift','day','','','oak',[]],
+ ['PACU_MD','PACU MD','dshift','day','','','oak',[]],
+ ['OFL','OFL','dshift','day','','','oak',[]],
+ // ── ICU ──
+ ['ICU3','ICU3','icu','day','','','oak',[]],
+ ['ICU7A8','ICU7A8','icu','day','','','oak',[]],
+ ['ICU7A12','ICU7A12','icu','day','','','oak',[]],
+ ['RCH_ICU_A','RCH-ICU A','icu','day','','','rich',[]],
+ ['RCH_ICU_B','RCH-ICU B','icu','day','','','rich',[]],
+ ['R10','R10','icu','day','','','rich',[]],
+ // ── pedi ──
+ ['PEDI_AM','Pedi AM','pedi','day','07:30','11:30','oak',[]],
+ ['PEDI_PM','Pedi PM','pedi','day','13:30','17:30','oak',[]],
+ ['PEDI_CARDIAC','Pedi Cardiac','pedi','day','','','oak',[]],
+ ['MRI1','MRI1','pedi','day','','','oak',[]],
+ // ── admin ──
+ ['ADMIN_AM','Admin AM','admin','day','07:30','11:30','oak',[]],
+ ['ADMIN_PM','Admin PM','admin','day','13:30','17:30','oak',[]],
+ ['PAIN','Pain','admin','day','','','oak',[]],
+ ['LEARNER','Learner','admin','day','','','oak',[]],
+ // ── P / PCV ──
+ ['P1','P1','pcv','day','','','oak',[]],
+ ['PCV1','PCV 1','pcv','day','','','oak',[]],
+].map(([id,label,family,kind,starts,ends,loc,demand])=>({id,label,family,kind,starts,ends,loc,demand:demand.map(d=>({...d}))}));
+
+// approved pairs (admin-editable). seeded with a couple so the idea is visible.
+// Seeded empty on purpose: with most times still unset, nothing can honestly be
+// approved yet. Approvals become possible as times are filled in.
+const APPROVED=new Set();
+
+let sel=S[0].id, cf='candidate';
+// ── MASTER LOCK (owner ruling 15 Aug: "the unlock for shift edits should be a
+//    master lock for batch editing", and it covers add/remove too).
+//    One switch, site-wide. While it is on, the admin site is read-only for every
+//    kind of configuration and every batch operation. Unlocking is what puts you
+//    INTO batch-editing mode — that is the point of it, not a side effect: the
+//    selection checkboxes, the group-edit bar and the bulk actions only exist while
+//    it is open. In the real app it is a flag on the catalog document AND enforced
+//    in the Firestore rules, so a locked write is refused by the server rather than
+//    merely greyed out — the same discipline as the auction's 7-key config freeze.
+// Owner ruling 15 Aug: "Master switch on each page would be good." One switch per
+// page, not one for the site. Config pages open locked; daily-work pages (Schedule
+// Grid, Requests, Swaps, Open Shifts) open unlocked, because a lock on the daily job
+// is friction every single time. A page stays open until you close it or reload —
+// no timeout, no relock when you navigate away.
+const PAGES={catalog:'Shift Catalog',compat:'Compatibility'};
+const LOCK={catalog:true,compat:true};      // both are config pages → default locked
+const UNLOCKED_BY={};
+const SELECTED=new Set();
+function drawLock(){
+  for(const [k,name] of Object.entries(PAGES)){
+    const el=document.getElementById('lockbar-'+k); if(!el) continue;
+    const open=!LOCK[k];
+    el.className='lockbar '+(open?'open':'locked');
+    el.innerHTML = open
+      ? '🔓 <b>'+esc(name)+' unlocked — batch editing on.</b> Changes save immediately.'
+        +'<span class="who">unlocked by '+esc(UNLOCKED_BY[k]||'you')+' · just now</span>'
+        +'<span style="flex:1"></span><button class="btn btn-sm btn-primary" onclick="relock(\''+k+'\')">Lock this page</button>'
+      : '🔒 <b>'+esc(name)+' locked</b> — read-only. Batch editing is off.'
+        +'<span style="flex:1"></span><button class="btn btn-sm" onclick="askUnlock(\''+k+'\')">Unlock this page</button>';
+  }
+}
+const UNLOCK_SCOPE={
+  catalog:'start &amp; end times · sites · demand rules · <b>adding and removing shifts</b>',
+  compat:'which shift pairs may be held together on one day',
+};
+window.askUnlock=(k)=>{
+  const other=Object.keys(PAGES).filter(x=>x!==k);
+  const h='<h3>Unlock '+esc(PAGES[k])+' for batch editing?</h3>'
+    +'<div class="page-sub" style="margin-bottom:10px">This page only. Every other page keeps its own switch.</div>'
+    +'<div class="dif"><span class="k">Unlocks</span><span class="now">'+UNLOCK_SCOPE[k]+'</span></div>'
+    +'<div class="dif"><span class="k">Turns on</span><span class="now">multi-select, group edit and every bulk action on this page</span></div>'
+    +'<div class="dif"><span class="k">Not affected</span><span class="now">'+other.map(x=>esc(PAGES[x])).join(' · ')+' — still locked</span></div>'
+    +'<div class="dif"><span class="k">Stays open</span><span class="now">until you lock it or reload. No timeout, no relock on navigation.</span></div>'
+    +'<div class="dif"><span class="k">Recorded</span><span class="now">who unlocked it and when, in the audit log</span></div>'
+    +'<div class="page-sub" style="margin-top:10px">A banner stays on screen the whole time it is open, so it can\'t be left unlocked by accident.</div>'
+    +'<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">'
+    +'<button class="btn" onclick="closeCm()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="doUnlock(\''+k+'\')">Unlock '+esc(PAGES[k])+'</button></div>';
+  document.getElementById('cmBody').innerHTML=h;
+  document.getElementById('cm').classList.add('on');
+};
+window.doUnlock=(k)=>{LOCK[k]=false;UNLOCKED_BY[k]='dr.vacation.goddess@gmail.com';closeCm();redraw();};
+window.relock=(k)=>{LOCK[k]=true; if(k==='catalog') SELECTED.clear(); redraw();};
+function redraw(){drawLock();drawList();drawDetail();if(document.getElementById('p2').classList.contains('on'))drawCp();if(document.getElementById('p3').classList.contains('on'))drawSp();}
+// Accepts 730 · 7:30 · 0730 · 07.30 → '07:30'. Returns '' if it isn't a real time.
+function norm24(v){
+  const t=String(v||'').trim(); if(!t) return '';
+  const m=t.match(/^(\d{1,2})[:.\s]?(\d{2})$/); if(!m) return null;
+  const h=+m[1], mi=+m[2];
+  if(h>23||mi>59) return null;
+  return String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0');
+}
+function timeField(id,val,oninput){
+  return '<input class="inp t24" id="'+id+'" inputmode="numeric" maxlength="5" placeholder="--:--" '
+    +'value="'+esc(val||'')+'" data-prev="'+esc(val||'')+'" onchange="'+oninput+'" '
+    +'title="24-hour clock, e.g. 15:30">';
+}
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const byId=id=>S.find(x=>x.id===id);
+const famColor=f=>FAM[f]?.color||'#e2e8f0';
+const famLabel=f=>FAM[f]?.label||'No family';
+const locLabel=l=>(LOCS.find(x=>x[0]===l)||['',''])[1];
+const hasTimes=s=>!!(s.starts&&s.ends);
+const mins=t=>{const [h,m]=t.split(':').map(Number);return h*60+m;};
+function dur(s){ if(!hasTimes(s)) return null; let d=mins(s.ends)-mins(s.starts); if(d<=0) d+=1440; return d; }
+const fmtDur=d=>d==null?'':(Math.floor(d/60)+'h'+(d%60?' '+(d%60)+'m':''));
+
+// ── overlap, midnight-aware ──
+function overlaps(a,b){
+  if(!hasTimes(a)||!hasTimes(b)) return null;            // unknown
+  const iv=s=>{const st=mins(s.starts); let en=mins(s.ends); if(en<=st) en+=1440; return [st,en];};
+  const [a1,a2]=iv(a), [b1,b2]=iv(b);
+  const hit=(x1,x2,y1,y2)=>x1<y2&&y1<x2;
+  // compare across a 48h window so a shift crossing midnight is caught either way
+  return hit(a1,a2,b1,b2)||hit(a1,a2,b1+1440,b2+1440)||hit(a1+1440,a2+1440,b1,b2);
+}
+// Owner ruling 15 Aug: a person is at ONE SITE for a whole day, never both. So a
+// site mismatch is impossible regardless of the hours — it is not a timing question.
+// A shift with no site set cannot be judged, which is why filling in the site column
+// matters as much as the times.
+function pairState(a,b){
+  if(a.loc&&b.loc&&a.loc!==b.loc) return 'impossible';
+  if(!hasTimes(a)||!hasTimes(b)) return 'unknown';
+  if(overlaps(a,b)) return 'impossible';
+  return APPROVED.has(key(a.id,b.id))?'approved':'candidate';
+}
+const key=(x,y)=>[x,y].sort().join('|');
+
+// ── holidays: derived from the year, exactly like the vacation site ──
+function nthDow(y,m,dow,n){ const d=new Date(y,m,1); let c=0; while(true){ if(d.getDay()===dow){c++; if(c===n) return new Date(d);} d.setDate(d.getDate()+1);} }
+function lastDow(y,m,dow){ const d=new Date(y,m+1,0); while(d.getDay()!==dow) d.setDate(d.getDate()-1); return d; }
+function holidaySet(y){
+  const s=new Set(), k=d=>d.toISOString().slice(0,10);
+  s.add(k(new Date(y,0,1)));            // New Year's
+  s.add(k(nthDow(y,0,1,3)));            // MLK
+  s.add(k(nthDow(y,1,1,3)));            // Presidents'
+  s.add(k(lastDow(y,4,1)));             // Memorial
+  s.add(k(new Date(y,6,4)));            // July 4
+  s.add(k(nthDow(y,8,1,1)));            // Labor
+  s.add(k(nthDow(y,10,4,4)));           // Thanksgiving
+  s.add(k(new Date(y,11,25)));          // Christmas
+  return s;
+}
+const HOL=new Set([...holidaySet(2026),...holidaySet(2027)]);
+
+// ── evaluate the demand rules for one date ──
+// Later rules win, which is what makes "every combination" expressible.
+function demandOn(sh,d){
+  const iso=d.toISOString().slice(0,10), dow=d.getDay(), isHol=HOL.has(iso);
+  let n=0, why=null;
+  sh.demand.forEach((r,i)=>{
+    let match=false;
+    if(r.when==='every') match=true;
+    else if(r.when==='weekdays') match=dow>=1&&dow<=5;
+    else if(r.when==='weekends') match=dow===0||dow===6;
+    else if(r.when==='dow') match=(r.dows||[]).includes(dow);
+    else if(r.when==='holidays') match=isHol;
+    else if(r.when==='permonth') match=false;   // placed by admin, never auto-demanded
+    if(!match) return;
+    if(r.hol==='exclude'&&isHol) return;
+    if(r.hol==='only'&&!isHol) return;
+    n=r.n; why=i+1;
+  });
+  return {n,why,isHol,dow};
+}
+
+// ═════════ LIST ═════════
+function drawList(){
+  const q=(document.getElementById('q').value||'').trim().toLowerCase();
+  let h='';
+  for(const f of FAMORDER){
+    const rows=S.filter(s=>s.family===f&&(!q||s.label.toLowerCase().includes(q)));
+    if(!rows.length) continue;
+    const allSel=rows.every(r=>SELECTED.has(r.id));
+    h+='<div class="famhdr" style="background:'+famColor(f)+'">'
+      +(LOCK.catalog?'':'<input type="checkbox" class="selchk" style="margin-right:6px" '+(allSel?'checked':'')
+        +' onclick="event.stopPropagation();selFamily(\''+f+'\','+(!allSel)+')" title="Select every shift in this family">')
+      +esc(famLabel(f))+'</div>';
+    for(const s of rows){
+      h+='<div class="srow'+(s.id===sel?' on':'')+'" onclick="pick(\''+s.id+'\')">'
+        +(LOCK.catalog?'':'<input type="checkbox" class="selchk" '+(SELECTED.has(s.id)?'checked':'')
+          +' onclick="event.stopPropagation();togSel(\''+s.id+'\')">')
+        +'<span class="nm">'+esc(s.label)+'</span>'
+        +(hasTimes(s)?'<span class="tm">'+esc(s.starts)+'–'+esc(s.ends)+'</span>'
+          :(s.starts||s.ends)?'<span class="warn" title="Half set">'+esc(s.starts||'?')+'–'+esc(s.ends||'?')+'</span>'
+                     :'<span class="warn" title="No times set">⚠ no times</span>')
+        +'</div>';
+    }
+  }
+  document.getElementById('list').innerHTML=h||'<div style="padding:18px;text-align:center;color:var(--t3)">No match.</div>';
+  drawBulk();
+}
+function drawBulk(){
+  const bar=document.getElementById('bulkbar'); if(!bar) return;
+  if(LOCK.catalog||!SELECTED.size){ bar.style.display='none'; return; }
+  bar.style.display='';
+  bar.className='bulkbar';
+  bar.innerHTML='<span>'+SELECTED.size+' selected</span>'
+    +'<button class="btn btn-sm" onclick="bulkTimes()">Set times…</button>'
+    +'<button class="btn btn-sm" onclick="bulkLoc()">Set location…</button>'
+    +'<span style="flex:1"></span>'
+    +'<button class="btn btn-sm" onclick="clearSel()">Clear</button>';
+}
+window.togSel=id=>{SELECTED.has(id)?SELECTED.delete(id):SELECTED.add(id);drawList();};
+window.selFamily=(f,on)=>{S.filter(s=>s.family===f).forEach(s=>on?SELECTED.add(s.id):SELECTED.delete(s.id));drawList();};
+window.clearSel=()=>{SELECTED.clear();drawList();};
+
+// ── Group edit. The confirmation lists every shift and its before → after,
+//    because a bulk change is exactly where a mistake is invisible. It also
+//    names the knock-on nobody expects: shifting times can turn an APPROVED
+//    pairing into an impossible one.
+window.bulkTimes=()=>{
+  const ids=[...SELECTED];
+  const h='<h3>Set times for '+ids.length+' shift'+(ids.length===1?'':'s')+'</h3>'
+    +'<div class="page-sub" style="margin-bottom:10px">Applies the same start and end to every selected shift. Leave a box empty to leave that field alone.</div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    +'<div><label class="lbl">Starts (24h)</label>'+timeField('bts','','')+'</div>'
+    +'<div><label class="lbl">Ends (24h)</label>'+timeField('bte','','')+'</div>'
+    +'</div><div id="btPrev"></div>'
+    +'<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">'
+    +'<button class="btn" onclick="closeCm()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="applyBulkTimes()">Review changes</button></div>';
+  document.getElementById('cmBody').innerHTML=h;
+  document.getElementById('cm').classList.add('on');
+};
+window.applyBulkTimes=()=>{
+  const st=norm24(document.getElementById('bts').value), en=norm24(document.getElementById('bte').value);
+  if(st===null||en===null){ document.getElementById('btPrev').innerHTML='<div class="hint" style="color:var(--red)">Enter 24-hour times, e.g. 15:30.</div>'; return; }
+  if(!st&&!en){ document.getElementById('btPrev').innerHTML='<div class="hint" style="color:var(--red)">Enter a start, an end, or both.</div>'; return; }
+  const ids=[...SELECTED];
+  // knock-on: which approved pairs would become impossible?
+  const trial=id=>{const o=byId(id);return {...o,starts:st||o.starts,ends:en||o.ends};};
+  const after=new Map(ids.map(id=>[id,trial(id)]));
+  const shOf=id=>after.get(id)||byId(id);
+  const broken=[...APPROVED].filter(k=>{
+    const [a,b]=k.split('|'); const A=shOf(a), B=shOf(b);
+    return pairState(A,B)==='impossible';
+  });
+  let h='<h3>Apply to '+ids.length+' shift'+(ids.length===1?'':'s')+'?</h3>'
+    +'<table class="dt"><tr><th>Shift</th><th>Was</th><th>Becomes</th></tr>';
+  for(const id of ids){
+    const o=byId(id), n=after.get(id);
+    h+='<tr><td><b>'+esc(o.label)+'</b></td>'
+      +'<td class="mono '+(hasTimes(o)?'was':'')+'">'+(hasTimes(o)?esc(o.starts)+'–'+esc(o.ends):'not set')+'</td>'
+      +'<td class="mono"><b>'+esc(n.starts||'—')+'–'+esc(n.ends||'—')+'</b></td></tr>';
+  }
+  h+='</table>';
+  if(broken.length){
+    h+='<div class="dif" style="margin-top:10px"><span class="k" style="color:var(--red)">⚠ Knock-on</span><span class="now">'
+      +broken.length+' approved pairing'+(broken.length===1?'':'s')+' would become impossible:<br>'
+      +broken.map(k=>{const [a,b]=k.split('|');return '&nbsp;&nbsp;'+esc(byId(a).label)+' + '+esc(byId(b).label);}).join('<br>')
+      +'<br><span style="font-weight:600;color:var(--t2)">Their approval will be dropped.</span></span></div>';
+  }
+  h+='<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">'
+    +'<button class="btn" onclick="bulkTimes()">Back</button>'
+    +'<button class="btn btn-primary" onclick="commitBulkTimes(\''+st+'\',\''+en+'\')">Apply to '+ids.length+'</button></div>';
+  document.getElementById('cmBody').innerHTML=h;
+};
+window.commitBulkTimes=(st,en)=>{
+  for(const id of SELECTED){ const o=byId(id); if(st)o.starts=st; if(en)o.ends=en; }
+  for(const k of [...APPROVED]){ const [a,b]=k.split('|'); if(pairState(byId(a),byId(b))==='impossible') APPROVED.delete(k); }
+  closeCm(); redraw();
+};
+window.bulkLoc=()=>{
+  const ids=[...SELECTED];
+  const h='<h3>Set location for '+ids.length+' shift'+(ids.length===1?'':'s')+'</h3>'
+    +'<select class="sel" id="bloc" style="width:100%;margin-top:6px">'
+    +LOCS.map(([v,l])=>'<option value="'+v+'">'+esc(l)+'</option>').join('')+'</select>'
+    +'<div class="page-sub" style="margin-top:8px">'+ids.map(i=>esc(byId(i).label)).join(' · ')+'</div>'
+    +'<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">'
+    +'<button class="btn" onclick="closeCm()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="commitBulkLoc()">Apply</button></div>';
+  document.getElementById('cmBody').innerHTML=h;
+  document.getElementById('cm').classList.add('on');
+};
+window.commitBulkLoc=()=>{
+  const v=document.getElementById('bloc').value;
+  for(const id of SELECTED){ byId(id).loc=v; }
+  for(const k of [...APPROVED]){ const [a,b]=k.split('|'); if(pairState(byId(a),byId(b))==='impossible') APPROVED.delete(k); }
+  closeCm(); redraw();
+};
+window.pick=id=>{sel=id;drawList();drawDetail();};
+
+// ═════════ DETAIL ═════════
+const WHENS=[['every','Every day'],['weekdays','Weekdays (Mon–Fri)'],['weekends','Weekends'],
+             ['dow','Specific weekdays…'],['holidays','Holidays only'],['permonth','N times per month (you place them)']];
+const DOWN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+function drawDetail(){
+  const s=byId(sel); if(!s) return;
+  const d=dur(s);
+  let h='<div class="card" style="margin-top:0">';
+  if(LOCK.catalog) h+='<div class="hint" style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:7px 10px;margin-bottom:11px">🔒 Locked — unlock above to change times, site or demand, or to add and remove shifts.</div>';
+  h+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">'
+    +'<span style="width:15px;height:15px;border-radius:4px;background:'+famColor(s.family)+';border:1px solid rgba(15,23,42,.15)"></span>'
+    +'<span style="font-size:16px;font-weight:800">'+esc(s.label)+'</span>'
+    +'<span class="mono">'+esc(s.id)+'</span>'
+    +(hasTimes(s)?'<span class="pill pill-ok">times set</span>'
+      :(s.starts||s.ends)?'<span class="pill pill-warn">needs an end time</span>'
+      :'<span class="pill pill-warn">needs times</span>')
+    +'</div>';
+
+  h+='<div class="'+(LOCK.catalog?'grid2 dis':'grid2')+'">'
+    +'<div><label class="lbl">Starts <span style="font-weight:600;text-transform:none;letter-spacing:0">(24h)</span></label>'+timeField('fStarts',s.starts,"setT('starts',this)")+'</div>'
+    +'<div><label class="lbl">Ends <span style="font-weight:600;text-transform:none;letter-spacing:0">(24h)</span></label>'+timeField('fEnds',s.ends,"setT('ends',this)")+'</div>'
+    +'<div><label class="lbl">Length</label><div class="inp" style="background:var(--s2)">'+(d==null?'—':esc(fmtDur(d))+(mins(s.ends)<=mins(s.starts)?' · overnight':''))+'</div></div>'
+    +'<div><label class="lbl">Location</label><select class="sel" style="width:100%" onchange="setF(\'loc\',this.value)">'
+      +LOCS.map(([v,l])=>'<option value="'+v+'"'+(s.loc===v?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select></div>'
+    +'<div><label class="lbl">Counts as</label><select class="sel" style="width:100%" onchange="setF(\'kind\',this.value)">'
+      +'<option value="day"'+(s.kind==='day'?' selected':'')+'>Day shift</option>'
+      +'<option value="call"'+(s.kind==='call'?' selected':'')+'>Call (drives post-call &amp; call fairness)</option>'
+      +'</select></div>'
+    +'</div>';
+  h+='<div class="hint">24-hour clock throughout — type <b>730</b>, <b>7:30</b> or <b>07:30</b>, it stores 07:30. There are no built-in default times: every shift starts blank and warns against every pairing until you set both ends.</div>';
+
+  // ── demand rules ──
+  h+='<div style="margin-top:16px;display:flex;align-items:center;gap:9px;flex-wrap:wrap">'
+    +'<span class="lbl" style="margin:0">When is this shift needed?</span>'
+    +(LOCK.catalog?'':'<button class="btn btn-sm" onclick="addRule()">+ Add a rule</button>')
+    +(LOCK.catalog?'':'<button class="btn btn-sm" onclick="demoRules()" title="Fills invented rules so you can see the preview work">Load EXAMPLE rules</button>')
+    +'<span class="hint" style="margin:0">Rules stack — the last one that matches a day wins.</span></div>';
+  h+='<div style="margin-top:8px" class="'+(LOCK.catalog?'dis':'')+'">';
+  if(!s.demand.length){
+    h+='<div style="padding:12px;border:1px dashed var(--b2);border-radius:9px;color:var(--t2);font-size:12.5px">'
+      +'<b>No demand set.</b> Nothing has been specified for any shift yet, so nothing is demanded — '
+      +'this shift appears only where you place it by hand and never counts as uncovered.</div>';
+  }
+  if(s.demand.length&&s._demo){
+    h+='<div style="padding:8px 11px;border:1px solid #fca5a5;background:#fff5f5;border-radius:9px;'
+      +'color:#991b1b;font-size:12px;font-weight:700;margin-bottom:8px">'
+      +'⚠ EXAMPLE RULES — invented to demonstrate the editor. Not your data.</div>';
+  }
+  s.demand.forEach((r,i)=>{
+    const last=i===s.demand.length-1;
+    h+='<div class="rule'+(last?' last':'')+'"><span class="ord">'+(i+1)+'</span>'
+      +'<select class="sel" style="font-size:12px;padding:4px 7px" onchange="setR('+i+',\'when\',this.value)">'
+        +WHENS.map(([v,l])=>'<option value="'+v+'"'+(r.when===v?' selected':'')+'>'+esc(l)+'</option>').join('')+'</select>';
+    if(r.when==='dow'){
+      h+='<span style="display:inline-flex;gap:2px">'+DOWN.map((dn,di)=>
+        '<button class="btn btn-sm'+((r.dows||[]).includes(di)?' on':'')+'" style="padding:2px 6px" onclick="togDow('+i+','+di+')">'+dn[0]+'</button>').join('')+'</span>';
+    }
+    if(r.when==='permonth'){
+      h+='<span style="font-size:12px;font-weight:700;color:var(--t2)">count</span>'
+        +'<input class="inp" type="number" min="1" max="31" style="width:62px;font-size:12px;padding:4px 7px" value="'+(r.count||1)+'" onchange="setR('+i+',\'count\',+this.value)">';
+    }
+    h+='<span style="font-size:12px;font-weight:700;color:var(--t2)">people</span>'
+      +'<input class="inp" type="number" min="0" max="20" style="width:62px;font-size:12px;padding:4px 7px" value="'+r.n+'" onchange="setR('+i+',\'n\',+this.value)">'
+      +'<select class="sel" style="font-size:12px;padding:4px 7px" onchange="setR('+i+',\'hol\',this.value)">'
+        +'<option value="include"'+(r.hol==='include'?' selected':'')+'>holidays: include</option>'
+        +'<option value="exclude"'+(r.hol==='exclude'?' selected':'')+'>holidays: skip</option>'
+        +'<option value="only"'+(r.hol==='only'?' selected':'')+'>holidays only</option>'
+      +'</select>'
+      +'<span style="flex:1"></span>'
+      +'<button class="btn btn-sm" onclick="moveRule('+i+',-1)" '+(i===0?'disabled':'')+'>↑</button>'
+      +'<button class="btn btn-sm" onclick="moveRule('+i+',1)" '+(last?'disabled':'')+'>↓</button>'
+      +'<button class="btn btn-sm btn-danger" onclick="delRule('+i+')">Remove</button></div>';
+  });
+  h+='</div>';
+
+  // ── preview ──
+  h+='<div style="margin-top:14px"><span class="lbl">The next 60 days, as these rules read them</span>';
+  const start=new Date(2026,7,17);
+  let tot=0, zero=0;
+  let pv='<div class="pv">';
+  for(let i=0;i<60;i++){
+    const dt=new Date(start); dt.setDate(start.getDate()+i);
+    const {n,isHol,dow}=demandOn(s,dt);
+    tot+=n; if(!n) zero++;
+    pv+='<div class="pvd'+(n?'':' zero')+(isHol?' hol':'')+((dow===0||dow===6)?' wknd':'')+'" title="'+dt.toDateString()+(isHol?' · holiday':'')+' — '+n+' needed">'
+      +'<span class="dow">'+DOWN[dow][0]+dt.getDate()+'</span><span class="n">'+n+'</span></div>';
+  }
+  pv+='</div>';
+  h+=pv+'<div class="pvmark">Over 60 days: <b>'+tot+'</b> person-days needed · <b>'+zero+'</b> days with no demand · ★ = holiday'
+    +(s.demand.some(r=>r.when==='permonth')?' · <b>N per month</b> rules aren\'t shown here — you place those days yourself, and the app flags any you haven\'t.':'')
+    +'</div></div>';
+
+  if(!LOCK.catalog) h+='<div style="margin-top:16px;display:flex;gap:8px"><button class="btn btn-primary" onclick="askSave()">Save changes</button>'
+    +'<button class="btn" onclick="drawDetail()">Reset</button></div>';
+  h+='</div>';
+  document.getElementById('detail').innerHTML=h;
+}
+window.setF=(k,v)=>{const s=byId(sel);s[k]=v;drawList();drawDetail();};
+window.setT=(k,el)=>{
+  const v=norm24(el.value);
+  if(v===null){ el.value=el.getAttribute('data-prev')||''; schedNote('Enter a 24-hour time, e.g. 15:30'); return; }
+  byId(sel)[k]=v; drawList(); drawDetail();
+};
+function schedNote(msg){
+  let n=document.getElementById('t24note');
+  if(!n){ n=document.createElement('div'); n.id='t24note';
+    n.style.cssText='position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:8px 15px;border-radius:9px;font-size:13px;font-weight:700;z-index:200';
+    document.body.appendChild(n); }
+  n.textContent=msg; n.style.display='';
+  clearTimeout(n._t); n._t=setTimeout(()=>{n.style.display='none';},2600);
+}
+window.setR=(i,k,v)=>{const s=byId(sel);s.demand[i][k]=v; if(k==='when'&&v==='dow'&&!s.demand[i].dows)s.demand[i].dows=[1];drawDetail();};
+window.togDow=(i,d)=>{const s=byId(sel);const a=s.demand[i].dows||[];s.demand[i].dows=a.includes(d)?a.filter(x=>x!==d):[...a,d];drawDetail();};
+window.addRule=()=>{const s=byId(sel);s.demand.push({when:'weekdays',n:1,hol:'exclude'});s._demo=false;drawDetail();};
+// Deliberately behind a button and loudly labelled: these numbers are invented.
+window.demoRules=()=>{const s=byId(sel);
+  s.demand=[{when:'weekdays',n:1,hol:'exclude'},{when:'weekends',n:2,hol:'exclude'},{when:'holidays',n:0,hol:'only'}];
+  s._demo=true; drawDetail();};
+window.delRule=i=>{byId(sel).demand.splice(i,1);drawDetail();};
+window.moveRule=(i,d)=>{const a=byId(sel).demand;const j=i+d;if(j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];drawDetail();};
+
+// ── the confirmation you asked for: names what changes, before it changes ──
+window.askSave=()=>{
+  const s=byId(sel);
+  let h='<h3>Save changes to '+esc(s.label)+'?</h3>'
+    +'<div class="page-sub" style="margin-bottom:10px">Every change is named before it is written, and recorded in the audit log afterwards.</div>';
+  h+='<div class="dif"><span class="k">Times</span><span class="now">'+(hasTimes(s)?esc(s.starts)+'–'+esc(s.ends)+' ('+fmtDur(dur(s))+')':'<span class="was">not set</span>')+'</span></div>';
+  h+='<div class="dif"><span class="k">Location</span><span class="now">'+(esc(locLabel(s.loc))||'—')+'</span></div>';
+  h+='<div class="dif"><span class="k">Counts as</span><span class="now">'+(s.kind==='call'?'Call':'Day shift')+'</span></div>';
+  h+='<div class="dif"><span class="k">Demand</span><span class="now">'+(s.demand.length?s.demand.map((r,i)=>(i+1)+'. '+ruleText(r)).join('<br>'):'none — placed by hand only')+'</span></div>';
+  const affected=S.filter(o=>o.id!==s.id&&pairState(s,o)==='impossible').length;
+  if(hasTimes(s)) h+='<div class="dif"><span class="k">Knock-on</span><span class="now">'+affected+' shift'+(affected===1?'':'s')+' now overlap this one and can never be paired with it</span></div>';
+  h+='<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">'
+    +'<button class="btn" onclick="closeCm()">Cancel</button>'
+    +'<button class="btn btn-primary" onclick="closeCm()">Save</button></div>';
+  document.getElementById('cmBody').innerHTML=h;
+  document.getElementById('cm').classList.add('on');
+};
+window.closeCm=()=>document.getElementById('cm').classList.remove('on');
+function ruleText(r){
+  const w={every:'every day',weekdays:'weekdays',weekends:'weekends',holidays:'holidays',
+           dow:(r.dows||[]).map(d=>DOWN[d]).join('/')||'—',permonth:(r.count||1)+'× per month'}[r.when];
+  const hol=r.hol==='exclude'?', skipping holidays':(r.hol==='only'?' (holidays only)':', holidays included');
+  return w+' — '+r.n+' '+(r.n===1?'person':'people')+hol;
+}
+
+// ═════════ COMPATIBILITY ═════════
+window.setCF=v=>{cf=v;document.querySelectorAll('[data-cf]').forEach(b=>b.classList.toggle('on',b.dataset.cf===v));drawCp();};
+function allPairs(){
+  const out=[];
+  for(let i=0;i<S.length;i++) for(let j=i+1;j<S.length;j++) out.push([S[i],S[j],pairState(S[i],S[j])]);
+  return out;
+}
+function drawCp(){
+  const p=allPairs();
+  const c={approved:0,candidate:0,impossible:0,unknown:0};
+  p.forEach(([,,st])=>c[st]++);
+  document.getElementById('cpStats').innerHTML=
+     stat(p.length,'possible pairs')
+    +stat(c.impossible,'impossible — filtered out')
+    +stat(c.unknown,'unknown (missing times)')
+    +stat(c.candidate,'need your decision')
+    +stat(c.approved,'approved');
+  if(LOCK.compat) document.getElementById('cpNote').innerHTML='🔒 This page is locked — use its own switch above to change approvals. ';
+  else document.getElementById('cpNote').textContent =
+    cf==='impossible' ? 'These can never be approved — the times overlap or the sites differ.' :
+    cf==='approved'   ? 'Both shifts may be held by one person on one day.' :
+                        'Non-overlapping and same site. Tick the ones that are genuinely allowed.';
+  const rows=p.filter(([,,st])=> cf==='candidate' ? (st==='candidate'||st==='unknown') : st===cf);
+  let h='<tr><th style="width:34px"></th><th>Shift A</th><th>Shift B</th><th>Why</th></tr>';
+  for(const [a,b,st] of rows.slice(0,400)){
+    const k=key(a.id,b.id);
+    h+='<tr><td>'+(st==='impossible'?'<span style="color:var(--red);font-weight:800">✕</span>'
+        : st==='unknown'?'<span style="color:var(--yellow);font-weight:800">⚠</span>'
+        : '<input type="checkbox" '+(APPROVED.has(k)?'checked':'')+(LOCK.compat?' disabled':'')+' onchange="tog(\''+k+'\')">')+'</td>'
+      +'<td><b>'+esc(a.label)+'</b> <span class="mono">'+(hasTimes(a)?esc(a.starts)+'–'+esc(a.ends):'no times')+'</span></td>'
+      +'<td><b>'+esc(b.label)+'</b> <span class="mono">'+(hasTimes(b)?esc(b.starts)+'–'+esc(b.ends):'no times')+'</span></td>'
+      +'<td style="color:var(--t2)">'+whyText(a,b,st)+'</td></tr>';
+  }
+  if(!rows.length) h+='<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--t3)">Nothing here.</td></tr>';
+  if(rows.length>400) h+='<tr><td colspan="4" style="padding:10px;color:var(--t2)">Showing the first 400 of '+rows.length+'.</td></tr>';
+  document.getElementById('cpTable').innerHTML=h;
+}
+function whyText(a,b,st){
+  if(st==='unknown') return 'One of these has no times — can\'t tell. Set them.';
+  if(st==='impossible') return (a.loc&&b.loc&&a.loc!==b.loc)
+    ?('different sites — '+esc(locLabel(a.loc))+' vs '+esc(locLabel(b.loc))+'; one site per day')
+    :'times overlap';
+  return 'no overlap'+(a.loc?', both '+esc(locLabel(a.loc)):'');
+}
+const stat=(n,l)=>'<span class="stat"><b>'+n+'</b><span>'+l+'</span></span>';
+window.tog=k=>{APPROVED.has(k)?APPROVED.delete(k):APPROVED.add(k);drawCp();};
+
+// ═════════ SETUP PROGRESS ═════════
+function drawSp(){
+  const noTimes=S.filter(s=>!hasTimes(s));
+  const noDemand=S.filter(s=>!s.demand.length);
+  const noLoc=S.filter(s=>!s.loc);
+  document.getElementById('spStats').innerHTML=
+     stat(S.length,'shifts in the catalog')
+    +stat(noTimes.length,'still need times')
+    +stat(noLoc.length,'no location')
+    +stat(noDemand.length,'no demand rules');
+  let h='<tr><th>Shift</th><th>Times</th><th>Location</th><th>Demand</th><th></th></tr>';
+  for(const s of S){
+    const bad=!hasTimes(s)||!s.demand.length;
+    if(!bad) continue;
+    h+='<tr><td><b>'+esc(s.label)+'</b> <span class="mono">'+esc(famLabel(s.family))+'</span></td>'
+      +'<td>'+(hasTimes(s)?'<span class="pill pill-ok">'+esc(s.starts)+'–'+esc(s.ends)+'</span>':'<span class="pill pill-warn">not set</span>')+'</td>'
+      +'<td>'+(s.loc?esc(locLabel(s.loc)):'<span class="pill pill-off">—</span>')+'</td>'
+      +'<td>'+(s.demand.length?s.demand.length+' rule'+(s.demand.length===1?'':'s'):'<span class="pill pill-off">placed by hand</span>')+'</td>'
+      +'<td><button class="btn btn-sm" onclick="tab(1);pick(\''+s.id+'\')">Fix</button></td></tr>';
+  }
+  document.getElementById('spTable').innerHTML=h;
+}
+
+window.tab=n=>{
+  for(const i of [1,2,3]){
+    document.getElementById('p'+i).classList.toggle('on',i===n);
+    document.getElementById('t'+i).classList.toggle('on',i===n);
+  }
+  if(n===2) drawCp(); if(n===3) drawSp();
+};
+drawLock(); drawList(); drawDetail();
+</script>
+</body>
+</html>

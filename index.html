@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 24;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 25;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -76,16 +76,8 @@
   --mono:'SF Mono',Consolas,Menlo,monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-/* Demo notice — this schedule site is not in live use. Fixed so it stays visible while
-   scrolling; body gets matching padding and the sticky header sits below it. z-index is
-   above every overlay on the page so the notice shows on the sign-in screen too. */
-:root{--demo-h:26px}
-.demo-banner{position:fixed;top:0;left:0;right:0;z-index:100001;background:#b91c1c;color:#fff;
-  font-size:12.5px;font-weight:700;letter-spacing:.01em;text-align:center;padding:5px 12px;
-  line-height:1.3;box-shadow:0 1px 4px rgba(0,0,0,.28)}
-body{padding-top:var(--demo-h)}
 body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px}
-.top{background:var(--s1);border-bottom:1px solid var(--b1);padding:14px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:sticky;top:var(--demo-h);z-index:50}
+.top{background:var(--s1);border-bottom:1px solid var(--b1);padding:14px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:sticky;top:0;z-index:50}
 .top h1{font-size:17px;font-weight:800;letter-spacing:.01em}
 .top .sub{font-size:12px;color:var(--t2)}
 .wrap{max-width:1500px;margin:0 auto;padding:18px 22px 60px}
@@ -160,8 +152,6 @@ table.grid .wkend{background:var(--s3)}
 </style>
 </head>
 <body>
-<div class="demo-banner">⚠️ This site is a non-functional example of a scheduling site.</div>
-
 <div class="top">
   <h1>📅 Daily Schedule</h1>
   <span class="sub">Anesthesia — call, shifts, days off &amp; vacation</span>
