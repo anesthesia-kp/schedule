@@ -1,0 +1,58 @@
+Build 57 (admin) — Renaming a shift. The label changes; the internal id never does.
+
+Closes defect 24's remedy gap. Admin only; staff untouched at 27. No rules change.
+
+WHY
+
+  Owner, 16 Aug: "also change shift RBMD to R8MD".
+
+  Neither of us could. The Shift Catalog had no way to edit a label at all — while defect 24
+  records five labels transcribed from a handheld photo and flagged "photo unclear —
+  verify" (NICU9+, RC0+, R9/5, R11+, CV8+), with the note that they "must be fixed in the
+  Shift Catalog UI". That remedy did not exist. RBMD is a sixth: the owner's current system
+  calls it "RCH, 8hr, MD only (R8:MD)", so the B is a misread 8.
+
+  Claude does not write to production Firebase, so the fix had to be a capability rather
+  than a favour.
+
+THE DESIGN POINT
+
+  THE LABEL CHANGES. THE INTERNAL ID DOES NOT.
+
+  Every assignment already on the schedule, every eligibility tick, every tag membership and
+  every open request refers to a shift by its id. Renaming the id would orphan all of them,
+  silently — the shift would still exist, and everything pointing at it would quietly stop
+  resolving.
+
+  §17 already separates the two ideas: a label is what the group calls it, stored as its own
+  data and derived from nothing. So the label is free to change and the id is not. The id is
+  never shown to anyone, and the page says so under the list.
+
+  The suite proves the distinction rather than asserting it: it seeds a doctor holding RBMD
+  on the schedule, eligible for RBMD, with RBMD in the overnight-call tag — renames it, and
+  checks that all three still resolve AND that the Schedule Grid now displays "R8MD" for the
+  assignment that was made before the rename.
+
+REFUSALS
+
+  A blank name is refused and the previous one survives. A name already used by another
+  shift is refused, naming the clash, and the other shift is untouched. The rename confirms
+  by name before → after and explains in plain words that nothing already assigned breaks
+  (§3). The catalog lock refuses it from the handler, not the button.
+
+  The label field joins the tab-through focus guard from build 55, so renaming does not
+  fight the re-render either.
+
+GATES
+
+  · sched/build57-test.mjs — 19/19, three consecutive runs, driven in a real browser.
+  · Honesty check — the same suite against build 56/27 scores 9 pass / 10 fail.
+  · Whole schedule battery green on these bytes: isolation 27/27 · elig 33/33 ·
+    build50 37/37 · build51 88/88 · build52 49/49 · build53 29/29 · build54 45/45 ·
+    build55 45/45 · build56 39/39.
+  · AUCTION battery, on the owner's machine — 14 suites, 1074 assertions, green.
+
+Bumped: var BUILD in admin/index.html AND versions.json -> {"index":27,"admin":57}
+
+NEXT: build 58 — the §47 subcollection split, which the owner already ruled should happen
+now while no month has real assignments in it.

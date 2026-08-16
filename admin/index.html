@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 56;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 57;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -539,6 +539,9 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
       </div>
       <div id="catTimeSummary" style="font-size:12px;line-height:1.6;margin-bottom:10px;padding:9px 12px;border-radius:9px;background:var(--s2);border:1px solid var(--b1)"></div>
       <div id="catList"></div>
+      <div style="font-size:11px;color:var(--t3);margin-top:9px;line-height:1.5">
+        <b>Renaming is safe.</b> Type over a shift's name to change it — everything already assigned, every eligibility tick and every tag keeps working, because they refer to the shift by an internal id that never changes and is never shown to anyone. Only the name people read is different.
+      </div>
     </div>
     </div>
   </div>
@@ -2783,6 +2786,39 @@ window.setShiftTime=async function(id,which,raw,inputEl){
     if(inputEl) inputEl.value=before;
   }
 };
+// [57] RENAME A SHIFT — the LABEL only.
+//
+// Defect 24: five labels were transcribed from a handheld photo and flagged "photo unclear
+// — verify", and the note says they "must be fixed in the Shift Catalog UI". They could
+// not be: there was no way to edit a label at all. RBMD → R8MD is a sixth (the owner's
+// current system calls it "RCH, 8hr, MD only (R8:MD)", so the B was a misread 8).
+//
+// THE INTERNAL ID NEVER CHANGES. Every assignment, eligibility tick, tag membership and
+// request references the shift by id; renaming the id would orphan all of them silently.
+// §17 already separates the two ideas — a label is what the group calls it, and it is not
+// derived from anything. So the label is free to change and the id is not.
+window.setShiftLabel=async function(id,raw,inputEl){
+  if(catLockedRefuse()){ renderCatalog(); return; }
+  const s=catalog.shifts?.[id]; if(!s) return;
+  const before=s.label||id;
+  const label=String(raw||'').trim();
+  if(!label){ schedToast('A shift needs a label','err'); if(inputEl) inputEl.value=before; return; }
+  if(label===before) return;
+  const clash=Object.entries(catalog.shifts||{}).find(([k,x])=>k!==id&&(x.label||'')===label);
+  if(clash){ schedToast('"'+label+'" is already the name of another shift','err'); if(inputEl) inputEl.value=before; return; }
+  if(!confirm('Rename "'+before+'" to "'+label+'"?\n\n'
+    +'Only the name changes. Everything already assigned, every eligibility tick and every tag keeps working, because they all refer to this shift by its internal id — which stays '+id+' and is not shown to anyone.\n\n'
+    +'Staff see the new name immediately.')){ if(inputEl) inputEl.value=before; return; }
+  try{
+    await mergeFields(catalogRef,{['shifts.'+id+'.label']:label});
+    auditLog('shift.rename','Renamed "'+before+'" to "'+label+'" (internal id '+id+' unchanged)');
+    schedToast('Renamed to '+label,'ok');
+  }catch(e){
+    schedToast('Could not rename it: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err');
+    if(inputEl) inputEl.value=before;
+  }
+};
+
 window.setShiftProvisional=async function(id,val){
   if(catLockedRefuse()){ renderCatalog(); return; }
   const s=catalog.shifts?.[id]; if(!s) return;
@@ -3144,7 +3180,9 @@ function renderCatalog(){
   const list=shiftList().filter(([,s])=>!catalogRoleFilter||s.role===catalogRoleFilter||(catalogRoleFilter!=='Both'&&s.role==='Both'));
   el.innerHTML=list.length?list.map(([id,s])=>`
     <div class="rowline">
-      <span class="chipp" style="background:${esc(shiftColor(s))}">${esc(s.label)}</span>
+      <input type="text" class="inp" id="lb_${esc(id)}" value="${esc(s.label)}" title="What people call this shift. The internal id stays ${esc(id)} — see the note under the list."
+             style="width:112px;font-size:11.5px;font-weight:700;padding:3px 7px;border-radius:999px;text-align:center;background:${esc(shiftColor(s))};border:1px solid var(--b2)"
+             onchange="setShiftLabel('${esc(id)}',this.value,this)">
       <span style="font-size:11px;color:var(--t2)">${s.kind==='call'?'call':'day'}</span>
       <span style="display:inline-flex;align-items:center;gap:3px" title="24-hour clock — 0730, 7:30 or 07.30">
         <input type="text" class="inp" id="tm_${esc(id)}_start" style="width:62px;font-size:11px;padding:3px 5px;text-align:center${(!s.start&&!s.end)?';background:#fffbeb;border-color:#fcd34d':''}"
