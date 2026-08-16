@@ -652,3 +652,99 @@ the visibility above is actually built.
 **Supersedes the placement in §35**, which shipped the switch per person on the Reports page
 as an interim. That per-person value becomes the *override*, not the source. When groups
 land, the group is the default and the person's setting is an exception to it.
+
+## 44 · THE TARGET ARCHITECTURE — an engine, fed by rules and requests — 16 Aug 2026
+
+> *"The ultimate workflow will be a set of rules, users submit requests, admin
+> approves/denies requests, then the engine creates a schedule that takes all that into
+> account."*
+
+**This is the most important thing said in the project so far, and it reframes the whole
+roadmap.** Stages 1, 3, 4 and 5 are not a list of features. They are the **inputs to an
+engine**:
+
+```
+     RULES            (stage 5 — what scheduling must obey)
+       +
+     REQUESTS         (what people asked for, approved or denied by an admin)
+       +
+     SHIFTS, PEOPLE   (stages 1 and 4 — times, sites, demand, roles, groups)
+       ↓
+     THE ENGINE  →  a proposed schedule
+       ↓
+     an admin accepts, adjusts, or rejects it — nothing is placed silently (§21)
+```
+
+**Consequences a later session must not lose:**
+
+* **Auto-populate is NOT the engine.** It is a crude ancestor of one — greedy, single-pass,
+  fairness-only. Do not grow it into the engine by accretion; the engine is a build of its
+  own, against rules that do not exist yet.
+* **Every earlier stage is now judged by whether the engine can consume it.** A shift with
+  no time is not just an incomplete record — it is an input the engine cannot reason about.
+  That is why §38 leaving times blank has a real cost, and why stage 1 is the bottleneck.
+* **§4 still holds at the engine's output.** Whatever it proposes, nothing is blocked and
+  nothing is placed silently. The engine suggests; a person accepts.
+* **§21's shape generalises**: the app suggests candidate dates, the owner accepts or moves
+  them. The engine is that idea at full size.
+
+Not yet designed. Recorded now so the stages are built as inputs rather than as islands.
+
+## 45 · Auto-populate is a TESTING tool, and moves to a Testing section — 16 Aug 2026
+
+> *"Auto-populate is funky. My original thought was that it would work as a simulator so I
+> could rapidly assign shifts to test things. For this reason, I think it should move to a
+> new testing section of admin, like the vacation site. Auto-pop month and year should move
+> there. Let's stash clear month there as for now. Auto-pop for now should only give 1
+> assignment."*
+
+**What moves:** Auto-populate month · Auto-populate year · Clear Month.
+
+**Where to:** a new **Testing** section, mirroring the Vacation Auction's exactly — which
+already has a `Testing` nav heading, a 🎲 Simulator page, and a **Rehearsal Mode** master
+switch that arms every destructive testing tool at once, with a persistent red banner while
+it is on and blunt wording: *"This is NOT a sandbox: everything still writes the real
+auction."* The schedule copies that shape rather than inventing one. The sites are
+deliberately convergent (§34).
+
+**Behaviour change:** auto-populate gives **one shift per person per day, total** — not one
+day shift plus one call as it does today (owner, 16 Aug, asked to choose). A simulator that
+can never double someone up is easier to reason about while testing.
+
+**Why it matters beyond tidying:** per §44 the real thing is an engine driven by rules and
+approved requests. Auto-populate is not that and must not become it by accretion. Moving it
+out of the daily-work pages stops a prototype sitting where a stray click has consequences.
+
+## 46 · Per-person caps ARE wanted — as a rule type — 16 Aug 2026
+
+> *"Yes, as a rule type. Maybe it's time to have a rules section of admin where I will enter
+> all the rules that scheduling must follow and shift assignments must follow."*
+
+**Supersedes §21's deferral**, which said per-person monthly caps were *"NOT wanted yet —
+shift demand only, revisit once the Rules section exists."* This is that revisit.
+
+A cap is an instance of the **Not more than N of [tag] per week / month** rule type in
+`design/RULES.md` — targeted at everyone, a role, a group, or named individuals. Per §4 it
+**warns and is overridable**, never blocks, and every override is recorded.
+
+## 47 · Split the month document into a subcollection — now — 16 Aug 2026
+
+Defect 8: each month is a single `dailysched/sched_YYYY-MM` document, Firestore caps a
+document at 1 MB, and **every write rewrites the whole thing**. Build 52 made each cell
+larger — a list with provenance on every entry instead of two strings — so the headroom
+shrank at exactly the moment it became easier to fix.
+
+Offered now / later / measure-first, the owner chose **now, while there is no real data**.
+
+Three things it buys, not one:
+
+1. **The cap stops being a question.** A year of daily use by 60 people cannot approach it.
+2. **A write stops rewriting the month.** Today two admins editing different days contend on
+   one document; build 52's transactions make that safe but not cheap.
+3. **Defect 9 becomes fixable.** Firestore rules cannot constrain a write to one person's
+   entry while the whole month is one document. Per-day documents are what makes a real
+   server-side rule possible — and rules are the only enforcement that does not depend on
+   the page behaving.
+
+Timing: after the Testing section and after stage 1 — it is independent of both, since stage
+1 is the shift catalog rather than month documents.

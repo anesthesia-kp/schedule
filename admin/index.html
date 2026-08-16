@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 52;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 53;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -250,6 +250,8 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
   <a onclick="nav('catalog',this)">🧰 Shift Catalog</a>
   <a onclick="nav('families',this)">🎨 Shift Families</a>
   <a onclick="nav('stats',this)">📊 Stats</a>
+  <div class="nav-section">Testing</div>
+  <a onclick="nav('simulator',this)">🎲 Simulator</a>
   <div class="nav-section">Admin</div>
   <a onclick="nav('reports',this)">📈 Reports</a>
   <a onclick="nav('audit',this)">🧾 Audit Log</a>
@@ -319,12 +321,13 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
         <input type="date" class="inp" style="font-size:12px;padding:5px 8px" onchange="jumpToDate(this.value)">
       </label>
       <span style="flex:1"></span>
-      <button class="btn btn-primary" onclick="autoPopulate()">⚡ Auto-Populate Month</button>
-      <button class="btn btn-primary" onclick="autoPopulateYear()">⚡ Auto-Populate Year</button>
-      <button class="btn btn-danger" onclick="clearMonth()">Clear Month</button>
+      <!-- [53] Auto-Populate and Clear Month moved to Testing → Simulator (DECISIONS §45).
+           They are testing tools, not daily work, and this is a page people use every day. -->
+      <a onclick="nav('simulator',document.querySelector('nav a[onclick*=simulator]'))"
+         style="font-size:11.5px;color:var(--t2);cursor:pointer;text-decoration:underline">🎲 Auto-populate and Clear Month moved to Testing →</a>
     </div>
     <div class="card" style="padding:10px 14px;margin-bottom:10px">
-      <div style="font-size:12px;color:var(--t2)"><b>Call fairness:</b> Auto-Populate balances each shift using a <b>rolling 12-month average</b> — it counts the last 12 months of the actual saved schedule (plus each person's starting baseline below) and gives the next shift to whoever has done it least.</div>
+      <div style="font-size:12px;color:var(--t2)"><b>Call fairness:</b> fairness is measured on a <b>rolling 12-month average</b> — the last 12 months of the actual saved schedule, plus each person's starting baseline below. This feeds the <b>fairness view</b> on the Reports page and the simulator's distribution. The baseline stays here because it is real fairness data, not a testing tool.</div>
       <details style="margin-top:8px">
         <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--t1)">⚙️ Set starting baseline — prior call not yet in the system</summary>
         <div style="font-size:11px;color:var(--t2);margin:6px 0 8px">Enter how many of each call shift each person has already done in the past ~12 months. These seed the rolling window so fairness starts from the right place. As the system builds a full 12-month history, lower these toward 0.</div>
@@ -520,6 +523,41 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
       <div id="statsHint" style="font-size:11px;color:var(--t2);margin-bottom:8px">Assignments per user for the month shown above — use the controls to jump to any month or year. Call columns highlighted — watch these for even distribution.</div>
       <div id="statsLoading" style="display:none;font-size:12px;color:var(--t2);padding:8px 0">Adding up all 12 months…</div>
       <div style="overflow-x:auto"><table class="grid" id="statsGrid"></table></div>
+    </div>
+  </div>
+
+  <!-- SIMULATOR — testing tools, armed behind one switch (DECISIONS §45) -->
+  <div class="panel" id="panel-simulator">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">🎲 Simulator</div>
+    <div class="page-sub" style="margin-bottom:10px">Tools for filling a month quickly so you can see how the site behaves with data in it. They are here, and not on the Schedule Grid, because they are for testing — <b>and because the real thing is not this.</b> A rules-driven engine that reads approved requests is what will eventually build a schedule (§44); auto-populate is a crude ancestor of it and must not grow into it.</div>
+
+    <div id="rehearseBanner" style="display:none;padding:11px 15px;border-radius:10px;margin-bottom:12px;background:rgba(220,38,38,.12);border:2px solid var(--red);color:var(--red);font-weight:800;font-size:13.5px;line-height:1.45"></div>
+
+    <div class="card">
+      <div class="card-title">Rehearsal mode</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">
+        One switch for every tool below. <b>This is not a sandbox.</b> Everything here writes the real schedule, and everyone sees the result immediately — the switch exists so that filling or wiping a month is always two deliberate acts instead of one stray click. It is in memory, so it turns itself off when you reload.
+      </div>
+      <div id="rehearseBtns" class="row" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+    </div>
+
+    <div class="card" id="simTools">
+      <div class="card-title">Fill</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">
+        Gives each shift to whoever has done it least over the rolling 12 months (real schedule + the baseline on the Schedule Grid). Existing assignments are kept. <b>One shift per person per day</b> — the simulator never doubles anyone up (§45), so what it produces is easy to read.
+      </div>
+      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="autoPopulate()">⚡ Auto-populate this month</button>
+        <button class="btn btn-primary" onclick="autoPopulateYear()">⚡ Auto-populate the whole year</button>
+      </div>
+    </div>
+
+    <div class="card" id="simDanger">
+      <div class="card-title">Wipe</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">
+        <b>Clear Month removes every assignment for the month you are viewing, for everybody.</b> There is no undo, and staff see it at once. It is parked here for now because it is a testing tool; when the site is in real use it needs a better answer than a button.
+      </div>
+      <button class="btn btn-danger" onclick="clearMonth()">🗑 Clear the month I'm viewing</button>
     </div>
   </div>
 
@@ -1097,6 +1135,8 @@ function shiftsOf(cell){ return shiftEntries(cell).map(x=>x.s); }
 // question and belongs to stage 5. `kind` survives here as a catalog field; §25 retired it
 // as the basis for fairness, rules and reports, which now point at tags.
 function kindOfShift(id){ return catalog.shifts?.[id]?.kind==='call'?'call':'day'; }
+// Still used by the swap apply, which moves the shifts of a named kind. Auto-populate no
+// longer uses it: from build 53 the simulator gives one shift per person per day, total (§45).
 function holdsKind(cell,slot){ return shiftsOf(cell).some(x=>kindOfShift(x)===slot); }
 function holdsShift(cell,id){ return shiftsOf(cell).indexOf(id)>=0; }
 // Module scope is invisible to inline onclick= and to page.evaluate in tests — HANDOFF
@@ -1362,7 +1402,51 @@ async function windowShiftCounts(endYm, priorMonths, cache){
 // or already holding that slot type that day. Fairness: pick the eligible user
 // with the LOWEST rolling-12-month count for that shift (window + baseline + this
 // month so far) — this is what keeps call16/call24/OB PM evenly spread.
+// ══ [53] REHEARSAL MODE — DECISIONS §45 ══════════════════════════════════════
+// Mirrors the Vacation Auction's switch of the same name rather than inventing one: the
+// two sites are deliberately convergent (§34), and the auction's wording is already honest
+// about the thing that matters — this is NOT a sandbox. Every tool it arms writes the real
+// schedule and every user sees the result at once.
+// In memory on purpose, so it disarms on reload rather than remembering an unlock — same
+// reasoning as the Users-page lock in build 50.
+let rehearsalOn=false;
+function renderRehearsal(){
+  const bar=document.getElementById('rehearseBanner'), btns=document.getElementById('rehearseBtns');
+  if(!btns) return;
+  if(bar){
+    bar.style.display=rehearsalOn?'block':'none';
+    bar.innerHTML='🎭 <b>REHEARSAL MODE IS ON.</b> Auto-populate and Clear Month are unlocked. '
+      +'This is <b>not</b> a sandbox — everything writes the real schedule and staff see it immediately. '
+      +'Turn it off when you have finished testing.';
+  }
+  btns.innerHTML = rehearsalOn
+    ? '<button class="btn btn-primary" onclick="setRehearsal(false)">Turn rehearsal mode OFF</button>'
+      +'<span style="font-size:11.5px;color:var(--t2)">Unlocked by '+esc(_currentAdminEmail||'you')+'. It turns itself off when you reload.</span>'
+    : '<button class="btn" onclick="setRehearsal(true)">Turn rehearsal mode ON</button>'
+      +'<span style="font-size:11.5px;color:var(--t2)">The tools below refuse until this is on.</span>';
+  const dim=x=>{ const e=document.getElementById(x); if(e) e.className='card'+(rehearsalOn?'':' pagelocked'); };
+  dim('simTools'); dim('simDanger');
+}
+window.setRehearsal=function(v){
+  if(v && !confirm('Turn rehearsal mode ON?\n\n'
+    +'It unlocks auto-populate and Clear Month.\n\n'
+    +'This is NOT a sandbox. Everything they do writes the REAL schedule for this site, and '
+    +'staff see the result immediately. Clear Month has no undo.\n\n'
+    +'It turns itself off when you reload the page.')) return;
+  rehearsalOn=!!v;
+  auditLog('rehearsal.'+(v?'on':'off'),'Rehearsal mode turned '+(v?'ON — auto-populate and Clear Month unlocked':'off'));
+  renderRehearsal();
+};
+// Defence in depth: the handlers refuse regardless of what the DOM looks like. A lock that
+// only dims buttons is not a lock — the same lesson as the Users page in build 50.
+function rehearsalRefuse(){
+  if(rehearsalOn) return false;
+  schedToast('Turn rehearsal mode on first — Testing → Simulator','err');
+  return true;
+}
+
 window.autoPopulate=async function(){
+  if(rehearsalRefuse()) return;
   const [y,m]=curYM.split('-').map(Number);
   const nDays=new Date(y,m,0).getDate();
   if(!confirm('Auto-populate '+MS[m-1]+' '+y+'?\n\nFills every empty slot for every shift in the catalog using eligibility + even call distribution. Existing assignments are kept. Users see changes immediately.')) return;
@@ -1387,7 +1471,9 @@ window.autoPopulate=async function(){
         const cands=names.filter(u=>allowed(u,id)
           &&!vac[u+'|'+dk]
           &&!(days[dd][u]?.off)
-          &&!holdsKind(days[dd][u],slot));
+          // [53 · §45] ONE shift per person per day, TOTAL — not one of each kind as before.
+          // The simulator can never double anyone up, so what it produces is easy to read.
+          &&!shiftsOf(days[dd][u]).length);
         if(!cands.length){ unfillable.push(dk+' '+s.label+(capacity>1?' ('+(capacity-have)+' more needed)':'')); break; }
         cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
         const pick=cands[0];
@@ -1415,6 +1501,7 @@ window.autoPopulate=async function(){
 // setMonth()'s live listener, so this doesn't disturb whatever month is
 // currently on screen.
 window.autoPopulateYear=async function(){
+  if(rehearsalRefuse()) return;
   const year=curYM?Number(curYM.split('-')[0]):new Date().getFullYear();
   if(!confirm('Auto-populate ALL 12 months of '+year+' (January–December)?\n\nRuns the same fill as Auto-Populate Month, one month at a time in order, keeping existing assignments and balancing call fairness across the whole year. This can take a few seconds and writes to all 12 months.')) return;
   const vac=vacationDays();
@@ -1439,7 +1526,7 @@ window.autoPopulateYear=async function(){
         const capacity=s.capacity||1;
         let have=Object.values(days[dd]).filter(c=>holdsShift(c,id)).length;
         while(have<capacity){
-          const cands=names.filter(u=>allowed(u,id)&&!vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!holdsKind(days[dd][u],slot));
+          const cands=names.filter(u=>allowed(u,id)&&!vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!shiftsOf(days[dd][u]).length); // [53 · §45] one per person per day, total
           if(!cands.length){ grandUnfillable.push(dk+' '+s.label+(capacity>1?' ('+(capacity-have)+' more needed)':'')); break; }
           cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
           const pick=cands[0];
@@ -1460,6 +1547,7 @@ window.autoPopulateYear=async function(){
   alert('Auto-populate year complete for '+year+' — '+grandFilled+' assignments made across all 12 months.'+(grandUnfillable.length?'\n\n⚠️ Could not fill (no eligible user) — '+grandUnfillable.length+' slot(s):\n'+grandUnfillable.slice(0,15).join('\n')+(grandUnfillable.length>15?'\n…and '+(grandUnfillable.length-15)+' more':''):''));
 };
 window.clearMonth=async function(){
+  if(rehearsalRefuse()) return;
   const [y,m]=curYM.split('-').map(Number);
   if(!confirm('Clear ALL assignments for '+MS[m-1]+' '+y+'? Vacation weeks stay (they come from the auction). This cannot be undone.')) return;
   await setDoc(monthRef(curYM),{days:{}});
@@ -2641,7 +2729,7 @@ function renderDash(){
   document.getElementById('dashUserSub').textContent=names.length?(noFte?(noFte+' of '+names.length+' user(s) have no FTE set here.'):'Every user has an FTE set.'):'No users yet.';
 }
 
-function renderAll(){ if(cellSel) renderCellModal(); renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); renderUsersLock(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); renderReports(); }
+function renderAll(){ if(cellSel) renderCellModal(); renderRehearsal(); renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); renderUsersLock(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); renderReports(); }
 
 // ── Call-fairness baseline table (users × call shifts) ──
 function renderBaseline(){
