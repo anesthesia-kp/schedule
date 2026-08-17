@@ -180,6 +180,15 @@ here deliberately unelaborated, because the detail was lost and inventing it wou
       TODO). Whether the schedule should reuse that template, use its own, and what it should
       send (assignment changes? open-shift alerts? request decisions?) is unspecified. Ask.
 
+- [x→specified] **ANSWERED IN PART, 17 Aug 2026 — the owner re-specified both lost ideas,
+      verbatim:** *"They will need to have access to the schedule from their phones, either
+      apple or andoird. They will need e-mail updating and alerts."* And: *"There are big
+      builds left to do on the schedule site. … My schedule site needs to have all
+      functionality for a group of busy physicians."* So: phone access (Apple AND Android —
+      which points at the web app working well on both phone browsers, not native apps,
+      unless he says otherwise — ASK) and e-mail updates + alerts are CONFIRMED wanted.
+      Detail still unspecified: what triggers an alert, what a phone view shows first.
+      A full ideas list is queued as item A8 in `anesthesia-kp.github.io/MASTER-TODO.md`.
 - [ ] **Anything else the owner remembers from the pre-16-Aug sessions.** He said there were
       "a lot of good ideas". These two are the ones he named. **Ask him directly what else he
       recalls, and write each one here the moment he says it.**
