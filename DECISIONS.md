@@ -1079,3 +1079,19 @@ lost; the text stays where it is.
 | §42 | defects 21 and 23 are resolved by using the shift's category field |
 | §52 | the catalog sort is a view preference for ONE page — it must not touch `shiftList()` |
 | §47 | subcollection timing: after the Testing section and after stage 1 |
+
+## §54 — Calendar feed: design and build YES, release to doctors NO — 17 Aug 2026
+
+Owner, verbatim:
+
+> *"calendar feed can be designed and built, but we can't push calendar to docs until the
+> schedule is complete, which is weeks to months away."*
+
+**What this settles:**
+1. The per-doctor `.ics` calendar feed (IDEAS 1b) is **approved for design and build** — the
+   first item from the ideas list to get a go.
+2. **It is NOT released, announced, or offered to any doctor until the owner says the
+   schedule is complete.** Building and releasing are two separate gates; only the first is
+   open. Any subscribe button/link stays admin-only or hidden until the second gate opens.
+3. Residual **ASK** from IDEAS 1b still stands before design: feed contents (shifts only?)
+   and the per-doctor secret-URL security ruling.
