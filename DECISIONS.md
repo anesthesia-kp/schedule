@@ -957,3 +957,75 @@ subgroups become the source of truth, that grid is a SECOND answer to "can this 
 this shift" — precisely what §19 forbids. Whichever wins, the other must stop being
 consulted, not merely stop being edited. Build 61 routed every path through one checker,
 so there is exactly one place to change.
+
+## §53a — Subgroups: two of §53's three open questions are ANSWERED — 16 Aug 2026
+
+Owner, 16 Aug 2026, verbatim:
+
+> *"A shift may require any one OR all of them. A person may belong to 1 or more subgroups.
+> not sure what 3rd question means"*
+
+**1. ANY-vs-ALL is a per-shift setting, not a global policy.** "any one OR all" means both
+modes exist and each shift says which it uses. So a shift carries a subgroup requirement
+AND a mode: `any` (in at least one of the listed subgroups) or `all` (in every one of them).
+A global switch would be the wrong build — it cannot express both, and the sentence asks
+for both.
+
+**2. A person may belong to more than one subgroup.** Confirmed.
+
+**3. ~~STILL OPEN~~ — ANSWERED SAME DAY. See §53b.** The question was restated in plain
+language and the owner chose option C.
+
+### Two residuals raised by the answers themselves — BOTH ANSWERED in §53b
+
+- **"1 or more" vs §53's "zero or more".** §53 wrote *zero* or more; the owner wrote *1* or
+  more. If every person must be in at least one subgroup, that is a validation rule and it
+  changes what happens to a person the day they are added, before anyone has classified
+  them. If it was loose phrasing, zero stands. **Not resolved. Not assumed either way.**
+- **Across categories.** §53 asked whether a person may hold subgroups belonging to the
+  other category. The answer given ("1 or more subgroups") settles the COUNT but not the
+  SCOPE. Still open.
+
+## §53b — Subgroups: the LAST three questions are answered. §53 and §53a are now CLOSED — 16 Aug 2026
+
+Owner, 16 Aug 2026, verbatim:
+
+> *"I choose C, thank you for that. I can live with 0 or more, maybe usefyl for new users.
+> MDs and CRNAs can only stay in that subgroup."*
+
+**1. SUBGROUPS GRANT; THE TICK GRID IS AN EXCEPTION LIST.** (Option C of the three put to
+him.) Being in a subgroup a shift requires makes a person eligible **by default**. The
+per-person-per-shift grid survives, but it stops being the roster of who may work what and
+becomes the short list of deliberate departures from the subgroup answer.
+
+Rejected, and why — so this is not relitigated:
+- **A (subgroups replace the grid entirely)** — no way to exclude one person from one shift
+  without pulling them out of a subgroup that governs every other shift too.
+- **B (a person must be BOTH in the subgroup AND ticked)** — two independent reasons a
+  person can be ineligible, neither visible from the other. That is §19's forbidden second
+  source of truth, and it makes "why can't he be assigned?" a two-place lookup forever.
+
+⚠️ **The §19 obligation this creates.** `allowed(u,id)` (admin ~1201) is today the ONE gate,
+and it reads `elig[u][id]===true` — a bare tick. Under C it must become: *does a subgroup
+grant this, and has an exception overridden it.* An unticked box must stop meaning
+"ineligible" and start meaning "no exception recorded". Migrating the existing grid is
+therefore **not** a data copy — every existing tick has to be re-interpreted, and the ones
+that merely restate what a subgroup would grant are noise that should not become 60 × 91
+exceptions. **How that migration runs is NOT specified and must not be invented (§22).**
+
+**2. ZERO subgroups is legal.** Owner: *"I can live with 0 or more, maybe useful for new
+users."* §53's original "zero or more" stands; §53a's residual is closed. A person in no
+subgroup is a valid, saveable person — not an error state. They are simply granted nothing
+by subgroup, and can still be reached by an explicit exception.
+
+**3. SUBGROUPS ARE WITHIN-CATEGORY. An MD cannot hold a CRNA subgroup, or the reverse.**
+Every subgroup belongs to exactly one category. §53's reading of *"MDs and CRNAs then can
+each have subgroups"* was correct.
+
+### One consequence to put to the owner before stage 4 is built — NOT a guess, a flag
+
+If subgroups are strictly within-category, then a capability both groups share — a Peds
+skill, say — cannot be one subgroup. It is **two** subgroups with the same name, one per
+category, and a shift open to both would list both. That is a direct consequence of the
+ruling, not a disagreement with it; it is recorded here so the shape is not a surprise when
+the UI shows it. Ask whether that is what he pictured before building the editor.

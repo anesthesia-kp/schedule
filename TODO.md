@@ -88,6 +88,7 @@ removed from both pages.
 |---|---|---|---|
 | Q8 | **Suggestion 3** — phone-first staff view, notifications, Quick View fix. No verdict given; absorbed as stage 8 and deliberately movable. | If the group starts using the site before the foundations land, this is the stage to pull forward. Nothing in it depends on the rest. | 15 Aug |
 | Q10 | **ANSWERED 15 Aug** — *"Richmond shifts generally say RCH or R at the start."* Applied: 9 Richmond, 82 Oakland, none blank. Residual: 2 rows marked CHECK ME (`NICU9+` starts with N; `SMOB Uro` matches neither), and 7 of the 9 Richmond shifts rest purely on the R-start rule with the abbreviation undecoded. | Ruling 18 makes site a property of a person's whole DAY. | 15 Aug |
+| Q18 | **Subgroups — the third question of §53.** ANY-vs-ALL and multi-membership are ANSWERED (DECISIONS §53a). Still open: do subgroups REPLACE the per-shift eligibility tick grid or FILTER it; may a person hold subgroups across categories; and is the minimum zero subgroups or one. | Stage 4 cannot be built without it, and §19 forbids two answers to "can this person do this shift". | 16 Aug |
 
 ### Answered
 
