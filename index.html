@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 28;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 29;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -835,11 +835,21 @@ function fillUserSelect(id){
   if(cur) sel.value=cur;
 }
 function fillSwapWith(){ fillUserSelect('swapWith'); fillUserSelect('swap3With1'); fillUserSelect('swap3With2'); }
+// [29 · §55 · defect 4] ELIGIBLE SHIFTS ONLY. A user may not request a shift they are not
+// marked eligible for — hard block, owner ruling 17 Aug 2026, a deliberate exception to
+// §51's warn-don't-block (which still governs ADMIN overrides). This dropdown is not §41's
+// future curated list; eligibility is the floor, §41 narrows further when built.
+// STAGE-4 NOTE (§53b): today an untick means "ineligible". When subgroups land (option C)
+// an untick becomes "no exception recorded" — re-point this at the one shared checker then.
+function canRequestShift(id){ return me ? (elig?.[me]?.[id]===true) : false; }
 function fillReqShift(){
   const sel=document.getElementById('reqShift'); if(!sel) return;
   const cur=sel.value;
-  sel.innerHTML=shiftList().map(([id,s])=>`<option value="${esc(id)}">${esc(s.label)}</option>`).join('');
-  if(cur) sel.value=cur;
+  const mine=shiftList().filter(([id])=>canRequestShift(id));
+  sel.innerHTML=mine.length
+    ? mine.map(([id,s])=>`<option value="${esc(id)}">${esc(s.label)}</option>`).join('')
+    : '<option value="">— no shifts you\'re marked eligible for — ask an admin —</option>';
+  if(cur&&mine.some(([id])=>id===cur)) sel.value=cur;
 }
 window.onReqType=function(){
   document.getElementById('reqShift').style.display=document.getElementById('reqType').value==='shift'?'':'none';
@@ -854,6 +864,11 @@ window.submitRequest=async function(){
   const note=document.getElementById('reqNote').value.trim();
   if(!me) return;
   if(!date&&type!=='other'){ msg.textContent='Pick a date first.'; msg.style.color='var(--red)'; return; }
+  // [29 · §55] The dropdown only offers eligible shifts, but the handler refuses regardless
+  // of what the DOM looks like — same defence-in-depth shape as usersLockedRefuse().
+  if(type==='shift'&&(!shiftId||!canRequestShift(shiftId))){
+    msg.textContent='You\'re not marked as eligible for that shift, so it can\'t be requested. If you think that\'s wrong, ask an admin to update your eligibility.';
+    msg.style.color='var(--red)'; return; }
   if(type==='other'&&!note){ msg.textContent='Describe what you\'re requesting in the note.'; msg.style.color='var(--red)'; return; }
   const req={id:'r'+Date.now()+Math.floor(Math.random()*1e4),user:me,date:date||null,type,shiftId,note,status:'pending',ts:Date.now()};
   await txUpdateList(requestsRef, cur=>[...cur,req]);
@@ -1196,7 +1211,7 @@ onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll();
 // [C-2] Removed onSnapshot(vApprovalsRef,…) — the schedule site no longer reads live
 // auction approvals (privacy leak + H-4 rules now deny this read anyway).
 onSnapshot(catalogRef,snap=>{ catalog=snap.exists()?snap.data():{shifts:{}}; if(!catalog.shifts)catalog.shifts={}; renderAll(); });
-onSnapshot(eligRef,snap=>{ elig=snap.exists()?snap.data():{}; });
+onSnapshot(eligRef,snap=>{ elig=snap.exists()?snap.data():{}; fillReqShift(); }); // [29 · §55] the load this data existed for
 onSnapshot(requestsRef,snap=>{ requests=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(requests.list))requests.list=[]; renderMyRequests(); renderOpenShifts(); });
 onSnapshot(swapsRef,snap=>{ swaps=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(swaps.list))swaps.list=[]; renderMySwaps(); });
 onSnapshot(openRef,snap=>{ openShifts=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(openShifts.list))openShifts.list=[]; renderOpenShifts(); });
