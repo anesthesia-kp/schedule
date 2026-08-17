@@ -1,3 +1,12 @@
+> ⚠️ **STATUS, 17 Aug 2026: LARGELY BUILT.** This document is the DESIGN as written before
+> building. What shipped and when is in `BUILD-LOG.md`; what is outstanding is in
+> `anesthesia-kp.github.io/TODO.md`. Statements below like "nothing here is built" are
+> HISTORICAL. Design reasoning remains valid; status claims do not.
+
+> Specifically: stages 1, 2, 3 and 9 SHIPPED (builds 51–58); the catalog is 92 shifts
+> since §39; the §7 open questions are ALL ANSWERED (see DECISIONS §18/§19/§21/§26 and
+> TODO). The coverage and auto-populate complaints in §1 were fixed in builds 58 and 53.
+
 # Daily Schedule — the three foundations
 
 **Draft for the owner, 15 Aug 2026.** Written after the rulings in that day's session.

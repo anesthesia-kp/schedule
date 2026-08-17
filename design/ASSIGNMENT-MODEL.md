@@ -1,3 +1,12 @@
+> ⚠️ **STATUS, 17 Aug 2026: LARGELY BUILT.** This document is the DESIGN as written before
+> building. What shipped and when is in `BUILD-LOG.md`; what is outstanding is in
+> `anesthesia-kp.github.io/TODO.md`. Statements below like "nothing here is built" are
+> HISTORICAL. Design reasoning remains valid; status claims do not.
+
+> Specifically: SHIPPED as build 52. Defect 1 closed in build 61 (§51), NOT by stage 6 as
+> written below. Months became a subcollection in build 59 (§47), retiring the defect-8
+> paragraph. Defect 3 (swap atomicity) is still real.
+
 # Stage 3 — the assignment model
 
 **16 Aug 2026. DESIGN ONLY — nothing here is built.**

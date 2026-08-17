@@ -6,9 +6,9 @@ None of them touch Firebase. None of them contain real schedule data.
 | file | what it shows | status |
 |---|---|---|
 | `elig-grid-preview.html` | Shift Eligibility rebuild — family bands, vertical labels, pinned header, counts, filters | **shipped in admin 49** |
-| `shift-editor-preview.html` | Stage 1 — times (24h), sites, stacking demand rules with a live 60-day preview, compatibility, per-page master locks, group edit | designed, not built |
-| `reports-preview.html` | Reports — one report per person and per shift, reusing the auction's `REPORT_CSS` verbatim | designed, not built |
-| `shift-times.xlsx` | Proposed times for all 91 shifts | **owner is editing this** |
+| `shift-editor-preview.html` | Stage 1 — times (24h), sites, stacking demand rules with a live 60-day preview, compatibility, per-page master locks, group edit | **built across 54–56** except compatibility + group edit (§13) |
+| `reports-preview.html` | Reports — one report per person and per shift, reusing the auction's `REPORT_CSS` verbatim | **shipped in admin 51** |
+| `shift-times.xlsx` | Proposed times for all 91 shifts (92 since §39) | **owner is editing this** |
 
 ## shift-times.xlsx
 

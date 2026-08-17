@@ -1,3 +1,12 @@
+> ⚠️ **STATUS, 17 Aug 2026: LARGELY BUILT.** This document is the DESIGN as written before
+> building. What shipped and when is in `BUILD-LOG.md`; what is outstanding is in
+> `anesthesia-kp.github.io/TODO.md`. Statements below like "nothing here is built" are
+> HISTORICAL. Design reasoning remains valid; status claims do not.
+
+> Specifically: request types themselves are still UNBUILT (correct), but the dependency
+> table below is stale — site-on-shifts shipped in 54, the assignment model in 52, and the
+> approval checks in 61, so the "makes defect 1 worse" warning is obsolete.
+
 # Request types — design
 
 **16 Aug 2026. DESIGN ONLY — nothing here is built.**

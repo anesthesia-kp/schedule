@@ -1,3 +1,13 @@
+> ⚠️ **STATUS, 17 Aug 2026: LARGELY BUILT.** This document is the DESIGN as written before
+> building. What shipped and when is in `BUILD-LOG.md`; what is outstanding is in
+> `anesthesia-kp.github.io/TODO.md`. Statements below like "nothing here is built" are
+> HISTORICAL. Design reasoning remains valid; status claims do not.
+
+> Specifically: the ruling this file says is missing NOW EXISTS — DECISIONS §53/§53a/§53b.
+> Two statements below are OVERRULED by it: groups are NOT free-floating (§53b: subgroups
+> are within-category, MD or CRNA), and per-person monthly caps ARE wanted (§46 reversed
+> §21's deferral). Read §53b before this file.
+
 # Stage 5 — rules and the conflict report
 
 **16 Aug 2026. DESIGN ONLY — nothing here is built.**

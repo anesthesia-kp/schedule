@@ -4,7 +4,7 @@
 summaries?"* The answer was **no**. Several commits carry a test file's opening lines
 instead of the summary written for them, and one auction commit says only "hosuekeeping".
 
-Nothing substantive was lost — `DECISIONS.md` holds every ruling and `HANDOFF.md` holds the
+Nothing substantive was lost — `DECISIONS.md` holds every ruling and `anesthesia-kp.github.io/HANDOFF.md` holds the
 per-build detail, and both are committed — but the *commit history on its own* no longer
 tells the story. So the story lives here too, in a file that is committed and cannot be
 lost to a mis-paste.
@@ -19,10 +19,10 @@ flagged. Where the full prose survives it is in the named commit, or in
 
 | build | commit | date | what shipped |
 |---|---|---|---|
-| **63** | —  not pushed yet | 16 Aug 2026 | The AUDIT LOG stops forgetting. It was never a size problem — it trimmed itself at 400 entries and kept 300, silently discarding the rest, including build 61's override records. Now one document per entry in `auditLog/entries`, never trimmed, read newest-300 with a real query. Pre-63 entries still shown, merged, with no conversion step (append-only, so unlike §47 it cannot split-brain). Also fixes `isolation-test`, which had stopped completing at all — `startsRegex()` re-scanned the whole emitted buffer per `/`, which went quadratic on a 318 KB page and hung the CARDINAL-RULE suite with no output. |
-| **62** | —  not pushed yet | 16 Aug 2026 | §49a — BOTH the real holiday and the federal observed day count, for all holidays (Independence Day 2026 = Sat 04 Jul AND Fri 03 Jul), including the cross-year case where 1 Jan on a Saturday is observed 31 Dec of the year before. Plus §52 — the Shift Catalog grouped by family with headings, and sortable by family / catalog order / A–Z. |
-| **61** | —  not pushed yet | 16 Aug 2026 | Defect 1 — ONE definition of "is this assignment a problem?". Request and swap approval now run the same eligibility / capacity / vacation / collision checks the cell editor runs; warns and records an override, never blocks (§51). Eligibility checked on every path for the first time, closing half of defect 4. |
-| **60** | —  not pushed yet | 16 Aug 2026 | The config locks open by default (§50) — Shift Catalog, Report settings, Simulator. The Users page and the unconverted-month guard deliberately stay closed (§50a), and both refusals are asserted so a later session cannot "finish the job". |
+| **63** | `c0021e4` — pushed, live | 16 Aug 2026 | The AUDIT LOG stops forgetting. It was never a size problem — it trimmed itself at 400 entries and kept 300, silently discarding the rest, including build 61's override records. Now one document per entry in `auditLog/entries`, never trimmed, read newest-300 with a real query. Pre-63 entries still shown, merged, with no conversion step (append-only, so unlike §47 it cannot split-brain). Also fixes `isolation-test`, which had stopped completing at all — `startsRegex()` re-scanned the whole emitted buffer per `/`, which went quadratic on a 318 KB page and hung the CARDINAL-RULE suite with no output. |
+| **62** | `b2e0458` — pushed, live. ⚠️ carries builds 61 AND 62 in one commit, and its subject describes the TEST SUITES, not the build | 16 Aug 2026 | §49a — BOTH the real holiday and the federal observed day count, for all holidays (Independence Day 2026 = Sat 04 Jul AND Fri 03 Jul), including the cross-year case where 1 Jan on a Saturday is observed 31 Dec of the year before. Plus §52 — the Shift Catalog grouped by family with headings, and sortable by family / catalog order / A–Z. |
+| **61** | inside `b2e0458` (with 62) — pushed, live; no commit of its own | 16 Aug 2026 | Defect 1 — ONE definition of "is this assignment a problem?". Request and swap approval now run the same eligibility / capacity / vacation / collision checks the cell editor runs; warns and records an override, never blocks (§51). Eligibility checked on every path for the first time, closing half of defect 4. |
+| **60** | `15822e3` — pushed, live | 16 Aug 2026 | The config locks open by default (§50) — Shift Catalog, Report settings, Simulator. The Users page and the unconverted-month guard deliberately stay closed (§50a), and both refusals are asserted so a later session cannot "finish the job". |
 | **59** | `b7dd372` | 16 Aug 2026 12:48 | §47 — a month became one document PER DAY (`sched_YYYY-MM/days/{DD}`). Unconverted months are shown in full but read-only behind a banner; converting copies in one atomic batch and keeps the old record as a backup. Plus the repo housekeeping and the `_archive/` folder. ⚠️ **commit message lost** — a test file was pasted instead. |
 | **58** | `9f8a8b1` | 16 Aug 2026 11:25 | Stage 2 — COVERAGE against demand, closing defect 6. "Nothing has been asked for" and "nothing has been filled" are reported as different states. |
 | **57** | `1e4e39c` | 16 Aug 2026 11:02 | Renaming a shift: the label changes, the internal id never does. |
@@ -53,7 +53,9 @@ a header comment stating what it proves and what its honesty check is.
 
 ## How to not lose another one
 
-The summary for the build you are about to push is written to **`.claude-commit-msg.txt`**
-in each repo. That is the file to copy from — not the source file, and not the test file.
-It is gitignored, so it never shows up in GitHub Desktop's changed-files list; open it from
-Finder or a text editor and paste the whole thing into the commit box.
+The summary for the build you are about to push is written to **`COMMIT-MESSAGE.txt`** in
+each repo — deliberately NOT a dotfile (the old `.claude-commit-msg.txt` was invisible in
+Finder because of the leading dot, which is exactly how messages got lost). It is
+gitignored but visible; open it and paste the whole thing into the commit box. It is also
+delivered to the chat outputs column every build. Copy from either — never from a source or
+test file.

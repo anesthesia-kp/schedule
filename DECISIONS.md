@@ -129,6 +129,11 @@ One primary role plus **any number of overlapping groups**, admin-created, not a
 list in code and not a tree. Rules target: everyone · a role · a group · a combination ·
 named individuals.
 
+> ⚠️ *Marked 17 Aug 2026: §53b supersedes the shape here. Subgroups are WITHIN-CATEGORY
+> (MD or CRNA) — which IS a two-level structure, despite "not a tree" above. A capability
+> both categories share becomes TWO same-named subgroups, one per category (§53b flags this
+> for the owner). The example list here ("pediatric, obstetric, admin…") predates that.*
+
 ## 11 · Everything admin-editable — 15 Aug 2026
 
 > *"I want all builds and choices to be admin editable so that when something changes,
@@ -149,6 +154,11 @@ numbers, without a build. A genuinely new *kind* of constraint is a build.
 Shift configuration is locked by default. Unlock is deliberate, logged, and shows a
 persistent banner while open. Must be enforced in the Firestore rules, not only in the
 page — the same discipline as the auction's 7-key config freeze.
+
+> ⚠️ *Marked 17 Aug 2026: §50 opened three config locks BY DEFAULT (§50 names only §20, but
+> the change reaches this ruling too). §12's Firestore-rules enforcement clause was never
+> built and is not honoured by an open-by-default lock — whether server-side enforcement is
+> still wanted is UNRESOLVED. Ask before building either way.*
 
 ## 13 · Group editing — 15 Aug 2026
 
@@ -217,8 +227,9 @@ gets a multi-agent adversarial audit.
   rule the app should enforce, not just a set of values.
 - Further named corrections: `D pm` **11:30–15:30**, `CVpm` **13:30–17:30**.
   `Pedi Admin AM` / `Pedi Admin PM` follow the admin pattern by inference (estimated).
-  `Pedi PM` was **not** mentioned and is the only shift left on the blanket
-  15:30–07:30 rule — flagged CHECK ME rather than quietly changed.
+  `Pedi PM` was **not** mentioned in the original dictation — ~~flagged CHECK ME~~
+  **RESOLVED by Q14 (owner, 16 Aug): 13:30–17:30 confirmed.** With that, no shift remains
+  on the blanket PM rule and it is retired (as the list above already records).
 - **Estimated times must be visibly distinct from confirmed ones.** The owner said
   *"make your best guess at the rest… I can edit later"*, so every shift carries a
   confirmed/estimated flag and an estimated time stays provisional until accepted.
@@ -260,6 +271,11 @@ and no relock when you navigate away.** A banner stays visible the whole time it
 naming the page and who unlocked it.
 
 Enforced in the Firestore rules as well as the page, per §12.
+
+> ⚠️ *Marked 17 Aug 2026: §50 opened the Shift Catalog, Report settings and Simulator, and
+> §50a deliberately kept Users and the month guard shut. **Compatibility, Shift Families and
+> Shift Eligibility — in this ruling's locked list — were never mentioned in §50 either
+> way.** Whether they fall under the owner's "all the locks" or stay locked is UNRESOLVED.*
 
 ## 21 · "N per month" is a debt the month owes, with suggestions — 15 Aug 2026
 
@@ -379,7 +395,9 @@ change history, hours-and-shifts group summary, individual printable schedule.
 
 Not a flat mean. The method:
 
-1. **The pool** is every doctor except per diem and locums.
+1. **The pool** is every doctor except per diem and locums. *(Narrowed since: §36 — no FTE →
+not in the pool; §35/§43 — an explicit counts-toward-comparisons flag, per-person now,
+per-group when stage 4 lands. This sentence alone is not the current definition.)*
 2. **A rate per 1.0 FTE** is taken across the pool: pool total ÷ pool FTE.
 3. **Each doctor's expectation** is that rate × their own FTE. A 0.6 FTE is measured
    against 0.6 of the load, never against a full-timer's number.
@@ -405,6 +423,11 @@ out (§1). Offered the choice between naming the live auction consequence in the
 confirmation, a soft delete, both, or relying on the per-page lock, the owner chose:
 
 > **"Leave it — the per-page lock is enough."**
+
+*(Flagged 17 Aug: this was an option-selection, like §§35–37, and per §37's stated practice
+those are recorded WITHOUT quotation marks. Whether this exact sentence was dictated cannot
+be verified from the surviving record — treat it as the recorded outcome, not certified
+verbatim speech.)*
 
 **Accepted, with the hazard restated so it is never mistaken for closed:** an unlocked
 Users page still removes a physician from the LIVE auction roster in one click, and still
@@ -458,7 +481,13 @@ recall it.
 **Unchanged:** the auction takes absolute priority, and a Firestore rules change is an
 auction deploy whichever site it serves.
 
-## 35 · The comparison pool — a per-person switch on Users — 16 Aug 2026
+## 35 · The comparison pool — a per-person switch ~~on Users~~ — 16 Aug 2026
+> ⚠️ **SUPERSEDED IN PART, marked 17 Aug 2026.** The switch SHIPPED on the **Reports** page,
+> not Users — owner-approved 16 Aug (see the Note at the end of §41, and §43). The Users page
+> is the one page that writes the LIVE auction roster and opens locked for that reason; a
+> schedule-only report setting must never be a reason to unlock it. **Do not move the switch
+> to Users.** §43 further rules that when groups land, the group is the default and the
+> per-person value becomes the override.
 
 §26 excludes per diem and locums from the fairness pools, and §29 requires the report to
 name who was excluded. **Neither can be answered from the data that exists**: a person's
@@ -539,7 +568,9 @@ Claude estimated times for 68 of the 91 shifts and flagged 4 of them SUSPECT aft
 `Eye Call` disproved the reasoning behind them (§17). **None of the estimates go into the
 app.** A shift whose time the owner has not stated stays empty.
 
-This is the same answer §17 already gave — *"no default times in code. Every shift is blank
+~~This is the same answer §17 already gave~~ *(Corrected 17 Aug: it is NOT — §17 put
+estimates IN the app behind a confirmed/estimated flag; §38 keeps them OUT entirely. §38
+WINS on the estimates. §17's flag mechanism remains right for times the owner later accepts)* — *"no default times in code. Every shift is blank
 until an admin sets it"* — now extended to Claude's spreadsheet: an estimate is not a
 setting, and a blank is not a gap to be helpfully filled. A blank time warns against every
 pairing rather than being treated as compatible, which is the safe direction.
@@ -649,8 +680,7 @@ The rule: **there is one answer, with visible exceptions** — not two answers t
 disagree. That is the difference between this and what §19 warns about, and it only holds if
 the visibility above is actually built.
 
-**Supersedes the placement in §35**, which shipped the switch per person on the Reports page
-as an interim. That per-person value becomes the *override*, not the source. When groups
+**Supersedes the placement in §35.** (The Reports-page shipping decision is recorded in the Note at the end of §41 — §35 itself never said Reports.) The per-person switch shipped in build 51 as an interim. That per-person value becomes the *override*, not the source. When groups
 land, the group is the default and the person's setting is an exception to it.
 
 ## 44 · THE TARGET ARCHITECTURE — an engine, fed by rules and requests — 16 Aug 2026
@@ -793,7 +823,7 @@ the calendar says.
 
 ---
 
-## §47 — DONE, build 59. How it actually came out.
+## §47 (outcome) — DONE, build 59. How it actually came out. Carries §47a–§47d.
 
 The ruling was "split the month document into a subcollection, NOW, while there is no
 real data." Built. `dailysched/sched_YYYY-MM/days/{DD}`, one document per day.
@@ -818,7 +848,7 @@ Request approval and swap apply both write to other months. A cached answer is w
 exactly the cases that matter, so `mutateCell` re-reads the month marker inside its own
 transaction before writing anything.
 
-Also settled here: **Clear Month must write the v2 marker alongside the deletions.**
+### §47d — settled here, binding: **Clear Month must write the v2 marker alongside the deletions.**
 Without it, clearing empties the day records, the reader falls back to the old document,
 and every assignment just cleared comes back. That is a general shape worth remembering —
 whenever "empty" and "look somewhere else" are both possible, something must say which.
@@ -917,7 +947,7 @@ change what the schedule draws. Asserted.
 
 ---
 
-## §53 — ROLES AND SUBGROUPS. Answers the question §43 left open. Unblocks stage 4.
+## §53 — ROLES AND SUBGROUPS. Answers the "Both" question (asked and settled in §42, mis-credited to §43 in the original heading). Unblocks stage 4.
 
 Owner, 16 Aug 2026:
 
@@ -958,7 +988,9 @@ this shift" — precisely what §19 forbids. Whichever wins, the other must stop
 consulted, not merely stop being edited. Build 61 routed every path through one checker,
 so there is exactly one place to change.
 
-## §53a — Subgroups: two of §53's three open questions are ANSWERED — 16 Aug 2026
+## §53a — Subgroups: ~~two~~ ONE of §53's three questions ANSWERED here (the rest in §53b) — 16 Aug 2026
+> *Heading corrected 17 Aug: the owner's message answered any-one-vs-all only; multi-membership
+> answered a question §53 had already settled ("zero or more"). §53b closed the remainder.*
 
 Owner, 16 Aug 2026, verbatim:
 
@@ -1013,8 +1045,8 @@ therefore **not** a data copy — every existing tick has to be re-interpreted, 
 that merely restate what a subgroup would grant are noise that should not become 60 × 91
 exceptions. **How that migration runs is NOT specified and must not be invented (§22).**
 
-**2. ZERO subgroups is legal.** Owner: *"I can live with 0 or more, maybe useful for new
-users."* §53's original "zero or more" stands; §53a's residual is closed. A person in no
+**2. ZERO subgroups is legal.** Owner: *"I can live with 0 or more, maybe usefyl for new
+users."* [sic — verbatim] §53's original "zero or more" stands; §53a's residual is closed. A person in no
 subgroup is a valid, saveable person — not an error state. They are simply granted nothing
 by subgroup, and can still be reached by an explicit exception.
 
@@ -1029,3 +1061,21 @@ skill, say — cannot be one subgroup. It is **two** subgroups with the same nam
 category, and a shift open to both would list both. That is a direct consequence of the
 ruling, not a disagreement with it; it is recorded here so the shape is not a surprise when
 the UI shows it. Ask whether that is what he pictured before building the editor.
+
+## Buried rulings — an index, added 17 Aug 2026
+
+Binding decisions that live inside another ruling's prose. Numbered here so they cannot be
+lost; the text stays where it is.
+
+| lives in | the ruling |
+|---|---|
+| end of §41 | the comparison-pool switch shipped on REPORTS, owner-approved — §35 carries the warning |
+| §47 (outcome) | **§47d** — Clear Month must write the v2 marker alongside the deletions |
+| bottom of §37 | rulings 35–37 were settled by option-selection, not dictation (governs §22 handling) |
+| §17 | no admin shift may end after 17:30 — an app VALIDATION rule, not just a value |
+| §17 | `EV` corrected 16 Aug to 15:30–23:30, superseding the 15 Aug statement |
+| §1 | a phase gate on the Users panel is RULED OUT (the auction runs all year) |
+| §11 | rule *types* are code; a genuinely new *kind* of constraint is a build |
+| §42 | defects 21 and 23 are resolved by using the shift's category field |
+| §52 | the catalog sort is a view preference for ONE page — it must not touch `shiftList()` |
+| §47 | subcollection timing: after the Testing section and after stage 1 |
