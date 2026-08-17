@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 63;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 64;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -2419,6 +2419,7 @@ window.removeOpen=async function(id){
 function renderUsersGrid(){
   const g=document.getElementById('usersGrid'); if(!g) return;
   const count=document.getElementById('uCount'); if(count) count.textContent=names.length;
+  if(_usersEditing) return; // [64 · defect 12] mid-edit: leave the rows alone; rebuilt on focus-leave
   let head='<tr><th style="text-align:left">Initials</th><th style="text-align:left">Full Name</th><th style="text-align:left">Login e-mail (Google)</th><th style="text-align:left">KP e-mail</th><th style="text-align:left">FTE (schedule)</th><th></th></tr>';
   let rows='';
   for(const u of names){
@@ -3265,6 +3266,39 @@ document.addEventListener('focusout',e=>{
     const l=document.getElementById('catList');
     if(l&&!l.contains(document.activeElement)){ _catEditing=false; renderCatalog(); }
   },250);
+});
+// [64 · defect 12] THE SAME GUARD FOR THE USERS GRID AND THE BASELINE GRID.
+// renderAll() fires on every snapshot (~14 listeners), and rebuilding a grid replaces every
+// <input> with a new element — unsaved typing gone, focus dead. The catalog solved this in
+// [55] above (whose comment names defect 12 as the same shape). Same cure, same trade:
+// while focus is inside the grid the rows are left alone; it rebuilds once, with fresh
+// data, when focus leaves (250ms settle so tabbing between fields is not "leaving").
+// Another admin's concurrent edit therefore waits until you click away — on a page that
+// opens locked (§50a) and is run by one person, that is the right trade, as it was in [55].
+let _usersEditing=false,_usersBlurT=null,_blEditing=false,_blBlurT=null;
+document.addEventListener('focusin',e=>{
+  const g=document.getElementById('usersGrid');
+  if(g&&g.contains(e.target)){ clearTimeout(_usersBlurT); _usersEditing=true; }
+  const b=document.getElementById('baselineGrid');
+  if(b&&b.contains(e.target)){ clearTimeout(_blBlurT); _blEditing=true; }
+});
+document.addEventListener('focusout',e=>{
+  const g=document.getElementById('usersGrid');
+  if(g&&g.contains(e.target)){
+    clearTimeout(_usersBlurT);
+    _usersBlurT=setTimeout(()=>{
+      const l=document.getElementById('usersGrid');
+      if(l&&!l.contains(document.activeElement)){ _usersEditing=false; renderUsersGrid(); }
+    },250);
+  }
+  const b=document.getElementById('baselineGrid');
+  if(b&&b.contains(e.target)){
+    clearTimeout(_blBlurT);
+    _blBlurT=setTimeout(()=>{
+      const l=document.getElementById('baselineGrid');
+      if(l&&!l.contains(document.activeElement)){ _blEditing=false; renderBaseline(); }
+    },250);
+  }
 });
 
 window.setShiftTime=async function(id,which,raw,inputEl){
@@ -4151,6 +4185,7 @@ function renderAll(){ if(cellSel) renderCellModal(); renderLegacyBanner(); rende
 // ── Call-fairness baseline table (users × call shifts) ──
 function renderBaseline(){
   const g=document.getElementById('baselineGrid'); if(!g) return;
+  if(_blEditing) return; // [64 · defect 12] mid-edit guard, mirrors [55]
   const callShifts=[...shiftList()].filter(([id,s])=>s.kind==='call');
   if(!names.length){ g.innerHTML='<tr><td style="font-size:11px;color:var(--t3)">No users yet.</td></tr>'; return; }
   if(!callShifts.length){ g.innerHTML='<tr><td style="font-size:11px;color:var(--t3)">No call shifts in the catalog yet.</td></tr>'; return; }
