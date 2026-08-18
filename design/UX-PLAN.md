@@ -186,7 +186,7 @@ page is NOT recommended yet; revisit only when the engine block pushes past ~8k 
 
 ---
 
-## 8 · THE MORNING QUESTIONS (also posted in chat — quick answers are enough)
+## 8 · THE MORNING QUESTIONS — ALL ANSWERED 18 Aug 2026; rulings live in the one TODO. Q1 deferred (+batch-add approved then deferred); 2–8 GO; 9 all but OR board & pairing; 11 weighted by FTE; 12 yes + Richmond weekly + saved selections; 13 approved. Kept for the record:
 
 1. **Roster**: (a) read both auctions' rosters · (b) schedule gets its OWN roster —
    recommended · (c) share MD, hand-enter CRNAs?
