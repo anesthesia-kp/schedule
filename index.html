@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 29;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 30;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -400,9 +400,17 @@ const onSnapshot=(r,cb)=>{ try{ return _onSnapshot(r,cb,err=>console.warn('liste
 // dailysched — this site's own data
 const catalogRef  = doc(db,"dailysched","shiftCatalog");
 const eligRef     = doc(db,"dailysched","eligibility");
-const requestsRef = doc(db,"dailysched","requests");
-const swapsRef    = doc(db,"dailysched","swaps");
-const openRef     = doc(db,"dailysched","openShifts"); // admin-posted unfilled shifts users can apply for
+// [30 · S4] The three {list:[]} docs are LEGACY — read-only, forever. One document per
+// item now lives in dailysched/{requests|swaps|openShifts}/items/{id}; readers merge both
+// places (an item doc wins over a legacy entry with the same id; _gone = deleted), and
+// every write goes to an item doc. Mirrors admin build 68 — the two pages must deploy
+// together, and firestore.rules needs the dailysched subcollection match FIRST.
+const requestsRef = doc(db,"dailysched","requests");   // LEGACY — never written since 30
+const swapsRef    = doc(db,"dailysched","swaps");      // LEGACY — never written since 30
+const openRef     = doc(db,"dailysched","openShifts"); // LEGACY — admin-posted; never written since 30
+const reqItemsCol  = collection(db,"dailysched","requests","items");
+const swapItemsCol = collection(db,"dailysched","swaps","items");
+const openItemsCol = collection(db,"dailysched","openShifts","items");
 // [59 · §47] A month is now one document PER DAY: dailysched/sched_YYYY-MM/days/{DD}.
 // The old single document survives as the marker and the backup — sched_YYYY-MM.v2===true
 // means the subcollection is the truth, even when it is empty.
@@ -529,22 +537,42 @@ function _writeFailMsg(e){
   if(c==='unavailable'||c==='deadline-exceeded') return 'No connection — that did not save. Try again.';
   return 'That did not save. Please try again.';
 }
-async function txUpdateList(ref, mutate){
+// [30 · S4] txUpdateList is gone with the whole-list writes. Two replacements, both
+// keeping the same failure contract (toast the user, re-throw marked so the caller
+// aborts instead of printing "submitted" over a write that never landed):
+//   itemCreate  — a brand-new item is just its own document; a fresh random id cannot
+//                 collide, so no transaction is needed. Publish-day floods stop
+//                 contending on one array.
+//   txUpdateItem — mutate ONE existing item with the guard on FRESH data inside a
+//                 transaction: the item's own doc if it has one, else the copy still in
+//                 the legacy array (read in the SAME transaction). Writes only the item
+//                 doc; the legacy doc is never touched.
+function _writeFail(e){
+  console.warn('item write failed',e&&e.code,e);
+  schedToast(_writeFailMsg(e),'err');
+  const err=new Error('write-failed'); err.__handled=true; err.cause=e; throw err;
+}
+async function itemCreate(colRef,obj){
+  try{ await setDoc(doc(colRef,String(obj.id)),obj); }
+  catch(e){ _writeFail(e); }
+}
+async function txUpdateItem(colRef, legacyRef, id, mutate){
   try{
     await runTransaction(db, async (tx)=>{
-      const snap=await tx.get(ref);
-      const cur=(snap.exists()&&Array.isArray(snap.data().list))?snap.data().list:[];
-      const next=mutate(cur);
+      const iRef=doc(colRef,String(id));
+      const iSnap=await tx.get(iRef);
+      let cur=iSnap.exists()?iSnap.data():null;
+      if(!cur){
+        const lSnap=await tx.get(legacyRef);
+        const l=(lSnap.exists()&&Array.isArray(lSnap.data().list))?lSnap.data().list:[];
+        cur=l.find(x=>x&&x.id===id)||null;
+      }
+      if(!cur||cur._gone) return;                 // vanished / deleted — no-op
+      const next=mutate({...cur});
       if(next===null||next===undefined) return;   // guard failed on fresh data — no-op
-      tx.set(ref,{list:next},{merge:true});
+      tx.set(iRef,next);
     });
-  }catch(e){
-    console.warn('txUpdateList failed',e&&e.code,e);
-    schedToast(_writeFailMsg(e),'err');
-    // Re-thrown so the caller ABORTS instead of running on to print "submitted" over a
-    // write that never landed. Marked so the handler below can keep the console clean.
-    const err=new Error('write-failed'); err.__handled=true; err.cause=e; throw err;
-  }
+  }catch(e){ _writeFail(e); }
 }
 // The callers deliberately have no try/catch — aborting is the correct behaviour and the
 // user has already been told. This stops the resulting rejection becoming console noise.
@@ -743,14 +771,28 @@ window.applyOpen=async function(openId){
   const o=(openShifts.list||[]).find(x=>x.id===openId); if(!o||o.status!=='open') return;
   // Cheap local short-circuit against an obvious double-apply.
   if((requests.list||[]).some(r=>r.user===me&&r.openId===openId&&r.status==='pending')) return;
-  const req={id:'r'+Date.now()+Math.floor(Math.random()*1e4),user:me,date:o.date,type:'claim',shiftId:o.shiftId,openId,note:'',status:'pending',ts:Date.now()};
-  // [L-9] Authoritative dedup INSIDE the transaction on the fresh list — a fast double-click
-  // (before the button flips to "applied") or the same user in two tabs can otherwise create
-  // duplicate pending claims, which the admin could then approve twice. Re-check and abort.
-  await txUpdateList(requestsRef, cur=>{
-    if(cur.some(r=>r.user===me&&r.openId===openId&&r.status==='pending')) return null;
-    return [...cur,req];
-  });
+  // [30 · S4] The [L-9] dedup is now STRUCTURAL: a claim's doc id is claim_{openId}_{me},
+  // so two pending claims by the same person on the same open shift cannot exist as two
+  // documents. The transaction still guards on fresh data — its own doc AND the legacy
+  // array (a pre-migration pending claim there also blocks) — and a decided earlier claim
+  // is archived under a dated id before re-applying, so history survives the overwrite.
+  const claimId='claim_'+openId+'_'+me;
+  const req={id:claimId,user:me,date:o.date,type:'claim',shiftId:o.shiftId,openId,note:'',status:'pending',ts:Date.now()};
+  try{
+    await runTransaction(db, async (tx)=>{
+      const iRef=doc(reqItemsCol,claimId);
+      const iSnap=await tx.get(iRef);
+      const lSnap=await tx.get(requestsRef);
+      const l=(lSnap.exists()&&Array.isArray(lSnap.data().list))?lSnap.data().list:[];
+      if(iSnap.exists()&&iSnap.data().status==='pending') return;                       // already applied — no-op
+      if(l.some(r=>r&&r.user===me&&r.openId===openId&&r.status==='pending')) return;    // legacy pending claim — no-op
+      if(iSnap.exists()){
+        const old=iSnap.data(); const archId=claimId+'_'+(old.decidedTs||old.ts||0);
+        tx.set(doc(reqItemsCol,archId),{...old,id:archId});                             // keep the decided history
+      }
+      tx.set(iRef,req);
+    });
+  }catch(e){ _writeFail(e); }
 };
 
 function renderMyRequests(){
@@ -871,7 +913,7 @@ window.submitRequest=async function(){
     msg.style.color='var(--red)'; return; }
   if(type==='other'&&!note){ msg.textContent='Describe what you\'re requesting in the note.'; msg.style.color='var(--red)'; return; }
   const req={id:'r'+Date.now()+Math.floor(Math.random()*1e4),user:me,date:date||null,type,shiftId,note,status:'pending',ts:Date.now()};
-  await txUpdateList(requestsRef, cur=>[...cur,req]);
+  await itemCreate(reqItemsCol,req);
   document.getElementById('reqNote').value='';
   msg.textContent='Request submitted — admin will review it.'; msg.style.color='var(--green)';
 };
@@ -886,7 +928,7 @@ window.submitSwap=async function(){
   // Starts as pending_target — the OTHER user has to accept before this
   // ever reaches admin. See renderMySwaps()/acceptSwap()/declineSwap().
   const s={id:'s'+Date.now()+Math.floor(Math.random()*1e4),type:'2way',from:me,to,date,part,note,status:'pending_target',ts:Date.now()};
-  await txUpdateList(swapsRef, cur=>[...cur,s]);
+  await itemCreate(swapItemsCol,s);
   logUserAction('swap.request',displayName(me)+' proposed a swap with '+displayName(to)+' on '+date+' ('+(part==='call'?'call':'day shift')+')');
   document.getElementById('swapNote').value='';
   msg.textContent='Swap requested — '+displayName(to)+' needs to accept it first.'; msg.style.color='var(--green)';
@@ -899,23 +941,21 @@ window.acceptSwap=async function(id){
   // The guard is re-evaluated on FRESH server data inside the transaction, so a
   // stale UI or a racing write can't push a swap that was already decided.
   let acted=false, sFrom=null, sDate=null;
-  await txUpdateList(swapsRef, cur=>{
+  await txUpdateItem(swapItemsCol, swapsRef, id, s=>{
     acted=false;
-    const s=cur.find(x=>x.id===id);
-    if(!s||s.status!=='pending_target'||s.to!==me) return null;
+    if(s.status!=='pending_target'||s.to!==me) return null;
     acted=true; sFrom=s.from; sDate=s.date;
-    return cur.map(x=>x.id===id?{...x,status:'pending_admin',targetDecidedTs:Date.now()}:x);
+    return {...s,status:'pending_admin',targetDecidedTs:Date.now()};
   });
   if(acted) logUserAction('swap.accept',displayName(me)+' accepted a swap with '+displayName(sFrom)+' on '+sDate+' — now awaiting admin approval');
 };
 window.declineSwap=async function(id){
   let acted=false, sFrom=null, sDate=null;
-  await txUpdateList(swapsRef, cur=>{
+  await txUpdateItem(swapItemsCol, swapsRef, id, s=>{
     acted=false;
-    const s=cur.find(x=>x.id===id);
-    if(!s||s.status!=='pending_target'||s.to!==me) return null;
+    if(s.status!=='pending_target'||s.to!==me) return null;
     acted=true; sFrom=s.from; sDate=s.date;
-    return cur.map(x=>x.id===id?{...x,status:'declined_by_target',targetDecidedTs:Date.now()}:x);
+    return {...s,status:'declined_by_target',targetDecidedTs:Date.now()};
   });
   if(acted) logUserAction('swap.decline',displayName(me)+' declined a swap with '+displayName(sFrom)+' on '+sDate);
 };
@@ -940,7 +980,7 @@ window.submitSwap3=async function(){
     participants:[me,b,c], legs:[{date:d1,part:p1},{date:d2,part:p2},{date:d3,part:p3}],
     note, status:'pending_target', acceptances:{}, ts:Date.now()
   };
-  await txUpdateList(swapsRef, cur=>[...cur,s3]);
+  await itemCreate(swapItemsCol,s3);
   logUserAction('swap3.request',displayName(me)+' proposed a 3-way swap: '+displayName(me)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(me));
   document.getElementById('swap3Note').value='';
   msg.textContent='3-way swap requested — '+displayName(b)+' and '+displayName(c)+' both need to accept.'; msg.style.color='var(--green)';
@@ -950,30 +990,28 @@ window.acceptSwap3=async function(id){
   // person's "yes" in, so two participants accepting at nearly the same moment no
   // longer overwrite each other (which used to silently strand the swap at pending).
   let acted=false, parts=null, both=false;
-  await txUpdateList(swapsRef, cur=>{
+  await txUpdateItem(swapItemsCol, swapsRef, id, s=>{
     acted=false; both=false;
-    const s=cur.find(x=>x.id===id);
-    if(!s||s.type!=='3way'||s.status!=='pending_target') return null;
+    if(s.type!=='3way'||s.status!=='pending_target') return null;
     const [a,b,c]=s.participants;
     if(me!==b&&me!==c) return null;
     if(s.acceptances?.[me]) return null;   // already accepted on fresh data — don't double-apply
     const acceptances={...(s.acceptances||{}),[me]:true};
     const bothAccepted=!!(acceptances[b]&&acceptances[c]);
     acted=true; parts=[a,b,c]; both=bothAccepted;
-    return cur.map(x=>x.id===id?{...x,acceptances,status:bothAccepted?'pending_admin':'pending_target'}:x);
+    return {...s,acceptances,status:bothAccepted?'pending_admin':'pending_target'};
   });
   if(acted){ const [a,b,c]=parts; logUserAction('swap3.accept',displayName(me)+' accepted their leg of a 3-way swap ('+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)+')'+(both?' — now awaiting admin approval':'')); }
 };
 window.declineSwap3=async function(id){
   let acted=false, parts=null;
-  await txUpdateList(swapsRef, cur=>{
+  await txUpdateItem(swapItemsCol, swapsRef, id, s=>{
     acted=false;
-    const s=cur.find(x=>x.id===id);
-    if(!s||s.type!=='3way'||s.status!=='pending_target') return null;
+    if(s.type!=='3way'||s.status!=='pending_target') return null;
     const [a,b,c]=s.participants;
     if(me!==b&&me!==c) return null;
     acted=true; parts=[a,b,c];
-    return cur.map(x=>x.id===id?{...x,status:'declined_by_target',declinedBy:me}:x);
+    return {...s,status:'declined_by_target',declinedBy:me};
   });
   if(acted){ const [a,b,c]=parts; logUserAction('swap3.decline',displayName(me)+' declined their leg of a 3-way swap ('+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)+')'); }
 };
@@ -1212,9 +1250,25 @@ onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll();
 // auction approvals (privacy leak + H-4 rules now deny this read anyway).
 onSnapshot(catalogRef,snap=>{ catalog=snap.exists()?snap.data():{shifts:{}}; if(!catalog.shifts)catalog.shifts={}; renderAll(); });
 onSnapshot(eligRef,snap=>{ elig=snap.exists()?snap.data():{}; fillReqShift(); }); // [29 · §55] the load this data existed for
-onSnapshot(requestsRef,snap=>{ requests=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(requests.list))requests.list=[]; renderMyRequests(); renderOpenShifts(); });
-onSnapshot(swapsRef,snap=>{ swaps=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(swaps.list))swaps.list=[]; renderMySwaps(); });
-onSnapshot(openRef,snap=>{ openShifts=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(openShifts.list))openShifts.list=[]; renderOpenShifts(); });
+// [30 · S4] Two listeners per list — the frozen legacy array and the item docs —
+// recombined into the same {list:[]} shape every renderer already reads. An item doc
+// wins over a legacy entry with its id; _gone tombstones drop out entirely.
+const mergeItems=(legacy,items)=>{
+  const out=[];
+  for(const l of legacy){ if(l&&l.id!=null&&!items.has(String(l.id))) out.push(l); }
+  for(const it of items.values()){ if(!it._gone) out.push(it); }
+  return out;
+};
+let _reqLegacy=[], _reqItems=new Map(), _swapLegacy=[], _swapItems=new Map(), _openLegacy=[], _openItems=new Map();
+const _reMergeReq =()=>{ requests={list:mergeItems(_reqLegacy,_reqItems)};    renderMyRequests(); renderOpenShifts(); };
+const _reMergeSwap=()=>{ swaps={list:mergeItems(_swapLegacy,_swapItems)};     renderMySwaps(); };
+const _reMergeOpen=()=>{ openShifts={list:mergeItems(_openLegacy,_openItems)}; renderOpenShifts(); };
+onSnapshot(requestsRef,snap=>{ const d=snap.exists()?snap.data():{}; _reqLegacy=Array.isArray(d.list)?d.list:[]; _reMergeReq(); });
+onSnapshot(reqItemsCol,qs=>{ _reqItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeReq(); });
+onSnapshot(swapsRef,snap=>{ const d=snap.exists()?snap.data():{}; _swapLegacy=Array.isArray(d.list)?d.list:[]; _reMergeSwap(); });
+onSnapshot(swapItemsCol,qs=>{ _swapItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeSwap(); });
+onSnapshot(openRef,snap=>{ const d=snap.exists()?snap.data():{}; _openLegacy=Array.isArray(d.list)?d.list:[]; _reMergeOpen(); });
+onSnapshot(openItemsCol,qs=>{ _openItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeOpen(); });
 </script>
 </body>
 </html>

@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 67;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 68;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -922,9 +922,28 @@ const onSnapshot=(r,cb)=>{ try{ return _onSnapshot(r,cb,err=>console.warn('liste
 // dailysched — this system's own data (fully separate from the auction)
 const catalogRef  = doc(db,"dailysched","shiftCatalog");
 const eligRef     = doc(db,"dailysched","eligibility");
-const requestsRef = doc(db,"dailysched","requests");
-const swapsRef    = doc(db,"dailysched","swaps");
-const openRef     = doc(db,"dailysched","openShifts");
+// [68 · S4] THE THREE {list:[]} DOCUMENTS ARE NOW LEGACY — READ-ONLY, FOREVER.
+// They were the only single-doc arrays left (the audit log escaped in 63, months in 59)
+// and the only things that actually break at 80 users: every submit/decide was a
+// transaction on the WHOLE list, so publish-day floods contend on one document, and the
+// array grows without bound. Same cure as [63]: one document per item, in
+// dailysched/{requests|swaps|openShifts}/items/{id}.
+//   · READ: both places, merged — an item doc WINS over a legacy entry with the same id,
+//     and an item doc with `_gone:true` is a tombstone (the item is deleted, but the
+//     legacy array can never be edited to say so).
+//   · WRITE: items only. Never the legacy doc — not even to delete from it.
+//   · MUTATE-ON-WRITE: changing an item that still lives only in the legacy array
+//     writes the changed copy as its item doc (same id); the merge hides the stale
+//     legacy copy from then on. No conversion step, no banner, nothing for an admin
+//     to run — the data walks itself over as it is touched.
+// ⚠ DEPLOY ORDER: firestore.rules must add the dailysched subcollection match BEFORE
+// this build goes live — see the rules file. Without it every item write is denied.
+const requestsRef = doc(db,"dailysched","requests");   // LEGACY {list:[]} — never written since 68
+const swapsRef    = doc(db,"dailysched","swaps");      // LEGACY {list:[]} — never written since 68
+const openRef     = doc(db,"dailysched","openShifts"); // LEGACY {list:[]} — never written since 68
+const reqItemsCol  = collection(db,"dailysched","requests","items");
+const swapItemsCol = collection(db,"dailysched","swaps","items");
+const openItemsCol = collection(db,"dailysched","openShifts","items");
 const totalsRef   = doc(db,"dailysched","callTotals"); // legacy counter — no longer used for fairness (see windowShiftCounts)
 const callBaselineRef = doc(db,"dailysched","callBaseline"); // {user:{shiftId:n}} admin-set STARTING baseline (prior call not yet in the schedule)
 // ╔════════════════════════════════════════════════════════════════════════════╗
@@ -932,7 +951,7 @@ const callBaselineRef = doc(db,"dailysched","callBaseline"); // {user:{shiftId:n
 // ║ Each section names what state it OWNS and what it WRITES; if you change a    ║
 // ║ section's writes, update its banner line and this map in the same edit.      ║
 // ╠════════════════════════════════════════════════════════════════════════════╣
-// ║ §S01 DATA LAYER        refs; month subcollection machinery [59]; audit [63]  ║
+// ║ §S01 DATA LAYER        refs; subcollections: months [59] audit [63] lists [68]║
 // ║ §S02 GLOBAL STATE      every top-level mutable, declared in one place        ║
 // ║ §S03 CATALOG CONSTANTS seed data: shifts, FAMILY_PRESETS, PALETTE            ║
 // ║ §S04 MONTH PLUMBING    month refs/watchers/convert + vacation reads          ║
@@ -1181,15 +1200,31 @@ async function mergeFields(ref, dotted){
 // pending, or a giver no longer holds a shift) — abort writes nothing. Firestore retries
 // mutate automatically on conflict, so it must be side-effect free; do logging/toasts and
 // dependent writes AFTER this resolves, gated on what mutate reported.
-async function txUpdateList(ref, mutate){
+// [68 · S4] txUpdateList is GONE — it was the whole-list transaction that made the three
+// {list:[]} docs a contention point. Its replacement acts on ONE item:
+//
+// The guard still runs on FRESH server data inside the transaction (the [H-10] property
+// every caller was built around): the item's truth is its own doc if it has one,
+// otherwise the copy still sitting in the legacy array — read inside the SAME
+// transaction, so a racing decide can't slip between the read and the write. The write
+// always goes to the item doc; the legacy doc is never touched. `mutate` returning
+// null/undefined means "guard failed on fresh data" — no-op, exactly as before.
+async function txUpdateItem(colRef, legacyRef, id, mutate){
   let wrote=false;
   await runTransaction(db, async (tx)=>{
     wrote=false;                                 // reset per attempt (this callback re-runs on conflict)
-    const snap=await tx.get(ref);
-    const cur=(snap.exists()&&Array.isArray(snap.data().list))?snap.data().list:[];
-    const next=mutate(cur);
-    if(next===null||next===undefined) return;   // guard failed on fresh data — no-op
-    tx.set(ref,{list:next},{merge:true});
+    const iRef=doc(colRef,String(id));
+    const iSnap=await tx.get(iRef);
+    let cur=iSnap.exists()?iSnap.data():null;
+    if(!cur){
+      const lSnap=await tx.get(legacyRef);
+      const l=(lSnap.exists()&&Array.isArray(lSnap.data().list))?lSnap.data().list:[];
+      cur=l.find(x=>x&&x.id===id)||null;
+    }
+    if(!cur||cur._gone) return;                  // vanished / already deleted — no-op
+    const next=mutate({...cur});
+    if(next===null||next===undefined) return;    // guard failed on fresh data — no-op
+    tx.set(iRef,next);
     wrote=true;
   });
   return wrote;                                  // true only if the FINAL attempt committed a change
@@ -2139,7 +2174,7 @@ window.clearMonth=async function(){
 
 // ── Requests ──
 // ═══════════════════════════════════════════════════════════════════════════
-// §S08 · REQUESTS — owns: requests; writes: requestsRef (decideReq via §S06 checker)
+// §S08 · REQUESTS — owns: requests; writes: requests/items docs [68] (decideReq via §S06 checker)
 // ═══════════════════════════════════════════════════════════════════════════
 function renderRequests(){
   const pend=(requests.list||[]).filter(r=>r.status==='pending').sort((a,b)=>a.ts-b.ts);
@@ -2197,11 +2232,10 @@ window.decideReq=async function(id,status){
     }
   }
   let r=null;
-  const wrote=await txUpdateList(requestsRef, cur=>{
-    const item=cur.find(x=>x.id===id);
-    if(!item || item.status!=='pending'){ r=null; return null; } // already decided / vanished — abort
+  const wrote=await txUpdateItem(reqItemsCol, requestsRef, id, item=>{
+    if(item.status!=='pending'){ r=null; return null; } // already decided / vanished — abort
     r=item;
-    return cur.map(x=>x.id===id?{...x,status,decidedTs:Date.now()}:x);
+    return {...item,status,decidedTs:Date.now()};
   });
   if(!wrote || !r) return; // gate on the transaction's REAL outcome, not a flag set inside the retried closure
   if(status==='approved'&&r.date){
@@ -2212,19 +2246,15 @@ window.decideReq=async function(id,status){
     // one capacity-1 shift, approving the second still assigned it, silently double-booking
     // the date. Nothing auto-denies the loser, so this is reachable by ordinary admin use.
     if(r.type==='claim'&&r.openId){
-      const won=await txUpdateList(openRef, ol=>{
-        const o=ol.find(x=>x.id===r.openId);
-        if(!o || o.status!=='open') return null;   // already claimed/removed — we lose
-        return ol.map(x=>x.id===r.openId?{...x,status:'claimed',claimedBy:r.user}:x);
+      const won=await txUpdateItem(openItemsCol, openRef, r.openId, o=>{
+        if(o.status!=='open') return null;         // already claimed/removed — we lose
+        return {...o,status:'claimed',claimedBy:r.user};
       });
       if(!won){
         // Someone else already holds it. Undo our approval so the decided list can't show
         // an "approved" claim that was never assigned, and say why. No schedule write ran.
-        await txUpdateList(requestsRef, cur2=>{
-          const item=cur2.find(x=>x.id===id);
-          if(!item) return null;
-          return cur2.map(x=>x.id===id?{...x,status:'denied',decidedTs:Date.now(),autoDenied:'open shift already claimed'}:x);
-        });
+        await txUpdateItem(reqItemsCol, requestsRef, id, item=>
+          ({...item,status:'denied',decidedTs:Date.now(),autoDenied:'open shift already claimed'}));
         auditLog('request.decide','Auto-denied claim from '+displayName(r.user)+' ('+r.date+') — open shift already claimed by someone else');
         alert('That open shift has already been claimed by someone else.\n\nThe request was marked denied and nothing was assigned.');
         return;
@@ -2286,18 +2316,14 @@ window.decideReq=async function(id,status){
       console.error('decideReq apply failed:',applyErr);
       // Put the open shift back so it can be claimed again — we hold it but never used it.
       if(r.type==='claim'&&r.openId){
-        await txUpdateList(openRef, ol=>{
-          const o=ol.find(x=>x.id===r.openId);
-          if(!o || o.claimedBy!==r.user || o.status!=='claimed') return null; // someone else moved it on
-          return ol.map(x=>x.id===r.openId?{...x,status:'open',claimedBy:null}:x);
+        await txUpdateItem(openItemsCol, openRef, r.openId, o=>{
+          if(o.claimedBy!==r.user || o.status!=='claimed') return null; // someone else moved it on
+          return {...o,status:'open',claimedBy:null};
         }).catch(()=>{});
       }
       // Send the request back to pending so the admin can retry it.
-      await txUpdateList(requestsRef, cur3=>{
-        const item=cur3.find(x=>x.id===id);
-        if(!item) return null;
-        return cur3.map(x=>x.id===id?{...x,status:'pending',decidedTs:null}:x);
-      }).catch(()=>{});
+      await txUpdateItem(reqItemsCol, requestsRef, id, item=>
+        ({...item,status:'pending',decidedTs:null})).catch(()=>{});
       auditLog('request.decide','FAILED to apply '+r.type+' approval for '+displayName(r.user)+(r.date?' ('+r.date+')':'')+' — '+(applyErr?.message||applyErr)+'; request returned to pending');
       alert('Could not apply that approval to the schedule:\n\n'+(applyErr?.message||applyErr)+'\n\nNothing was assigned. The request was put back to pending so you can try again.');
       return;
@@ -2312,7 +2338,7 @@ window.decideReq=async function(id,status){
 // other user accepted, now waiting on admin) → approved (admin approves —
 // this is the only point the actual schedule swap executes) or denied.
 // ═══════════════════════════════════════════════════════════════════════════
-// §S09 · SWAPS — owns: swaps; writes: swapsRef (decideSwap via §S06 checker)
+// §S09 · SWAPS — owns: swaps; writes: swaps/items docs [68] (decideSwap via §S06 checker)
 // ═══════════════════════════════════════════════════════════════════════════
 function renderSwaps(){
   const waiting=(swaps.list||[]).filter(s=>s.status==='pending_target').sort((a,b)=>a.ts-b.ts);
@@ -2404,11 +2430,10 @@ window.decideSwap=async function(id,status){
     }
   }
   let s=null;
-  const wrote=await txUpdateList(swapsRef, cur=>{
-    const item=cur.find(x=>x.id===id);
-    if(!item || item.status!=='pending_admin'){ s=null; return null; } // already decided / vanished — abort
+  const wrote=await txUpdateItem(swapItemsCol, swapsRef, id, item=>{
+    if(item.status!=='pending_admin'){ s=null; return null; } // already decided / vanished — abort
     s=item;
-    return cur.map(x=>x.id===id?{...x,status,decidedTs:Date.now()}:x);
+    return {...item,status,decidedTs:Date.now()};
   });
   if(!wrote || !s) return; // gate on the transaction's REAL outcome, not a flag set inside the retried closure
   let applyErr=null;
@@ -2465,7 +2490,7 @@ window.decideSwap=async function(id,status){
 
 // ── Open shifts ──
 // ═══════════════════════════════════════════════════════════════════════════
-// §S10 · OPEN SHIFTS — owns: openShifts; writes: openShiftsRef
+// §S10 · OPEN SHIFTS — owns: openShifts; writes: openShifts/items docs [68]
 // ═══════════════════════════════════════════════════════════════════════════
 function fillOpenShiftSel(){
   const sel=document.getElementById('openShift'); if(!sel) return;
@@ -2479,9 +2504,10 @@ window.postOpen=async function(){
   const note=document.getElementById('openNote').value.trim();
   if(!date||!shiftId){ alert('Pick a date and shift.'); return; }
   const o={id:'o'+Date.now()+Math.floor(Math.random()*1e4),date,shiftId,note,status:'open',ts:Date.now()};
-  // [H-10] Append inside a transaction on the fresh list so posting an open shift can't
-  // wipe a claim or another post that arrived since the last snapshot.
-  await txUpdateList(openRef, cur=>[...cur,o]);
+  // [68 · S4] A create is now just its own document — no transaction needed, because a
+  // fresh random id cannot collide with anything. This is the whole point of the
+  // migration: posting an open shift no longer contends with claims or other posts.
+  await setDoc(doc(openItemsCol,o.id),o);
   // [50] Was unlogged. The Audit Log panel claims it records "everything that changes
   // real data" — posting and removing open shifts were the two exceptions.
   auditLog('open.post','Posted open shift '+(catalog.shifts?.[shiftId]?.label||shiftId)+' on '+date+(note?' — '+note:''));
@@ -2504,9 +2530,11 @@ window.removeOpen=async function(id){
   // [50] Capture what is being removed BEFORE the transaction — afterwards it is gone and
   // the audit entry would have nothing but an opaque id to report.
   const gone=(openShifts.list||[]).find(o=>o.id===id)||{};
-  // [H-10] Filter inside a transaction on the fresh list so removing one open shift can't
-  // clobber a concurrent claim/post on another.
-  await txUpdateList(openRef, cur=>cur.filter(o=>o.id!==id));
+  // [68 · S4] Deletion is a TOMBSTONE item doc, because the legacy array is never edited:
+  // an item marked _gone is dropped by the merge on every reader, whichever place the
+  // original lives. Removing one open shift touches one document — a concurrent
+  // claim/post on another is untouched by construction.
+  await txUpdateItem(openItemsCol, openRef, id, o=>({id:o.id,_gone:true,goneTs:Date.now()}));
   auditLog('open.remove','Removed open shift '+(catalog.shifts?.[gone.shiftId]?.label||gone.shiftId||id)
     +(gone.date?' on '+gone.date:'')+(gone.status==='claimed'?' (was claimed by '+displayName(gone.claimedBy)+')':''));
 };
@@ -5286,9 +5314,25 @@ authReady.then(()=>{
     renderAll();
   });
   onSnapshot(eligRef,snap=>{ elig=snap.exists()?snap.data():{}; renderAll(); });
-  onSnapshot(requestsRef,snap=>{ requests=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(requests.list))requests.list=[]; markDirty('requests','badges','dash'); });
-  onSnapshot(swapsRef,snap=>{ swaps=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(swaps.list))swaps.list=[]; markDirty('swaps','badges','dash'); });
-  onSnapshot(openRef,snap=>{ openShifts=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(openShifts.list))openShifts.list=[]; markDirty('open','openSel','dash'); });
+  // [68 · S4] TWO listeners per list — the frozen legacy array and the item docs —
+  // recombined into the same {list:[]} shape every renderer already reads. An item doc
+  // wins over a legacy entry with its id; _gone tombstones drop out entirely.
+  const mergeItems=(legacy,items)=>{
+    const out=[];
+    for(const l of legacy){ if(l&&l.id!=null&&!items.has(String(l.id))) out.push(l); }
+    for(const it of items.values()){ if(!it._gone) out.push(it); }
+    return out;
+  };
+  let _reqLegacy=[], _reqItems=new Map(), _swapLegacy=[], _swapItems=new Map(), _openLegacy=[], _openItems=new Map();
+  const _reMergeReq =()=>{ requests={list:mergeItems(_reqLegacy,_reqItems)};    markDirty('requests','badges','dash'); };
+  const _reMergeSwap=()=>{ swaps={list:mergeItems(_swapLegacy,_swapItems)};     markDirty('swaps','badges','dash'); };
+  const _reMergeOpen=()=>{ openShifts={list:mergeItems(_openLegacy,_openItems)}; markDirty('open','openSel','dash'); };
+  onSnapshot(requestsRef,snap=>{ const d=snap.exists()?snap.data():{}; _reqLegacy=Array.isArray(d.list)?d.list:[]; _reMergeReq(); });
+  onSnapshot(reqItemsCol,qs=>{ _reqItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeReq(); });
+  onSnapshot(swapsRef,snap=>{ const d=snap.exists()?snap.data():{}; _swapLegacy=Array.isArray(d.list)?d.list:[]; _reMergeSwap(); });
+  onSnapshot(swapItemsCol,qs=>{ _swapItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeSwap(); });
+  onSnapshot(openRef,snap=>{ const d=snap.exists()?snap.data():{}; _openLegacy=Array.isArray(d.list)?d.list:[]; _reMergeOpen(); });
+  onSnapshot(openItemsCol,qs=>{ _openItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeOpen(); });
   onSnapshot(totalsRef,snap=>{ totals=snap.exists()?snap.data():{}; });
   onSnapshot(callBaselineRef,snap=>{ baselineData=snap.exists()?snap.data():{}; markDirty('baseline'); });
   // [51] Reports. Both are dailysched documents — this site's own. Absent is a valid state:
