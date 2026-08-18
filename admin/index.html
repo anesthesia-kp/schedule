@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 66;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 67;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -234,6 +234,16 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
 @keyframes dayFlash{0%,35%{background:#fef08a!important}100%{background:inherit}}
 
 
+/* [67 · S3] Sticky + markers — the quick-wins batch (UX-PLAN §2/§7 item 3). */
+.gridwrap{overflow:auto;max-height:74vh;border:1px solid var(--b1);border-radius:10px;background:var(--s1)}
+table.grid thead th{position:sticky;top:0;z-index:3;background:var(--s2)}
+table.grid thead th.stick1{z-index:4}
+table.grid th.today,table.grid td.today{background:#e0f2fe!important;box-shadow:inset 0 0 0 1px #7dd3fc}
+table.grid th .hol{display:inline-block;width:6px;height:6px;border-radius:50%;background:#f59e0b;margin-left:3px;vertical-align:middle}
+table.grid tr.totrow td{background:var(--s2);font-weight:800;border-top:2px solid var(--b2)}
+.cat-head{position:sticky;top:0;z-index:3;background:var(--s2);display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:2px solid var(--b2);font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.04em;border-radius:10px 10px 0 0}
+.tp-fam{display:block;width:100%;font-size:10.5px;font-weight:800;color:var(--t2);margin:8px 0 4px;display:flex;align-items:center;gap:6px}
+.tp-fam .sw{width:11px;height:11px;border-radius:3px;border:1px solid rgba(0,0,0,.15)}
 /* NOTE (§S00): the admin sign-in gate has its own scoped <style> next to its markup — grep #authGate. */
 </style>
 </head>
@@ -361,7 +371,7 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
     </div>
     <div class="card" style="padding:10px 12px">
       <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Click any cell to assign a day shift, call, or day off. <b>VAC</b> comes from the auction automatically and cannot be edited here. Users see every change immediately.</div>
-      <div style="overflow-x:auto"><table class="grid" id="schedGrid"></table></div>
+      <div class="gridwrap"><table class="grid" id="schedGrid"></table></div>
     </div>
   </div>
 
@@ -567,7 +577,24 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
         <button class="btn btn-ghost" id="catSort_label"  style="font-size:11px" onclick="setCatSort('label')"  title="Straight A–Z by name">A–Z</button>
       </div>
       <div id="catTimeSummary" style="font-size:12px;line-height:1.6;margin-bottom:10px;padding:9px 12px;border-radius:9px;background:var(--s2);border:1px solid var(--b1)"></div>
-      <div id="catList"></div>
+      <!-- [67 · S3] Column labels that STAY while you scroll 90 shifts. Widths mirror the
+           row controls below (label 112 · times 62+62 · length 118 …) — close, not pixel-law,
+           because the rows wrap on narrow screens. -->
+      <div class="gridwrap" style="max-height:66vh">
+        <div class="cat-head">
+          <span style="width:112px">Shift</span>
+          <span style="width:28px">Kind</span>
+          <span style="width:136px">Times</span>
+          <span style="width:118px">Length</span>
+          <span style="width:18px" title="provisional times">?</span>
+          <span style="width:88px">Site</span>
+          <span style="width:96px">Demand</span>
+          <span style="width:64px">👥 Cap</span>
+          <span style="width:104px">Family</span>
+          <span style="width:64px">Role</span>
+        </div>
+        <div id="catList" style="padding:0 10px 10px"></div>
+      </div>
       <div style="font-size:11px;color:var(--t3);margin-top:9px;line-height:1.5">
         <b>Renaming is safe.</b> Type over a shift's name to change it — everything already assigned, every eligibility tick and every tag keeps working, because they refer to the shift by an internal id that never changes and is never shown to anyone. Only the name people read is different.
       </div>
@@ -612,11 +639,16 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
         <input type="date" class="inp" style="font-size:12px;padding:5px 8px" onchange="jumpToDate(this.value)">
       </label>
       <button id="statsRefreshBtn" class="btn btn-ghost" style="font-size:12px;display:none" onclick="refreshStatsYear()" title="Re-pull all 12 months in case something changed">🔄 Refresh</button>
+      <span style="width:1px;height:20px;background:var(--b2)"></span>
+      <div class="btn-group" id="statsViewGroup" style="display:flex;border:1px solid var(--b2);border-radius:8px;overflow:hidden">
+        <button class="btn btn-primary" id="statsViewFamBtn" style="font-size:12px;border-radius:0" onclick="setStatsView('fam')" title="One column per family — fits on one screen">By family</button>
+        <button class="btn" id="statsViewAllBtn" style="font-size:12px;border-radius:0" onclick="setStatsView('all')" title="Every shift as its own column — the full matrix">Every shift</button>
+      </div>
     </div>
     <div class="card" style="padding:10px 12px">
       <div id="statsHint" style="font-size:11px;color:var(--t2);margin-bottom:8px">Assignments per user for the month shown above — use the controls to jump to any month or year. Call columns highlighted — watch these for even distribution.</div>
       <div id="statsLoading" style="display:none;font-size:12px;color:var(--t2);padding:8px 0">Adding up all 12 months…</div>
-      <div style="overflow-x:auto"><table class="grid" id="statsGrid"></table></div>
+      <div class="gridwrap" style="max-height:70vh"><table class="grid" id="statsGrid"></table></div>
     </div>
   </div>
 
@@ -680,31 +712,6 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
       <span style="font-size:10px;font-weight:800;background:var(--s3);color:var(--t2);border-radius:999px;padding:2px 9px;vertical-align:middle;margin-left:6px">ADMIN ONLY</span></div>
     <div class="page-sub" style="margin-bottom:10px">Per doctor, for any period you choose: how many of each shift they did with overnight call first, every overnight call listed by date, and a comparison with the group adjusted for FTE. Opens in its own tab using the Vacation Auction's report stylesheet, so both sites produce identical-looking paperwork.</div>
 
-    <div class="lockbar" id="reportsLockBar"></div>
-
-    <div id="reportsLockable">
-      <div class="card">
-        <div class="card-title">Which shifts count as overnight call?</div>
-        <div class="tagpick" id="ocTagPick"></div>
-        <div id="ocTagState" style="font-size:11.5px;margin-top:8px"></div>
-        <div style="font-size:11.5px;color:var(--t2);margin-top:6px;line-height:1.5">
-          <b>You set this — nothing is worked out automatically.</b> It cannot be: shifts that cross midnight would sweep in <b>RCH-ICU B</b>, a night ICU shift, and everything in the call family would sweep in <b>Eye Call</b> (07:30–15:30) and <b>Call 12 AM</b> (07:30–19:30), which are daytime. Anything left unticked is simply not overnight call, whatever its name or hours suggest.
-        </div>
-        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary" style="font-size:12px" onclick="saveOvernightTag()">Save overnight-call list</button>
-          <button class="btn btn-ghost" style="font-size:12px" onclick="resetOvernightTag()">Back to Call 16 · Call 24 · OB PM</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">Who counts toward the group comparison?</div>
-        <div style="font-size:11.5px;color:var(--t2);margin-bottom:9px;line-height:1.5">
-          Everyone counts unless you untick them. Untick <b>per diem and locums</b> — they are still scheduled, still reported on in full, and still get their own numbers; they just don't affect anyone else's group average. Anyone with <b>no FTE set</b> is left out of the average automatically, because there is no way to work out their share, and the report says so on their page.
-        </div>
-        <div id="compPoolList" class="tagpick"></div>
-        <div style="margin-top:10px"><button class="btn btn-primary" style="font-size:12px" onclick="saveCompPool()">Save who counts</button></div>
-      </div>
-    </div>
 
     <div class="card">
       <div class="card-title">1 · Period</div>
@@ -750,6 +757,38 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
       </div>
       <button class="btn btn-primary" onclick="runFairnessView()">👁 Open fairness view</button>
     </div>
+
+    <!-- [67 · S3] The run cards come FIRST — running a report is the everyday job.
+         The two configuration lists (set once, revisited rarely) moved below them,
+         under the ⚙️ Settings fold at the bottom of this panel. -->
+    <details open id="reportsSettings" style="margin-top:2px">
+      <summary style="cursor:pointer;font-size:12.5px;font-weight:800;color:var(--t2);padding:7px 2px">⚙️ Settings — what counts as overnight call · who's in the comparison</summary>
+    <div class="lockbar" id="reportsLockBar"></div>
+
+    <div id="reportsLockable">
+      <div class="card">
+        <div class="card-title">Which shifts count as overnight call?</div>
+        <div class="tagpick" id="ocTagPick"></div>
+        <div id="ocTagState" style="font-size:11.5px;margin-top:8px"></div>
+        <div style="font-size:11.5px;color:var(--t2);margin-top:6px;line-height:1.5">
+          <b>You set this — nothing is worked out automatically.</b> It cannot be: shifts that cross midnight would sweep in <b>RCH-ICU B</b>, a night ICU shift, and everything in the call family would sweep in <b>Eye Call</b> (07:30–15:30) and <b>Call 12 AM</b> (07:30–19:30), which are daytime. Anything left unticked is simply not overnight call, whatever its name or hours suggest.
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" style="font-size:12px" onclick="saveOvernightTag()">Save overnight-call list</button>
+          <button class="btn btn-ghost" style="font-size:12px" onclick="resetOvernightTag()">Back to Call 16 · Call 24 · OB PM</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Who counts toward the group comparison?</div>
+        <div style="font-size:11.5px;color:var(--t2);margin-bottom:9px;line-height:1.5">
+          Everyone counts unless you untick them. Untick <b>per diem and locums</b> — they are still scheduled, still reported on in full, and still get their own numbers; they just don't affect anyone else's group average. Anyone with <b>no FTE set</b> is left out of the average automatically, because there is no way to work out their share, and the report says so on their page.
+        </div>
+        <div id="compPoolList" class="tagpick"></div>
+        <div style="margin-top:10px"><button class="btn btn-primary" style="font-size:12px" onclick="saveCompPool()">Save who counts</button></div>
+      </div>
+    </div>
+    </details>
   </div>
 
   <!-- AUDIT LOG -->
@@ -1619,9 +1658,14 @@ function renderGrid(){
   document.getElementById('monthLabel').textContent=MS[m-1]+' '+y;
   const nDays=new Date(y,m,0).getDate();
   const vac=vacationDays();
-  let head='<tr><th class="stick1" style="text-align:left">User</th>';
-  for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); head+='<th data-day="'+pad(d)+'" class="'+((wd===0||wd===6)?'wkend':'')+'">'+d+'<br>'+DS[wd]+'</th>'; }
-  head+='</tr>';
+  // [67] today is marked, holidays get a dot in the header, and the header row is
+  // sticky (CSS on thead th) — the grid finally scrolls without losing its dates.
+  const _t=new Date(); const todayDD=(curYM===_t.getFullYear()+'-'+pad(_t.getMonth()+1))?pad(_t.getDate()):null;
+  let head='<thead><tr><th class="stick1" style="text-align:left">User</th>';
+  for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); const dd=pad(d);
+    const hol=isHoliday(curYM+'-'+dd);
+    head+='<th data-day="'+dd+'" class="'+((wd===0||wd===6)?'wkend':'')+(dd===todayDD?' today':'')+'"'+(hol?' title="Holiday"':'')+'>'+d+(hol?'<span class="hol"></span>':'')+'<br>'+DS[wd]+'</th>'; }
+  head+='</tr></thead>';
   let rows='';
   for(const u of names){
     // [50] Sticky, like the eligibility grid's. At 31 day columns the name scrolled out
@@ -1633,11 +1677,11 @@ function renderGrid(){
       if(vac[u+'|'+dk]) bits.push('<span class="chipp" style="background:#bbf7d0;color:#065f46">VAC</span>');
       if(c.off) bits.push('<span class="chipp" style="background:#e2e8f0;color:#475569">OFF</span>');
       for(const id of shiftsOf(c)) bits.push(chipHtml(id));   // [52] a list, however many
-      rows+='<td data-day="'+dd+'" class="cell '+((wd===0||wd===6)?'wkend':'')+'" onclick="openCell(\''+esc(u)+'\',\''+dd+'\')">'+(bits.join('<br>')||'')+'</td>';
+      rows+='<td data-day="'+dd+'" class="cell '+((wd===0||wd===6)?'wkend':'')+(dd===todayDD?' today':'')+'" onclick="openCell(\''+esc(u)+'\',\''+dd+'\')">'+(bits.join('<br>')||'')+'</td>';
     }
     rows+='</tr>';
   }
-  g.innerHTML=head+rows;
+  g.innerHTML=head+'<tbody>'+rows+'</tbody>';
 }
 // How many people OTHER than `excludeUser` already hold shift `id` on day `dd` — used both
 // for the "(2/3 filled)" hint and the capacity warning.
@@ -2851,7 +2895,10 @@ window.removeSchedUser=async function(u){
 // that the reader can now find anything: columns grouped by family under a coloured
 // band, vertical labels (25px/column instead of ~70px), pinned header + person
 // column, per-person and per-shift counts, and filters.
-let _eligFam='';      // '' = all families ('__none' = the no-family group)
+let _eligFam=null;    // '' = all families ('__none' = the no-family group)
+// [67] null = "not chosen yet": the page opens on the FIRST family, not on all 92 shifts.
+// 80 people × one family is readable; 80 × 92 was the worst possible first impression
+// (UX-PLAN). "All" stays one click away and behaves exactly as before.
 let _eligKind='';     // '' | 'day' | 'call'
 const NOFAM='__none';
 const eligFamKeyOf=s=>(s.family||'')||NOFAM;
@@ -2924,6 +2971,11 @@ function eligVisibleUsers(){
 // ═══════════════════════════════════════════════════════════════════════════
 function renderElig(){
   const g=document.getElementById('eligGrid'); if(!g) return;
+  // [67 · S3] First open lands on ONE family, not the 90-column wall. Latch only once
+  // families actually exist: during the boot listener storm this can run before the
+  // catalog arrives, and latching '' then would silently turn the default back into
+  // "All" (null and '' both filter as all-families below, so an early paint is unchanged).
+  if(_eligFam===null){ const _o=eligFamilyOrder(); if(_o.length) _eligFam=_o[0]; }
   renderEligChips();
   const emptyEl=document.getElementById('eligEmpty');
   const showEl=document.getElementById('eligShowing');
@@ -4046,25 +4098,69 @@ function renderStats(){
   document.getElementById('statsMonth').textContent=MS[m-1]+' '+y;
   document.getElementById('statsHint').textContent='Assignments per user for the month shown above — use the controls to jump to any month or year. Call columns highlighted — watch these for even distribution.';
   document.getElementById('statsLoading').style.display='none';
+  // [67 · S3] SUMMARY FIRST. The old view was 94 columns × every user — a pivot dump
+  // whose own hint said "watch call columns for even distribution" while showing the
+  // wrong grain for that question. Default is now ONE COLUMN PER FAMILY (family color in
+  // the header — the same encoding as everywhere else) + Call total + Total + OFF + VAC,
+  // with a group-total row. "Every shift" remains one click away, now with a sticky name
+  // column and header it never had.
   const shifts=shiftList();
-  let head='<tr><th style="text-align:left">User</th>'+shifts.map(([id,s])=>'<th'+(s.kind==='call'?' style="background:#ede9fe"':'')+'>'+esc(s.label)+'</th>').join('')+'<th>OFF</th><th>VAC days</th></tr>';
   const vac=vacationDays();
   const nDays=new Date(y,m,0).getDate();
-  let rows='';
+  const perUser={};
   for(const u of names){
-    const c={}; let off=0, vd=0;
+    const c={}; let off=0, vd=0, call=0, tot=0;
     for(let d=1;d<=nDays;d++){
       const dd=pad(d), cell=cellOf(u,dd);
-      for(const id of shiftsOf(cell)) c[id]=(c[id]||0)+1;
+      for(const id of shiftsOf(cell)){ c[id]=(c[id]||0)+1; tot++; const sh=catalog.shifts?.[id]; if(sh&&sh.kind==='call') call++; }
       if(cell.off) off++;
       if(vac[u+'|'+curYM+'-'+dd]) vd++;
     }
-    rows+='<tr><td style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
-      +shifts.map(([id,s])=>'<td'+(s.kind==='call'?' style="background:#f5f3ff;font-weight:800"':'')+'>'+(c[id]||'')+'</td>').join('')
-      +'<td>'+(off||'')+'</td><td style="color:var(--green);font-weight:700">'+(vd||'')+'</td></tr>';
+    perUser[u]={c,off,vd,call,tot};
   }
-  g.innerHTML=head+rows;
+  let head,rows='';
+  if(statsView==='fam'){
+    const fams=eligFamilyOrder();
+    head='<thead><tr><th class="stick1" style="text-align:left">User</th>'
+      +fams.map(k=>'<th style="background:'+esc(eligFamColorOf(k))+';color:#1e293b">'+esc(eligFamLabelOf(k))+'</th>').join('')
+      +'<th style="background:#ede9fe">Call total</th><th>Total</th><th>OFF</th><th>VAC</th></tr></thead>';
+    const famOf=id=>{ const sh=catalog.shifts?.[id]; return sh?eligFamKeyOf(sh):null; };
+    const gtot={};
+    for(const u of names){
+      const p=perUser[u]; const byFam={};
+      for(const id in p.c){ const k=famOf(id); if(k!==null) byFam[k]=(byFam[k]||0)+p.c[id]; }
+      rows+='<tr><td class="stick1" style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
+        +fams.map(k=>{ gtot[k]=(gtot[k]||0)+(byFam[k]||0); return '<td>'+(byFam[k]||'')+'</td>'; }).join('')
+        +'<td style="background:#f5f3ff;font-weight:800">'+(p.call||'')+'</td><td style="font-weight:800">'+(p.tot||'')+'</td>'
+        +'<td>'+(p.off||'')+'</td><td style="color:var(--green);font-weight:700">'+(p.vd||'')+'</td></tr>';
+      gtot.__call=(gtot.__call||0)+p.call; gtot.__tot=(gtot.__tot||0)+p.tot; gtot.__off=(gtot.__off||0)+p.off; gtot.__vd=(gtot.__vd||0)+p.vd;
+    }
+    rows+='<tr class="totrow"><td class="stick1" style="text-align:left">Group total</td>'
+      +fams.map(k=>'<td>'+(gtot[k]||'')+'</td>').join('')
+      +'<td>'+(gtot.__call||'')+'</td><td>'+(gtot.__tot||'')+'</td><td>'+(gtot.__off||'')+'</td><td>'+(gtot.__vd||'')+'</td></tr>';
+  }else{
+    head='<thead><tr><th class="stick1" style="text-align:left">User</th>'+shifts.map(([id,s])=>'<th'+(s.kind==='call'?' style="background:#ede9fe"':'')+'>'+esc(s.label)+'</th>').join('')+'<th style="background:#ede9fe">Call total</th><th>Total</th><th>OFF</th><th>VAC</th></tr></thead>';
+    const gt={call:0,tot:0,off:0,vd:0};
+    for(const u of names){
+      const p=perUser[u];
+      rows+='<tr><td class="stick1" style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
+        +shifts.map(([id,s])=>'<td'+(s.kind==='call'?' style="background:#f5f3ff;font-weight:800"':'')+'>'+(p.c[id]||'')+'</td>').join('')
+        +'<td style="background:#f5f3ff;font-weight:800">'+(p.call||'')+'</td><td style="font-weight:800">'+(p.tot||'')+'</td>'
+        +'<td>'+(p.off||'')+'</td><td style="color:var(--green);font-weight:700">'+(p.vd||'')+'</td></tr>';
+      gt.call+=p.call; gt.tot+=p.tot; gt.off+=p.off; gt.vd+=p.vd;
+    }
+    rows+='<tr class="totrow"><td class="stick1" style="text-align:left">Group total</td>'+shifts.map(()=>'<td></td>').join('')
+      +'<td>'+(gt.call||'')+'</td><td>'+(gt.tot||'')+'</td><td>'+(gt.off||'')+'</td><td>'+(gt.vd||'')+'</td></tr>';
+  }
+  g.innerHTML=head+'<tbody>'+rows+'</tbody>';
 }
+let statsView='fam'; // [67] summary-first default; 'all' = the full matrix
+window.setStatsView=function(v){
+  statsView=(v==='all')?'all':'fam';
+  const f=document.getElementById('statsViewFamBtn'), a=document.getElementById('statsViewAllBtn');
+  if(f) f.className='btn'+(statsView==='fam'?' btn-primary':''); if(a) a.className='btn'+(statsView==='all'?' btn-primary':'');
+  renderStats();
+};
 // One-shot fetch of all 12 months for the visible year (curYM's year), NOT
 // a live subscription — cheap on Firestore reads and simple to reason
 // about, at the cost of needing a manual Refresh if data changes while
@@ -5006,9 +5102,20 @@ function renderReports(){
   const pick=document.getElementById('ocTagPick');
   if(pick){
     const list=shiftList();
-    pick.innerHTML = list.length
-      ? list.map(([id,s])=>`<span class="tp${on.has(id)?' on':''}" onclick="togOvernight('${esc(id)}')">${on.has(id)?'✓ ':''}${esc(s.label||id)}</span>`).join('')
-      : '<span style="font-size:11px;color:var(--t3)">No shifts in the catalog yet.</span>';
+    if(!list.length){ pick.innerHTML='<span style="font-size:11px;color:var(--t3)">No shifts in the catalog yet.</span>'; }
+    else{
+      // [67 · S3] Grouped under family headings with the family's colour, so "tick the
+      // call family" is one glance instead of a hunt through 90 flat chips.
+      const byFam=new Map();
+      for(const [id,s] of list){ const k=eligFamKeyOf(s); if(!byFam.has(k)) byFam.set(k,[]); byFam.get(k).push([id,s]); }
+      let h='';
+      for(const k of eligFamilyOrder()){
+        const rows=byFam.get(k)||[]; if(!rows.length) continue;
+        h+='<span class="tp-fam"><span class="sw" style="background:'+esc(eligFamColorOf(k))+'"></span>'+esc(eligFamLabelOf(k))+'</span>';
+        h+=rows.map(([id,s])=>`<span class="tp${on.has(id)?' on':''}" onclick="togOvernight('${esc(id)}')">${on.has(id)?'✓ ':''}${esc(s.label||id)}</span>`).join('');
+      }
+      pick.innerHTML=h;
+    }
   }
   const st=document.getElementById('ocTagState');
   if(st){
@@ -5021,13 +5128,21 @@ function renderReports(){
   }
   const cp=document.getElementById('compPoolList');
   if(cp){
-    cp.innerHTML = names.length
-      ? names.map(u=>{ const inP=compWorking(u), f=fteOf(u);
-          const noFte=(f===null||f<=0);
-          return `<span class="tp${inP&&!noFte?' on':''}${noFte?' warn':''}" onclick="togCompPool('${esc(u)}')">`
-            +`${inP?'✓ ':'✕ '}${esc(displayName(u))}<span class="m">${noFte?'no FTE':esc(String(f))}</span></span>`;
-        }).join('')
-      : '<span style="font-size:11px;color:var(--t3)">No users yet.</span>';
+    if(!names.length){ cp.innerHTML='<span style="font-size:11px;color:var(--t3)">No users yet.</span>'; }
+    else{
+      // [67 · S3] Two sections: the people with an FTE (the real decision), then the
+      // no-FTE group who are excluded automatically whatever their tick says.
+      const chip=u=>{ const inP=compWorking(u), f=fteOf(u);
+        const noFte=(f===null||f<=0);
+        return `<span class="tp${inP&&!noFte?' on':''}${noFte?' warn':''}" onclick="togCompPool('${esc(u)}')">`
+          +`${inP?'✓ ':'✕ '}${esc(displayName(u))}<span class="m">${noFte?'no FTE':esc(String(f))}</span></span>`; };
+      const hasFte=u=>{ const f=fteOf(u); return !(f===null||f<=0); };
+      const withF=names.filter(hasFte), noF=names.filter(u=>!hasFte(u));
+      let h='';
+      if(withF.length) h+='<span class="tp-fam">FTE set — you decide</span>'+withF.map(chip).join('');
+      if(noF.length)   h+='<span class="tp-fam">No FTE — left out of the average automatically</span>'+noF.map(chip).join('');
+      cp.innerHTML=h;
+    }
   }
   const who=document.getElementById('repWho');
   if(who){ const keep=who.value;
