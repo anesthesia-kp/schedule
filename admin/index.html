@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 65;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 66;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -1401,6 +1401,8 @@ window.nav=function(id,el){
   document.getElementById('panel-'+id).classList.add('on');
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
   if(el) el.classList.add('on');
+  // [66 · S2] entering a panel renders it fresh — data may have changed while hidden.
+  if(typeof PANEL_KEYS!=='undefined'&&PANEL_KEYS[id]) markDirty(...PANEL_KEYS[id]);
 };
 
 // ── Month ──
@@ -4256,7 +4258,70 @@ function renderDash(){
 // ═══════════════════════════════════════════════════════════════════════════
 // §S18 · RENDER ORCHESTRATION — the fan-out S2 will replace with dirty-flags
 // ═══════════════════════════════════════════════════════════════════════════
-function renderAll(){ if(cellSel) renderCellModal(); renderLegacyBanner(); renderRehearsal(); renderCatLock(); renderCoverage(); renderGrid(); renderRequests(); renderSwaps(); renderOpenAdmin(); renderElig(); renderCatalog(); renderFamilies(); renderStats(); renderUsersGrid(); renderUsersLock(); fillOpenShiftSel(); renderAudit(); renderDash(); renderBaseline(); renderReports(); }
+// [65→66 · S2] DIRTY-FLAG RENDERING. renderAll() used to synchronously rebuild ~20
+// panels — hidden ones included — on EVERY snapshot from ~14 listeners. That fan-out was
+// the disease behind the typing-eaten defects (12, [55], [64]): any arriving data rebuilt
+// the input you were typing in. Now: listeners MARK panels dirty; one animation-frame
+// flush renders (a) always-on chrome (badges, banners, the open cell modal) and (b) only
+// the panels you can actually see. Hidden panels render when you navigate to them —
+// nav() marks its target dirty, so entry is always fresh. The FIRST flush after sign-in
+// paints everything once, so the app opens fully drawn (and ~10 boot snapshots now cost
+// one paint, not ten full rebuilds).
+// The [64]/[55] mid-edit guards are UNCHANGED — they still protect the visible panel.
+// Test hooks: window.__lastFlush (keys rendered in the most recent flush),
+// window.__flushCount. Both exist for the battery, not for the page.
+const RENDER_FN={
+  dash:renderDash, grid:renderGrid, baseline:renderBaseline,
+  cellmodal:()=>{ if(cellSel) renderCellModal(); },
+  legacyBanner:renderLegacyBanner, rehearsal:renderRehearsal, catLock:renderCatLock,
+  requests:renderRequests, swaps:renderSwaps, open:renderOpenAdmin, openSel:fillOpenShiftSel,
+  users:renderUsersGrid, usersLock:renderUsersLock, adminAccess:renderAdminAccess,
+  elig:renderElig, catalog:renderCatalog, families:renderFamilies, stats:renderStats,
+  coverage:renderCoverage, audit:renderAudit, reports:renderReports, badges:renderBadges,
+};
+const PANEL_KEYS={
+  dash:['dash'], grid:['grid','baseline','cellmodal','legacyBanner'],
+  requests:['requests'], swaps:['swaps'], open:['open','openSel'],
+  users:['users','usersLock','adminAccess'], elig:['elig'],
+  catalog:['catalog','catLock'], families:['families'], stats:['stats'],
+  coverage:['coverage'], simulator:['rehearsal'], reports:['reports'], audit:['audit'],
+};
+// Always rendered even for hidden panels: nav badges, the unconverted-month banner (its
+// STATE gates writers), the rehearsal pill, the cell modal (floats over everything).
+const ALWAYS_KEYS=new Set(['badges','legacyBanner','rehearsal','cellmodal']);
+function renderBadges(){
+  const rb=document.getElementById('reqBadge');
+  if(rb){ const p=(requests.list||[]).filter(r=>r.status==='pending').length; rb.textContent=p?('('+p+')'):''; }
+  const sb=document.getElementById('swapBadge');
+  if(sb){ const p=(swaps.list||[]).filter(x=>x.status==='pending_admin').length; sb.textContent=p?('('+p+')'):''; }
+}
+let _dirty=new Set(), _flushQueued=false, _bootPainted=false;
+window.__flushCount=0; window.__lastFlush=[];
+function _currentPanelId(){ const p=document.querySelector('.panel.on'); return p?p.id.replace('panel-',''):'dash'; }
+function markDirty(...keys){
+  keys.forEach(k=>{ if(RENDER_FN[k]) _dirty.add(k); });
+  if(_flushQueued) return; _flushQueued=true;
+  requestAnimationFrame(_flushRender);
+}
+function _flushRender(){
+  _flushQueued=false;
+  const visible=new Set(PANEL_KEYS[_currentPanelId()]||[]);
+  const ran=[];
+  for(const k of [..._dirty]){
+    if(!_bootPainted||ALWAYS_KEYS.has(k)||visible.has(k)){
+      _dirty.delete(k);
+      try{ RENDER_FN[k](); ran.push(k); }catch(e){ console.warn('render '+k,e); }
+    }
+  }
+  // Boot mode ends only when the STRUCTURAL inputs have arrived (roster + catalog) —
+  // the boot listener storm arrives in arbitrary order, and locking "painted" after the
+  // first flush froze whichever grids rendered before their data landed.
+  if(!_bootPainted&&ran.length&&namesLoaded&&Object.keys(catalog.shifts||{}).length) _bootPainted=true;
+  window.__flushCount++; window.__lastFlush=ran;
+  if(_dirty.size&&[..._dirty].some(k=>ALWAYS_KEYS.has(k)||visible.has(k))){ _flushQueued=true; requestAnimationFrame(_flushRender); }
+}
+const ALL_KEYS=Object.keys(RENDER_FN);
+function renderAll(){ markDirty(...ALL_KEYS); }
 
 // ── Call-fairness baseline table (users × call shifts) ──
 function renderBaseline(){
@@ -5011,8 +5076,8 @@ authReady.then(()=>{
   });
   onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; usernamesLoaded=true; renderAll(); });
   onSnapshot(emailsRef,snap=>{ emailsData=snap.exists()?snap.data():{}; emailsLoaded=true; renderAll(); });
-  onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; loginEmailsLoaded=true; renderUsersGrid(); });
-  onSnapshot(adminAccessRef,snap=>{ adminAccessEmails=snap.exists()?(snap.data().emails||[]).map(x=>String(x).toLowerCase()):[]; renderAdminAccess(); });
+  onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; loginEmailsLoaded=true; markDirty('users'); });
+  onSnapshot(adminAccessRef,snap=>{ adminAccessEmails=snap.exists()?(snap.data().emails||[]).map(x=>String(x).toLowerCase()):[]; markDirty('adminAccess'); });
   onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); });
   onSnapshot(catalogRef,async snap=>{
@@ -5106,16 +5171,16 @@ authReady.then(()=>{
     renderAll();
   });
   onSnapshot(eligRef,snap=>{ elig=snap.exists()?snap.data():{}; renderAll(); });
-  onSnapshot(requestsRef,snap=>{ requests=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(requests.list))requests.list=[]; renderRequests(); });
-  onSnapshot(swapsRef,snap=>{ swaps=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(swaps.list))swaps.list=[]; renderSwaps(); });
-  onSnapshot(openRef,snap=>{ openShifts=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(openShifts.list))openShifts.list=[]; renderOpenAdmin(); });
+  onSnapshot(requestsRef,snap=>{ requests=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(requests.list))requests.list=[]; markDirty('requests','badges','dash'); });
+  onSnapshot(swapsRef,snap=>{ swaps=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(swaps.list))swaps.list=[]; markDirty('swaps','badges','dash'); });
+  onSnapshot(openRef,snap=>{ openShifts=snap.exists()?snap.data():{list:[]}; if(!Array.isArray(openShifts.list))openShifts.list=[]; markDirty('open','openSel','dash'); });
   onSnapshot(totalsRef,snap=>{ totals=snap.exists()?snap.data():{}; });
-  onSnapshot(callBaselineRef,snap=>{ baselineData=snap.exists()?snap.data():{}; renderBaseline(); });
+  onSnapshot(callBaselineRef,snap=>{ baselineData=snap.exists()?snap.data():{}; markDirty('baseline'); });
   // [51] Reports. Both are dailysched documents — this site's own. Absent is a valid state:
   // no tags doc means reports use the owner's starting set, and no compPool doc means
   // everybody counts. Neither is seeded automatically, so nothing is written on page load.
-  onSnapshot(tagsRef,snap=>{ tagsData=snap.exists()?snap.data():null; ocDraft=null; renderReports(); });
-  onSnapshot(compPoolRef,snap=>{ compPool=snap.exists()?snap.data():{}; compDraft=null; renderReports(); });
+  onSnapshot(tagsRef,snap=>{ tagsData=snap.exists()?snap.data():null; ocDraft=null; markDirty('reports'); });
+  onSnapshot(compPoolRef,snap=>{ compPool=snap.exists()?snap.data():{}; compDraft=null; markDirty('reports'); });
 });
 </script>
 </body>
