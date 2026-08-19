@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 34;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 35;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -478,7 +478,18 @@ const auditRef    = doc(db,"dailysched","auditLog"); // shared with admin's Audi
 // vacations — READ-ONLY: shared roster + approved vacation weeks
 const userListRef  = doc(db,"vacations","userList");
 const usernamesRef = doc(db,"vacations","usernames");
-const passcodesRef = doc(db,"vacations","passcodes");
+// ── [build 35 · FB-5 prep] THE PASSCODES LISTENER IS GONE ────────────────────
+// Passcodes are retired (START-HERE §3 rule 5). This page still held a live listener on
+// vacations/passcodes whose data was WRITTEN into passcodesData and then never read by
+// anything — verified by grep across the whole file before removing it. Worse, the
+// sign-in screen BLOCKED on it: signinReady() waited for a document belonging to a dead
+// feature before the Continue button would light up.
+// Removing it does three things: one fewer document read on EVERY page load for EVERY
+// client (see TODO FB-1's arithmetic), a marginally faster sign-in, and — the reason it
+// was done now — vacations/passcodes drops off the "must stay world-readable" list in
+// TODO FB-5, because no pre-sign-in code reads it any more.
+// NOT touched: the ADMIN page still uses this document (clear one password, clear all,
+// Reset Auction) and adminSettings.passcodesEnabled stays as a stored field.
 const vAdminRef    = doc(db,"vacations","adminSettings");
 const vPhasesRef   = doc(db,"vacations","phases");
 // [C-2] vacations/approvals holds LIVE mid-phase decisions — never read here. The
@@ -492,7 +503,7 @@ const _portalBypass = /[?&]portal=1(?:&|$)/.test(location.search);
 
 const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-let names=[], usernamesData={}, passcodesData={}, vAdmin={}, vPhases={};
+let names=[], usernamesData={}, vAdmin={}, vPhases={};
 let loginEmailsData={}; // {INITIALS: "their-google-email"} — shared doc mapping Google accounts to accounts
 let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, monthData={days:{}};
 let me=null, curYM=null, unsubMonth=null;
@@ -1173,15 +1184,15 @@ onAuthStateChanged(auth, async u => {
 // the picker — but signing in still takes an explicit click (and passcode,
 // if the admin has them on for this user). Nobody is ever signed in silently. ──
 let _schedRemembered=null;
-let _namesReadySched=false,_usernamesReadySched=false,_passcodesReadySched=false,_adminReadySched=false;
-function _schedSignInDataReady(){ return _namesReadySched&&_usernamesReadySched&&_passcodesReadySched&&_adminReadySched; }
+let _namesReadySched=false,_usernamesReadySched=false,_adminReadySched=false;
+function _schedSignInDataReady(){ return _namesReadySched&&_usernamesReadySched&&_adminReadySched; }
 function initSchedSigninScreen(){
   if(me) return; // already signed in this session
   const w=document.getElementById('signWelcome'), p=document.getElementById('signPicker');
   if(!w||!p) return;
   let remembered=null; try{ remembered=localStorage.getItem('schedUser'); }catch(_){}
   if(remembered){
-    // Hold both panels until the roster/usernames/passcodes/admin settings have
+    // Hold both panels until the roster/usernames/admin settings have
     // loaded (or the 1.5s fallback fires) — rendering earlier flashes raw
     // initials before the saved username swaps in.
     if(!_schedSignInDataReady()){ w.style.display='none'; p.style.display='none'; return; }
@@ -1261,8 +1272,8 @@ window.switchUser=function(){
 // console. Re-derive this number against measured timings if App Check is ever removed.
 setTimeout(()=>{
   if(!_schedSignInDataReady()){
-    console.warn('[Sign-in] Firestore did not respond in 3s — unlocking. Missing:',{names:!_namesReadySched,usernames:!_usernamesReadySched,passcodes:!_passcodesReadySched,adminSettings:!_adminReadySched});
-    _namesReadySched=_usernamesReadySched=_passcodesReadySched=_adminReadySched=true;
+    console.warn('[Sign-in] Firestore did not respond in 3s — unlocking. Missing:',{names:!_namesReadySched,usernames:!_usernamesReadySched,adminSettings:!_adminReadySched});
+    _namesReadySched=_usernamesReadySched=_adminReadySched=true;
     initSchedSigninScreen();
   }
 }, 3000);
@@ -1282,7 +1293,6 @@ onSnapshot(userListRef,snap=>{
   initSchedSigninScreen();
 });
 onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; _usernamesReadySched=true; renderAll(); initSchedSigninScreen(); });
-onSnapshot(passcodesRef,snap=>{ passcodesData=snap.exists()?snap.data():{}; _passcodesReadySched=true; initSchedSigninScreen(); });
 onSnapshot(vAdminRef,snap=>{ vAdmin=snap.exists()?snap.data():{}; _adminReadySched=true; initSchedSigninScreen(); });
 onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; });
 onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
