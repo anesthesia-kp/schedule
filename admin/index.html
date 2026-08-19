@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 71;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 72;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -267,6 +267,24 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
 .tp-fam{display:block;width:100%;font-size:10.5px;font-weight:800;color:var(--t2);margin:8px 0 4px;display:flex;align-items:center;gap:6px}
 .tp-fam .sw{width:11px;height:11px;border-radius:3px;border:1px solid rgba(0,0,0,.15)}
 /* NOTE (§S00): the admin sign-in gate has its own scoped <style> next to its markup — grep #authGate. */
+
+/* ── reCAPTCHA badge [build 72] ────────────────────────────────────────────────
+   Firebase App Check renders the reCAPTCHA v3 badge inside a container it creates
+   itself — div#fire_app_check_<firebaseAppName> — and puts an inline display:none on
+   that container. The badge is therefore present and fully working but INVISIBLE.
+   That is Firebase's behaviour, not a misconfiguration, and it is why the owner
+   reported "I don't see the recaptcha" after 281/146 went live.
+   Owner ruling (DECISIONS §65): SHOW it. Two reasons — he wants visible reCAPTCHA
+   because it reassures users, and showing the badge exactly as Google serves it is
+   also the one position that requires NO attribution text. Hiding it would oblige us
+   to carry Google's specified wording plus both of its links.
+   PREFIX selector, never a hardcoded id: the id embeds the Firebase app name, which
+   differs per page (user-site · the default app · sched-user-site · sched-admin).
+   Verified in a real browser against the live site BEFORE shipping — with this rule
+   the badge measures 294x69 at the bottom-right with the standard logo tab showing.
+   Do NOT restyle or reposition the badge itself; Google's terms allow showing it as
+   served or hiding it with attribution, and nothing in between. */
+div[id^="fire_app_check"]{display:block!important}
 </style>
 </head>
 <body>
