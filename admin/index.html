@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 68;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 70;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -241,6 +241,28 @@ table.grid thead th.stick1{z-index:4}
 table.grid th.today,table.grid td.today{background:#e0f2fe!important;box-shadow:inset 0 0 0 1px #7dd3fc}
 table.grid th .hol{display:inline-block;width:6px;height:6px;border-radius:50%;background:#f59e0b;margin-left:3px;vertical-align:middle}
 table.grid tr.totrow td{background:var(--s2);font-weight:800;border-top:2px solid var(--b2)}
+/* [69 - S5a] COVERAGE STRIP. A second sticky header row colouring each day by how much of
+   that day's demand is filled, so "where are the holes" is a scan for red rather than a
+   trip to another page. Heights are fixed so the second row's sticky offset is exact. */
+table.grid thead tr.dayrow th{height:30px}
+table.grid thead tr.covrow th{position:sticky;top:30px;z-index:3;font-size:9px;font-weight:800;padding:1px 2px;line-height:1.3}
+table.grid thead tr.covrow th.stick1{z-index:4;text-align:left;font-size:9.5px}
+table.grid th.cov-ok{background:#dcfce7!important;color:#166534}
+table.grid th.cov-warn{background:#fef3c7!important;color:#92400e}
+table.grid th.cov-bad{background:#fee2e2!important;color:#991b1b}
+table.grid th.cov-none{background:var(--s2)!important;color:var(--t3)}
+/* [69 - S5a] COMPACT DENSITY. A family-coloured block per shift instead of a text chip;
+   80 rows survive this where the chip list does not. */
+.mini{display:inline-block;width:9px;height:9px;border-radius:2px;margin:1px;vertical-align:middle}
+.minict{font-size:9px;font-weight:800;color:var(--t2);margin-left:1px;vertical-align:middle}
+/* [70 - S5b] SHIFTS-AS-ROWS. Shortfall is marked with an inset ring rather than a
+   background, so it stacks with the weekend and today tints instead of fighting them. */
+table.grid td.sshort{box-shadow:inset 0 0 0 2px #fca5a5}
+table.grid td.swarn{box-shadow:inset 0 0 0 2px #fcd34d}
+table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hidden;text-overflow:ellipsis}
+.swatch{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.who{display:inline-block;border-radius:4px;padding:0 4px;margin:1px;font-size:10px;font-weight:700;background:var(--s3);color:var(--t1)}
+.needct{font-size:9px;font-weight:800;color:var(--t3)}
 .cat-head{position:sticky;top:0;z-index:3;background:var(--s2);display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:2px solid var(--b2);font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.04em;border-radius:10px 10px 0 0}
 .tp-fam{display:block;width:100%;font-size:10.5px;font-weight:800;color:var(--t2);margin:8px 0 4px;display:flex;align-items:center;gap:6px}
 .tp-fam .sw{width:11px;height:11px;border-radius:3px;border:1px solid rgba(0,0,0,.15)}
@@ -333,6 +355,18 @@ table.grid tr.totrow td{background:var(--s2);font-weight:800;border-top:2px soli
       <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:4px">Jump to
         <input type="date" class="inp" style="font-size:12px;padding:5px 8px" onchange="jumpToDate(this.value)">
       </label>
+      <!-- [70 - S5b] View switch. People is the original grid; Shifts flips it so each
+           row is a shift and the cells name who is on it. Owner asked for both. -->
+      <span style="font-size:11px;color:var(--t2)">View</span>
+      <button class="btn" id="viewPeople" style="font-size:11.5px" onclick="setGridView('people')">People</button>
+      <button class="btn btn-ghost" id="viewShifts" style="font-size:11.5px" onclick="setGridView('shifts')">Shifts</button>
+      <span style="width:1px;height:18px;background:var(--b1)"></span>
+      <!-- [69 - S5a] Density switch. Detail keeps the text chips; Compact swaps them for
+           family-coloured blocks so 80 rows stay readable. The choice is remembered. -->
+      <span style="width:1px;height:18px;background:var(--b1)"></span>
+      <span style="font-size:11px;color:var(--t2)">Density</span>
+      <button class="btn" id="densDetail" style="font-size:11.5px" onclick="setGridDensity('detail')">Detail</button>
+      <button class="btn btn-ghost" id="densCompact" style="font-size:11.5px" onclick="setGridDensity('compact')">Compact</button>
       <span style="flex:1"></span>
       <!-- [53] Auto-Populate and Clear Month moved to Testing → Simulator (DECISIONS §45).
            They are testing tools, not daily work, and this is a page people use every day. -->
@@ -1138,6 +1172,16 @@ const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 // §S02 · GLOBAL STATE — every top-level mutable; sections below name what they own
 // ═══════════════════════════════════════════════════════════════════════════
 let names=[], usernamesData={}, emailsData={}, loginEmailsData={}, adminAccessEmails=[], vPhases={}, vApprovals={};
+// [69 - S5a] Owned by the schedule grid. 'detail' keeps the text chips, 'compact' swaps
+// them for family-coloured blocks. Remembered across reloads; a browser that refuses
+// storage simply starts on detail every time.
+let gridDensity='detail';
+try{ const _gd=localStorage.getItem('dsGridDensity'); if(_gd==='compact'||_gd==='detail') gridDensity=_gd; }catch(_){}
+// [70 - S5b] Which way round the grid is drawn. 'people' is the original — one row per
+// person. 'shifts' flips it: one row per shift, and the cells name who is on it. Owner
+// asked for both, so neither is the "real" one.
+let gridView='people';
+try{ const _gv=localStorage.getItem('dsGridView'); if(_gv==='shifts'||_gv==='people') gridView=_gv; }catch(_){}
 let auditLogData={log:[]};      // the MERGED view every renderer already reads
 let auditLegacy=[], auditEntries=[];
 // Newest first, de-duplicated by id — an entry written before build 63 exists only in the
@@ -1306,6 +1350,64 @@ window.setCatSort=function(v){ catSort=v; renderCatalog(); };
 // recoloring a family (setFamilyColor) instantly recolors every member shift
 // everywhere in the app without having to rewrite each shift document.
 function shiftColor(s){ return (s?.family && catalog.families?.[s.family]?.color) || s?.color || '#fef9c3'; }
+// [69 - S5a] Compact cell contents: one small family-coloured block per shift, capped at
+// three with a "+n" so a busy cell cannot blow the row height. Title attributes carry the
+// labels, so nothing is lost - it moves from always-on text to on-hover.
+function cellBlocksHtml(c,onVac){
+  const out=[];
+  if(onVac) out.push('<span class="mini" style="background:#bbf7d0" title="Vacation"></span>');
+  if(c.off) out.push('<span class="mini" style="background:#e2e8f0" title="Day off"></span>');
+  const ids=shiftsOf(c);
+  for(const id of ids.slice(0,3)){ const sh=catalog.shifts?.[id]||{};
+    out.push('<span class="mini" style="background:'+esc(shiftColor(sh))+'" title="'+esc(sh.label||id)+'"></span>'); }
+  if(ids.length>3) out.push('<span class="minict">+'+(ids.length-3)+'</span>');
+  return out.join('');
+}
+// [70 - S5b] One row per SHIFT, cells naming who holds it. Read-only by design: a cell
+// here can hold several people, and there is no obvious single thing a click should edit,
+// so editing stays in the people view rather than inventing a second editor.
+function gridShiftRows(y,m,nDays,todayDD){
+  let out='';
+  for(const [id,sh] of shiftList()){
+    out+='<tr><td class="stick1 srow1" title="'+esc(sh.label||id)+'">'
+       +'<span class="swatch" style="background:'+esc(shiftColor(sh))+'"></span>'+esc(sh.label||id)+'</td>';
+    for(let d=1;d<=nDays;d++){
+      const dd=pad(d), wd=new Date(y,m-1,d).getDay(), dt=new Date(y,m-1,d);
+      const dayCells=(monthData.days&&monthData.days[dd])||{};
+      const who=[];
+      for(const u of names) if(holdsShift(dayCells[u]||{},id)) who.push(u);
+      const need=demandOn(sh,dt);
+      let mark='';
+      if(need!==null&&need!==undefined&&who.length<need) mark=(who.length>=need/2)?' swarn':' sshort';
+      let inner;
+      if(gridDensity==='compact'){
+        inner=who.length?('<b>'+who.length+'</b>'):'';
+        if(need!==null&&need!==undefined) inner+='<span class="needct">/'+need+'</span>';
+      } else {
+        inner=who.map(u=>'<span class="who">'+esc(displayName(u))+'</span>').join('');
+        if(need!==null&&need!==undefined&&who.length<need) inner+='<span class="needct"> '+who.length+'/'+need+'</span>';
+      }
+      const ttl=(sh.label||id)+' - '+(who.length?who.map(displayName).join(', '):'nobody')
+        +((need===null||need===undefined)?'':' (needs '+need+')');
+      out+='<td data-day="'+dd+'" class="cell'+((wd===0||wd===6)?' wkend':'')+(dd===todayDD?' today':'')+mark
+         +'" title="'+esc(ttl)+'">'+inner+'</td>';
+    }
+    out+='</tr>';
+  }
+  return out;
+}
+window.setGridView=function(mode){
+  if(mode!=='people'&&mode!=='shifts') return;
+  gridView=mode;
+  try{ localStorage.setItem('dsGridView',mode); }catch(_){}
+  renderGrid();
+};
+window.setGridDensity=function(mode){
+  if(mode!=='compact'&&mode!=='detail') return;
+  gridDensity=mode;
+  try{ localStorage.setItem('dsGridDensity',mode); }catch(_){}
+  renderGrid();
+};
 function chipHtml(id){ const s=catalog.shifts?.[id]||{}; return '<span class="chipp" style="background:'+esc(shiftColor(s))+'">'+esc(s.label||id)+'</span>'; }
 function allowed(u,id){ return elig?.[u]?.[id]===true; }
 
@@ -1696,27 +1798,57 @@ function renderGrid(){
   // [67] today is marked, holidays get a dot in the header, and the header row is
   // sticky (CSS on thead th) — the grid finally scrolls without losing its dates.
   const _t=new Date(); const todayDD=(curYM===_t.getFullYear()+'-'+pad(_t.getMonth()+1))?pad(_t.getDate()):null;
-  let head='<thead><tr><th class="stick1" style="text-align:left">User</th>';
+  // [69 - S5a] The coverage strip reads the SAME coverageRows the coverage report uses.
+  const _cov=coverageRows(curYM,monthData.days||{});
+  const covBy=_cov.byDay||{}, showCov=!!_cov.demanded;
+  let head='<thead><tr class="dayrow"><th class="stick1" style="text-align:left">User</th>';
   for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); const dd=pad(d);
     const hol=isHoliday(curYM+'-'+dd);
     head+='<th data-day="'+dd+'" class="'+((wd===0||wd===6)?'wkend':'')+(dd===todayDD?' today':'')+'"'+(hol?' title="Holiday"':'')+'>'+d+(hol?'<span class="hol"></span>':'')+'<br>'+DS[wd]+'</th>'; }
-  head+='</tr></thead>';
+  head+='</tr>';
+  if(showCov){
+    head+='<tr class="covrow"><th class="stick1" title="Unfilled demand for each day">Coverage</th>';
+    for(let d=1;d<=nDays;d++){ const dd=pad(d); const cv=covBy[dd]||{need:0,have:0,short:0};
+      let cls='cov-none', txt='&middot;', ttl='No demand set for this day';
+      if(cv.need>0){
+        if(cv.short<=0){ cls='cov-ok'; txt='&#10003;'; ttl='Fully covered - '+cv.have+' of '+cv.need; }
+        else { cls=(cv.have/cv.need>=0.5)?'cov-warn':'cov-bad'; txt='-'+cv.short;
+               ttl=cv.short+' unfilled of '+cv.need+' needed'; }
+      }
+      head+='<th class="'+cls+'" title="'+ttl+'">'+txt+'</th>';
+    }
+    head+='</tr>';
+  }
+  head+='</thead>';
   let rows='';
-  for(const u of names){
+  if(gridView==='shifts'){ rows=gridShiftRows(y,m,nDays,todayDD); }
+  else for(const u of names){
     // [50] Sticky, like the eligibility grid's. At 31 day columns the name scrolled out
     // of view and you lost track of whose row you were editing.
     rows+='<tr><td class="stick1" style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>';
     for(let d=1;d<=nDays;d++){
       const dd=pad(d), dk=curYM+'-'+dd, wd=new Date(y,m-1,d).getDay();
-      const c=cellOf(u,dd); const bits=[];
-      if(vac[u+'|'+dk]) bits.push('<span class="chipp" style="background:#bbf7d0;color:#065f46">VAC</span>');
+      const c=cellOf(u,dd); const onVac=!!vac[u+'|'+dk]; let inner;
+      if(gridDensity==='compact'){ inner=cellBlocksHtml(c,onVac); }
+      else {
+      const bits=[];
+      if(onVac) bits.push('<span class="chipp" style="background:#bbf7d0;color:#065f46">VAC</span>');
       if(c.off) bits.push('<span class="chipp" style="background:#e2e8f0;color:#475569">OFF</span>');
       for(const id of shiftsOf(c)) bits.push(chipHtml(id));   // [52] a list, however many
-      rows+='<td data-day="'+dd+'" class="cell '+((wd===0||wd===6)?'wkend':'')+(dd===todayDD?' today':'')+'" onclick="openCell(\''+esc(u)+'\',\''+dd+'\')">'+(bits.join('<br>')||'')+'</td>';
+      inner=bits.join('<br>'); }
+      rows+='<td data-day="'+dd+'" class="cell '+((wd===0||wd===6)?'wkend':'')+(dd===todayDD?' today':'')+'" onclick="openCell(\''+esc(u)+'\',\''+dd+'\')">'+(inner||'')+'</td>';
     }
     rows+='</tr>';
   }
   g.innerHTML=head+'<tbody>'+rows+'</tbody>';
+  const bP=document.getElementById('viewPeople'), bS=document.getElementById('viewShifts');
+  if(bP) bP.className='btn'+(gridView==='people'?'':' btn-ghost');
+  if(bS) bS.className='btn'+(gridView==='shifts'?'':' btn-ghost');
+  // Active-state paint for the density buttons. The guard keeps renderGrid safe on a boot
+  // where the toolbar markup has not been reached yet.
+  const bD=document.getElementById('densDetail'), bC=document.getElementById('densCompact');
+  if(bD) bD.className='btn'+(gridDensity==='detail'?'':' btn-ghost');
+  if(bC) bC.className='btn'+(gridDensity==='compact'?'':' btn-ghost');
 }
 // How many people OTHER than `excludeUser` already hold shift `id` on day `dd` — used both
 // for the "(2/3 filled)" hint and the capacity warning.
@@ -4266,9 +4398,13 @@ function coverageRows(ym,days){
   const [y,m]=ym.split('-').map(Number);
   const nDays=new Date(y,m,0).getDate();
   const rows=[]; let need=0, have=0, shiftsWithDemand=0;
+  // [69 - S5a] Per-day roll-up for the grid's coverage strip. Built in this same loop so
+  // the strip can never disagree with the coverage report - one computation, two readers.
+  const byDay={};
   for(const [,sh] of shiftList()) if(demandRules(sh).length) shiftsWithDemand++;
   for(let d=1;d<=nDays;d++){
     const dd=pad(d), dt=new Date(y,m-1,d);
+    byDay[dd]={need:0,have:0,short:0};
     const cell=(days&&days[dd])||{};
     const counts={};
     for(const u in cell) for(const id of shiftsOf(cell[u])) counts[id]=(counts[id]||0)+1;
@@ -4277,11 +4413,12 @@ function coverageRows(ym,days){
       if(n===null) continue;               // never asked for — not a gap (§9)
       const f=counts[id]||0;
       need+=n; have+=Math.min(f,n);
+      byDay[dd].need+=n; byDay[dd].have+=Math.min(f,n); byDay[dd].short+=Math.max(0,n-f);
       if(f!==n) rows.push({dd,date:dKey(dt),dow:DOW_SHORT[dt.getDay()],id,label:sh.label||id,
                            need:n,filled:f,short:n-f,holiday:isHoliday(dKey(dt))});
     }
   }
-  return {rows,need,have,shiftsWithDemand,
+  return {rows,need,have,shiftsWithDemand,byDay,
           pct:need?Math.round(have/need*100):null,
           demanded:need>0||shiftsWithDemand>0};
 }
