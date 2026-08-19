@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 33;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 34;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -383,9 +383,15 @@ table.grid .wkend{background:var(--s3)}
             Sign in with Google
           </button>
           <div id="signErr" style="font-size:12px;color:#b91c1c;margin-top:8px"></div>
-          <div style="margin-top:14px;font-size:.72rem;line-height:1.5;color:#5b7088;background:rgba(0,107,166,.06);border:1px solid rgba(0,107,166,.16);border-radius:8px;padding:8px 10px"><span style="display:block;font-size:.82rem;font-weight:700;color:#006ba6;margin-bottom:3px">🔒 Secured by Google sign-in and reCAPTCHA.</span>This site never sees or stores your password.<span style="display:block;margin-top:7px;font-size:.64rem;line-height:1.45;color:#7a8b9c">This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" style="color:#7a8b9c;text-decoration:underline">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" style="color:#7a8b9c;text-decoration:underline">Terms of Service</a> apply.</span></div>
         <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:#3b566d;cursor:pointer;margin-top:14px"><input type="checkbox" id="signRememberMe" checked> Remember me on this device</label>
         </div>
+        <!-- [build 34 · FB-6] OUTSIDE both sign-in panels ON PURPOSE. This box was inside the
+             picker panel, and "Remember me" is checked by default — so every returning user got the
+             WELCOME BACK panel and never saw it. That hid the reassurance the owner asked for AND,
+             since build 283/148 hid the reCAPTCHA badge, the attribution Google REQUIRES to be
+             visible in the user flow. One copy here, under whichever panel is showing — do not
+             duplicate it into the panels, that only drifts. -->
+        <div style="margin-top:14px;font-size:.72rem;line-height:1.5;color:#5b7088;background:rgba(0,107,166,.06);border:1px solid rgba(0,107,166,.16);border-radius:8px;padding:8px 10px"><span style="display:block;font-size:.82rem;font-weight:700;color:#006ba6;margin-bottom:3px">🔒 Secured by Google sign-in and reCAPTCHA.</span>This site never sees or stores your password.<span style="display:block;margin-top:7px;font-size:.64rem;line-height:1.45;color:#7a8b9c">This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" style="color:#7a8b9c;text-decoration:underline">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" style="color:#7a8b9c;text-decoration:underline">Terms of Service</a> apply.</span></div>
       </div>
     </div>
   </div>
