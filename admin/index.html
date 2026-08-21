@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 75;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 76;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -2817,6 +2817,13 @@ async function syncEmailToUserFromLogin(){
     schedToast((e&&e.code==='permission-denied')
       ?'E-mail saved, but the auction bid-security map needs a Vacation Auction admin — open the Vacation admin site once to auto-sync'
       :'E-mail saved, but the login map sync failed — open the Vacation admin site to re-sync','err');
+    // [76 · RA-M7] Every caller follows this await with its own success toast, which
+    // REPLACED the warning above within the same second — a failed bid-security-map sync
+    // read as a green "Saved" (and the physician's bid writes stay rejected until someone
+    // opens the Vacation admin site). Two backstops: a persistent audit-log row, and the
+    // warning re-issued AFTER the caller's toast has painted.
+    try{ auditLog('user.syncFail','⚠️ Bid-security map sync FAILED after an e-mail change — open the Vacation admin site to re-sync'); }catch(_){ }
+    setTimeout(()=>{ try{ schedToast('⚠️ Heads up: the auction bid-security map sync FAILED just now — open the Vacation admin site to re-sync','err'); }catch(_){ } },2500);
     return false;
   }
 }
