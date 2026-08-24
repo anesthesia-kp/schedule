@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 81;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 83;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -230,29 +230,46 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
 .dash-sub{font-size:12px;color:var(--t2);margin-bottom:10px}
 .dash-list{font-size:12px;color:var(--t2)}
 .dash-list .rowline{padding:5px 0}
-/* [81 - S6] THE DAY BOARD. auto-fit + minmax is the whole responsive story: one column on a
-   phone, as many as fit on a monitor, with no breakpoint to maintain. Defect 17 says this
-   page has no responsive rule anywhere - this block does not fix that, it just declines to
-   add to it. */
-.bd-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
-.bd-site{border:1px solid var(--b1);border-radius:10px;padding:10px 12px;background:var(--s2)}
-.bd-site h4{margin:0 0 2px;font-size:11px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em}
-.bd-site .bd-count{font-size:11px;color:var(--t3);margin-bottom:4px}
-.bd-row{padding:7px 0;border-top:1px dashed var(--b1);font-size:12.5px}
-.bd-row.first{border-top:0}
-.bd-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.bd-pill{font-size:9.5px;font-weight:800;letter-spacing:.04em;border-radius:999px;padding:1px 7px;text-transform:uppercase;white-space:nowrap}
-.bd-now{background:#dcfce7;color:#065f46}
-.bd-later{background:var(--s3);color:var(--t2)}
-.bd-done{background:var(--s3);color:var(--t3)}
-.bd-untimed{background:#fef3c7;color:#92400e}
-.bd-short{color:var(--red);font-weight:800}
-.bd-ok{color:var(--t3)}
-.bd-people{margin-top:3px;color:var(--t1);line-height:1.6}
-.bd-people a{color:var(--t1);text-decoration:none;border-bottom:1px dotted var(--b2)}
-.bd-people a:hover{border-bottom-style:solid}
+/* [82 - §93] THE DAY BOARD, REBUILT. The owner rejected the first version as cluttered and
+   said what he actually wants: to see WHO IS WORKING, at a glance, cleanly. So the board is
+   now one thing - a printed-assignment-sheet table, grouped in shift families, ordered by
+   start time. Everything that is not a person working today is a single quiet line of
+   numbers under it, each opening a drawer. auto-fit columns are gone with the site columns;
+   the table scrolls sideways on a narrow screen rather than reflowing into a mess. */
+.bd-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.bd-date{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.bd-clock{font-size:11.5px;color:var(--t3)}
+.bd-link{font-size:11.5px;color:var(--t2);cursor:pointer;text-decoration:underline}
+.bd-scroll{overflow-x:auto}
+.bd-sheet{width:100%;border-collapse:collapse;font-size:13.5px}
+.bd-sheet th{font-size:10px;font-weight:800;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;text-align:left;padding:0 10px 5px 0;white-space:nowrap}
+.bd-sheet td{padding:6px 10px 6px 0;border-top:1px solid var(--b1);vertical-align:baseline}
+.bd-sheet td:first-child{padding-left:9px}
+.bd-fam td{border-top:0;padding:14px 0 3px}
+.bd-fam:first-child td{padding-top:2px}
+.bd-fam span{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--t2);border-radius:4px;padding:1px 7px}
+.bd-t{font-family:var(--mono);font-size:12.5px;color:var(--t2);white-space:nowrap;width:1%}
+.bd-p{font-weight:700;color:var(--t1);white-space:nowrap}
+/* A name is not a link until you reach for it: a dotted rule under all 30 of them turned the
+   sheet into a page of underlines. The mailto stays; it just stops shouting. */
+.bd-p a{color:inherit;text-decoration:none}
+.bd-p a:hover{border-bottom:1px solid var(--b2)}
+.bd-s{color:var(--t2);white-space:nowrap}
+.bd-site{color:var(--t3);font-size:12px;white-space:nowrap}
+.bd-r.on td{background:#f0fdf4}
+.bd-r.on .bd-t,.bd-r.on .bd-p{color:#065f46}
+.bd-r.on td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+.bd-pill{font-size:9.5px;font-weight:800;letter-spacing:.04em;border-radius:999px;padding:1px 7px;text-transform:uppercase;white-space:nowrap;background:#dcfce7;color:#065f46}
+.bd-pill.later{background:var(--s3);color:var(--t3)}
 .bd-none{color:var(--t3);font-style:italic}
-.bd-strip{font-size:12px;color:var(--t2);margin-top:12px;line-height:1.6}
+.bd-foot{font-size:11.5px;color:var(--t3);margin-top:12px}
+.bd-stats{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 0}
+.bd-stat{font:inherit;font-size:12px;color:var(--t2);background:var(--s1);border:1px solid var(--b1);border-radius:999px;padding:5px 12px;cursor:pointer}
+.bd-stat:hover{border-color:var(--b2);color:var(--t1)}
+.bd-stat.on{background:var(--t1);border-color:var(--t1);color:#fff}
+.bd-stat b{color:inherit;font-weight:800}
+.bd-drawer{margin-top:8px;border:1px solid var(--b1);border-radius:10px;padding:12px 14px;background:var(--s2);font-size:12.5px}
+.bd-drawer[hidden]{display:none}
 .day-flash{animation:dayFlash 1.6s ease-out}
 @keyframes dayFlash{0%,35%{background:#fef08a!important}100%{background:inherit}}
 
@@ -341,59 +358,58 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   <!-- DASHBOARD -->
   <div class="panel on" id="panel-dash">
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Today</div>
-    <div class="page-sub" style="margin-bottom:12px">Who is on, where, and who is on right now.</div>
+    <div class="page-sub" style="margin-bottom:12px">Who is working, and who is on right now.</div>
 
-    <!-- [81 · S6] THE DAY BOARD — the landing block. -->
+    <!-- [82 · §93] THE DAY BOARD. The owner's ruling: who IS working is the page; who is not
+         is a number, not a list; clean beats complete. So this card holds ONE thing. -->
     <div class="card" id="bdCard">
-      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:2px">
-        <div class="card-title" style="margin:0">The day board</div>
-        <div id="bdDateLine" style="font-size:14px;font-weight:800"></div>
-        <div id="bdClock" style="font-size:11.5px;color:var(--t3)"></div>
+      <div class="bd-top">
+        <div class="bd-date" id="bdDateLine"></div>
+        <div class="bd-clock" id="bdClock"></div>
         <span style="flex:1"></span>
-        <a onclick="nav('grid',document.querySelector('nav a[onclick*=grid]'))"
-           style="font-size:11.5px;color:var(--t2);cursor:pointer;text-decoration:underline">Any other day → Schedule Grid</a>
+        <a class="bd-link" onclick="nav('grid',document.querySelector('nav a[onclick*=grid]'))">Any other day → Schedule Grid</a>
       </div>
-      <div id="bdSummary" class="dash-sub" style="margin-bottom:10px">&nbsp;</div>
       <div id="bdBody"></div>
-      <div id="bdStrips"></div>
-      <div id="bdFoot" style="font-size:11px;color:var(--t3);margin-top:12px;line-height:1.55"></div>
+      <div class="bd-foot" id="bdFoot"></div>
     </div>
 
-    <div class="page-sub" style="margin:18px 0 10px">Everything else at a glance — click any card to jump to its full page.</div>
-    <div class="dash-cols">
-
-      <div class="card big-card" onclick="nav('requests',document.querySelector('nav a[onclick*=requests]'))">
-        <div class="card-title">Pending Requests</div>
-        <div class="dash-stat" id="dashReqCount">0</div>
-        <div class="dash-sub" id="dashReqSub">Nothing waiting.</div>
-        <div class="dash-list" id="dashReqList"></div>
-      </div>
-
-      <div class="card big-card" onclick="nav('swaps',document.querySelector('nav a[onclick*=swaps]'))">
-        <div class="card-title">Pending Swaps</div>
-        <div class="dash-stat" id="dashSwapCount">0</div>
-        <div class="dash-sub" id="dashSwapSub">Nothing waiting.</div>
-        <div class="dash-list" id="dashSwapList"></div>
-      </div>
-
-      <div class="card big-card" onclick="nav('grid',document.querySelector('nav a[onclick*=grid]'))">
-        <div class="card-title">This Month's Coverage</div>
-        <div class="dash-stat" id="dashCoveragePct">—</div>
-        <div class="dash-sub" id="dashCoverageSub">&nbsp;</div>
-      </div>
-
-      <div class="card big-card" onclick="nav('audit',document.querySelector('nav a[onclick*=audit]'))">
-        <div class="card-title">Latest Activity</div>
-        <div class="dash-sub" id="dashAuditSub">&nbsp;</div>
-        <div class="dash-list" id="dashAuditList"></div>
-      </div>
-
-      <div class="card big-card" onclick="nav('users',document.querySelector('nav a[onclick*=users]'))">
-        <div class="card-title">Roster &amp; FTE</div>
-        <div class="dash-stat" id="dashUserCount">0</div>
-        <div class="dash-sub" id="dashUserSub">&nbsp;</div>
-      </div>
-
+    <!-- The five dashboard cards, reduced to one line of numbers that open on a click.
+         EVERY id the old cards carried is kept exactly as it was, so renderDash() did not
+         change at all — a layout change that rewrites a working renderer is two changes. -->
+    <div class="bd-stats">
+      <button class="bd-stat" onclick="bdToggle('req',this)"><b id="dashReqCount">0</b> requests</button>
+      <button class="bd-stat" onclick="bdToggle('swap',this)"><b id="dashSwapCount">0</b> swaps</button>
+      <button class="bd-stat" onclick="bdToggle('cov',this)">coverage <b id="dashCoveragePct">—</b></button>
+      <button class="bd-stat" onclick="bdToggle('vac',this)"><b id="bdVacCount">0</b> on vacation today</button>
+      <button class="bd-stat" onclick="bdToggle('users',this)"><b id="dashUserCount">0</b> people</button>
+      <button class="bd-stat" onclick="bdToggle('audit',this)">latest change</button>
+    </div>
+    <div class="bd-drawer" id="bdDrawer-req" hidden>
+      <div class="dash-sub" id="dashReqSub">Nothing waiting.</div>
+      <div class="dash-list" id="dashReqList"></div>
+      <a class="bd-link" onclick="nav('requests',document.querySelector('nav a[onclick*=requests]'))">Open Requests →</a>
+    </div>
+    <div class="bd-drawer" id="bdDrawer-swap" hidden>
+      <div class="dash-sub" id="dashSwapSub">Nothing waiting.</div>
+      <div class="dash-list" id="dashSwapList"></div>
+      <a class="bd-link" onclick="nav('swaps',document.querySelector('nav a[onclick*=swaps]'))">Open Swaps →</a>
+    </div>
+    <div class="bd-drawer" id="bdDrawer-cov" hidden>
+      <div class="dash-sub" id="dashCoverageSub">&nbsp;</div>
+      <a class="bd-link" onclick="nav('coverage',document.querySelector('nav a[onclick*=coverage]'))">Open Coverage →</a>
+    </div>
+    <div class="bd-drawer" id="bdDrawer-vac" hidden>
+      <div class="dash-sub">Away today, from the auction's approved vacation weeks.</div>
+      <div class="dash-list" id="bdVacList"></div>
+    </div>
+    <div class="bd-drawer" id="bdDrawer-users" hidden>
+      <div class="dash-sub" id="dashUserSub">&nbsp;</div>
+      <a class="bd-link" onclick="nav('users',document.querySelector('nav a[onclick*=users]'))">Open Users →</a>
+    </div>
+    <div class="bd-drawer" id="bdDrawer-audit" hidden>
+      <div class="dash-sub" id="dashAuditSub">&nbsp;</div>
+      <div class="dash-list" id="dashAuditList"></div>
+      <a class="bd-link" onclick="nav('audit',document.querySelector('nav a[onclick*=audit]'))">Open Audit Log →</a>
     </div>
   </div>
 
@@ -4393,8 +4409,11 @@ window.famDrop=function(ev,fkey){
 function renderFamilies(){
   const board=document.getElementById('famBoard'); if(!board) return;
   renderFamilyNewColorPicker();
-  const fams=Object.entries(catalog.families||{}).sort((a,b)=>a[1].label.localeCompare(b[1].label));
-  const cols=[['',{label:'Unassigned',color:'#f1f5f9'}],...fams];
+  // [83 · §94] Same comparator as the day board, so the two pages can never drift apart.
+  // Unassigned used to lead this row as a drop target; the owner's order puts it last.
+  const fams=Object.entries(catalog.families||{});
+  const cols=[['',{label:'Unassigned',color:'#f1f5f9'}],...fams]
+    .sort((a,b)=>bdFamCmp({label:a[1].label},{label:b[1].label}));
   board.innerHTML=cols.map(([fkey,f])=>{
     const members=shiftList().filter(([,s])=>(s.family||'')===fkey);
     const chips=members.map(([id,s])=>`<div draggable="true" ondragstart="famDragStart(event,'${esc(id)}')" class="chipp" style="cursor:grab;display:block;margin-bottom:4px;background:${esc(shiftColor(s))}">${esc(s.label)}</div>`).join('')||'<div style="font-size:11px;color:var(--t3)">Drop shifts here</div>';
@@ -4817,112 +4836,172 @@ function bdCellsOn(dt){
 function bdPerson(u){
   const em=emailsData[u]||'';
   const nm=esc(displayName(u));
-  return em?('<a href="mailto:'+esc(em)+'" title="'+esc(em)+'">'+nm+'</a>'):(nm+' <span class="bd-none" title="No KP e-mail on the Users page">· no e-mail</span>');
+  // A name is a name. [81] appended "· no e-mail" when there was no KP address, which put a
+  // small piece of admin housekeeping on every row of a sheet meant to be GLANCED at (§93).
+  // Whose address is missing is a Users-page question, and the Users page already answers it.
+  return em?('<a href="mailto:'+esc(em)+'" title="'+esc(em)+'">'+nm+'</a>'):nm;
 }
-function bdPillHtml(state){
-  if(state==='now')     return '<span class="bd-pill bd-now">on now</span>';
-  if(state==='later')   return '<span class="bd-pill bd-later">later today</span>';
-  if(state==='done')    return '<span class="bd-pill bd-done">finished</span>';
-  if(state==='untimed') return '<span class="bd-pill bd-untimed">no times</span>';
-  return '';
+// ── the sheet [82 · §93] ──────────────────────────────────────────────────────────────────
+// Small and pure on purpose: the suite executes these rather than screenshotting a page.
+function bdFamOf(sh){
+  const fam=(catalog.families||{})[sh&&sh.family];
+  // "Unassigned" is the owner's word for a shift with no family, and it is the same word the
+  // Families page uses for the column those shifts sit in (§94).
+  return {label:(fam&&fam.label)||'Unassigned', color:(fam&&fam.color)||''};
 }
+// Inside a family: by start time, untimed last, then the catalog's own order, then name.
+// Untimed shifts sort last rather than first, because a sheet is read top-down as a day.
+function bdRowSort(a,b){
+  const at=a.start?hhmmToMin(a.start):99999, bt=b.start?hhmmToMin(b.start):99999;
+  if(at!==bt) return at-bt;
+  // Normalise BEFORE comparing. Two shifts with no `order` both give NaN, and NaN!==NaN is
+  // TRUE — so the old shape returned 0 from the order branch and never reached the name,
+  // leaving those rows in whatever order the object happened to yield. Caught by the suite.
+  const ao=isNaN(Number(a.order))?99:Number(a.order), bo=isNaN(Number(b.order))?99:Number(b.order);
+  if(ao!==bo) return ao-bo;
+  return a.name<b.name?-1:(a.name>b.name?1:0);
+}
+// ── §94 · THE FAMILY ORDER IS THE OWNER'S, NOT A HEURISTIC ───────────────────────────────
+// "Call at top, then AP, then weekday daytime, then ob, then richmond, then pediatric, then
+// PCV, then ICU, then admin, then unassigned." Build 82 inferred the order — call family
+// first (from `kind`), rest alphabetical. A named order beats an inferred one; do not put
+// the inference back.
+//
+// TWO orders live here and they are deliberately different. RANK is his list. MATCHING is
+// tried most-specific-first, so a family called "Richmond Daytime" lands under Richmond and
+// not under weekday daytime. A family he did not name sorts alphabetically AFTER the ten and
+// BEFORE Unassigned — the department can invent families this list has never heard of, and
+// they must appear somewhere predictable rather than be dropped or guessed at (§22).
+const BD_FAM_ORDER=[
+  {rank:0, re:/\bcall\b/},
+  {rank:1, re:/\bap\b|acute\s*pain/},
+  {rank:4, re:/richmond/},
+  {rank:5, re:/pediatric|paediatric|\bpeds\b/},
+  {rank:6, re:/\bpcv\b/},
+  {rank:7, re:/\bicu\b|critical\s*care/},
+  {rank:3, re:/\bob\b|obstetric/},
+  {rank:8, re:/\badmin/},
+  {rank:2, re:/weekday|daytime/},
+];
+function bdFamRank(label){
+  const t=String(label==null?'':label).toLowerCase().trim();
+  if(t==='unassigned') return 999;
+  for(let i=0;i<BD_FAM_ORDER.length;i++) if(BD_FAM_ORDER[i].re.test(t)) return BD_FAM_ORDER[i].rank;
+  return 500;
+}
+function bdFamCmp(a,b){
+  const ra=bdFamRank(a.label), rb=bdFamRank(b.label);
+  if(ra!==rb) return ra-rb;
+  return a.label<b.label?-1:(a.label>b.label?1:0);
+}
+window.bdRowSort=bdRowSort; window.bdFamOf=bdFamOf; window.bdFamCmp=bdFamCmp; window.bdFamRank=bdFamRank;   // HANDOFF trap 1
+
 function renderBoard(){
   const body=document.getElementById('bdBody'); if(!body) return;
-  const dateLine=document.getElementById('bdDateLine'), clock=document.getElementById('bdClock');
-  const sum=document.getElementById('bdSummary'), strips=document.getElementById('bdStrips'), foot=document.getElementById('bdFoot');
+  const dateEl=document.getElementById('bdDateLine'), clockEl=document.getElementById('bdClock');
+  const foot=document.getElementById('bdFoot');
   const now=new Date(), todayKey=dKey(now);
-  if(dateLine) dateLine.innerHTML=esc(DOW_SHORT[now.getDay()]+' '+now.getDate()+' '+MS[now.getMonth()]+' '+now.getFullYear())
-    +(isHoliday(todayKey)?' <span class="bd-pill bd-untimed">holiday</span>':'');
-  if(clock) clock.textContent='as of '+pad(now.getHours())+':'+pad(now.getMinutes());
+  if(dateEl) dateEl.innerHTML=esc(DOW_SHORT[now.getDay()]+' '+now.getDate()+' '+MS[now.getMonth()]+' '+now.getFullYear())
+    +(isHoliday(todayKey)?' <span class="bd-pill later">holiday</span>':'');
+  if(clockEl) clockEl.textContent='as of '+pad(now.getHours())+':'+pad(now.getMinutes());
   bdEnsureSubs();
   bdStartTicker();
-
-  if(!namesLoaded){ body.innerHTML='<div class="bd-none">Loading the roster…</div>'; if(sum) sum.innerHTML='&nbsp;'; if(strips) strips.innerHTML=''; if(foot) foot.innerHTML=''; return; }
-  if(!Object.keys(catalog.shifts||{}).length){
-    body.innerHTML='<div class="bd-none">There are no shifts in the catalog yet, so there is nothing to be on. Add them on the Shift Catalog page.</div>';
-    if(sum) sum.innerHTML='&nbsp;'; if(strips) strips.innerHTML=''; if(foot) foot.innerHTML=''; return;
-  }
+  const say=(html)=>{ body.innerHTML=html; if(foot) foot.innerHTML=''; };
+  if(!namesLoaded) return say('<div class="bd-none">Loading the roster…</div>');
+  if(!Object.keys(catalog.shifts||{}).length) return say('<div class="bd-none">There are no shifts in the catalog yet, so nobody can be on one. Add them on the Shift Catalog page.</div>');
 
   const yest=bdPrevDay(now), yestKey=dKey(yest);
   const minsNow=now.getHours()*60+now.getMinutes();
   const tDay=bdCellsOn(now), yDay=bdCellsOn(yest);
+  if(!tDay.ready) return say('<div class="bd-none">Loading today’s assignments…</div>');
 
-  if(!tDay.ready){ body.innerHTML='<div class="bd-none">Loading today’s assignments…</div>'; if(sum) sum.innerHTML='&nbsp;'; if(strips) strips.innerHTML=''; if(foot) foot.innerHTML=''; return; }
-
-  const onToday={}, spill={};
-  for(const u in tDay.cells) for(const id of shiftsOf(tDay.cells[u])){ if(!onToday[id]) onToday[id]=[]; onToday[id].push(u); }
+  // ONE row per person per shift. This sheet answers who IS working (§93) — it is built from
+  // the people who are on, never from the catalog, so an empty day is empty and not a list of
+  // shifts nobody is on.
+  const rows=[];
+  const push=(u,id,since)=>{
+    const sh=(catalog.shifts||{})[id]||{};
+    const state=since?'now':bdShiftState(sh.start,sh.end,todayKey,todayKey,yestKey,minsNow);
+    rows.push({u:u,name:displayName(u),id:id,sh:sh,start:sh.start||'',order:sh.order,
+               site:sh.site||'',state:state,since:!!since,fam:bdFamOf(sh)});
+  };
+  for(const u in tDay.cells) for(const id of shiftsOf(tDay.cells[u])) push(u,id,false);
   for(const u in yDay.cells) for(const id of shiftsOf(yDay.cells[u])){
     const sh=(catalog.shifts||{})[id]||{};
-    if(bdShiftState(sh.start,sh.end,yestKey,todayKey,yestKey,minsNow)==='now'){ if(!spill[id]) spill[id]=[]; spill[id].push(u); }
+    if(bdShiftState(sh.start,sh.end,yestKey,todayKey,yestKey,minsNow)==='now') push(u,id,true);
   }
 
-  const bySite={}, peopleToday={}; let runningNow=0, gapCount=0, needTotal=0, demandedShifts=0;
+  // Shortfall is a FOOT NOTE, not a section: it comes from demandOn(), the same function the
+  // Coverage page uses, so the two can never tell different stories.
+  let short=0;
+  const onCount={};
+  for(const r of rows) if(!r.since) onCount[r.id]=(onCount[r.id]||0)+1;
   for(const [id,sh] of shiftList()){
-    if(demandRules(sh).length) demandedShifts++;
     const need=demandOn(sh,now);
-    const who=(onToday[id]||[]).slice().sort(), still=(spill[id]||[]).slice().sort();
-    if(need===null&&!who.length&&!still.length) continue;   // never asked for, nobody on it (§9)
-    const state=bdShiftState(sh.start,sh.end,todayKey,todayKey,yestKey,minsNow);
-    for(const u of who) peopleToday[u]=true;
-    if(state==='now') runningNow+=who.length;
-    runningNow+=still.length;
-    if(need!==null){ needTotal+=need; if(who.length<need) gapCount+=(need-who.length); }
-    const site=sh.site||'';
-    if(!bySite[site]) bySite[site]=[];
-    bySite[site].push({id:id,sh:sh,who:who,still:still,need:need,state:state});
+    if(need!==null) short+=Math.max(0,need-(onCount[id]||0));
   }
-
-  const order=siteList().slice();
-  for(const site in bySite) if(site&&order.indexOf(site)<0) order.push(site);
-  if(bySite['']) order.push('');
-  let html='';
-  for(const site of order){
-    const rows=bySite[site]; if(!rows||!rows.length) continue;
-    let onHere=0; for(const r of rows) onHere+=r.who.length+r.still.length;
-    let inner='';
-    rows.forEach((r,i)=>{
-      const times=(r.sh.start&&r.sh.end)?(esc(r.sh.start)+'–'+esc(r.sh.end)):'';
-      let cover='';
-      if(r.need!==null){
-        cover=r.who.length<r.need
-          ? '<span class="bd-short">'+r.who.length+' of '+r.need+' · '+(r.need-r.who.length)+' short</span>'
-          : '<span class="bd-ok">'+r.who.length+' of '+r.need+'</span>';
-      }
-      let people=r.who.length?r.who.map(bdPerson).join(' · '):'<span class="bd-none">nobody assigned</span>';
-      if(r.still.length) people+='<div style="margin-top:2px"><span class="bd-pill bd-now">still on from yesterday</span> '+r.still.map(bdPerson).join(' · ')+'</div>';
-      inner+='<div class="bd-row'+(i?'':' first')+'">'
-        +'<div class="bd-head">'+chipHtml(r.id)
-        +(times?'<span class="mono" style="font-size:11px;color:var(--t2)">'+times+'</span>':'')
-        +bdPillHtml(r.state)+cover+'</div>'
-        +'<div class="bd-people">'+people+'</div></div>';
-    });
-    html+='<div class="bd-site"><h4>'+(site?esc(site):'No site set')+'</h4>'
-      +'<div class="bd-count">'+onHere+' '+(onHere===1?'person':'people')+' on</div>'+inner+'</div>';
-  }
-  body.innerHTML=html?('<div class="bd-cols">'+html+'</div>')
-    :'<div class="bd-none">Nothing is assigned today, and no shift is being asked for today.</div>';
 
   const vac=vacationDays(), onVac=names.filter(u=>vac[u+'|'+todayKey]);
-  const free=names.filter(u=>!peopleToday[u]&&!vac[u+'|'+todayKey]);
-  if(strips) strips.innerHTML=
-     '<div class="bd-strip"><b>On vacation today · '+onVac.length+'</b> — '
-      +(onVac.length?onVac.map(u=>esc(displayName(u))).join(', '):'<span class="bd-none">nobody</span>')+'</div>'
-    +'<div class="bd-strip"><b>Not on anything today · '+free.length+'</b> — '
-      +(free.length?free.map(u=>esc(displayName(u))).join(', '):'<span class="bd-none">nobody</span>')+'</div>';
+  const vc=document.getElementById('bdVacCount'); if(vc) vc.textContent=onVac.length;
+  const vl=document.getElementById('bdVacList');
+  if(vl) vl.innerHTML=onVac.length?onVac.map(u=>'<div class="rowline">'+esc(displayName(u))+'</div>').join('')
+    :'<div class="bd-none">Nobody is away today.</div>';
 
-  const nOn=Object.keys(peopleToday).length;
-  let s1=nOn+' '+(nOn===1?'person is':'people are')+' on today · '+runningNow+' on right now';
-  if(!demandedShifts) s1+=' · nothing is being asked for yet (no shift has demand rules, which is not the same as being covered)';
-  else if(!needTotal)  s1+=' · nothing is asked for on this day';
-  else s1+=' · '+(gapCount?('<span class="bd-short">'+gapCount+' place'+(gapCount===1?'':'s')+' short</span>'):'fully covered against what is asked for');
-  if(sum) sum.innerHTML=s1;
+  if(!rows.length){
+    body.innerHTML='<div class="bd-none">Nobody is assigned to a shift today.</div>'
+      +'<div style="margin-top:8px"><a class="bd-link" onclick="nav(\'grid\',document.querySelector(\'nav a[onclick*=grid]\'))">Assign people on the Schedule Grid →</a></div>';
+    if(foot) foot.innerHTML=short?('<b style="color:var(--red)">'+short+' place'+(short===1?'':'s')+'</b> asked for today and nobody on them.'):'';
+    return;
+  }
 
-  const notes=['“On now” uses each shift’s catalog times, and a shift belongs to the day it starts — so an overnight shift that began yesterday counts as on now until it ends.'];
-  if(tDay.legacy) notes.push('This month is still stored in the old per-month format. The board reads it, but the grid stays read-only until it is converted.');
-  if(!yDay.ready) notes.push('Yesterday is in a month this page has not finished loading, so any overnight shift that started then is not shown yet.');
-  notes.push('Shortfalls use the same demand rules as the Coverage page. Contact numbers are deliberately not held anywhere on this site (§91).');
-  if(foot) foot.innerHTML=notes.map(t=>'· '+esc(t)).join('<br>');
+  const anySite=rows.some(r=>r.site);
+  const fams={};
+  for(const r of rows){
+    if(!fams[r.fam.label]) fams[r.fam.label]=[];
+    fams[r.fam.label].push(r);
+  }
+  const famNames=Object.keys(fams).map(l=>({label:l})).sort(bdFamCmp).map(x=>x.label);
+  const cols=anySite?5:4;
+  let html='<div class="bd-scroll"><table class="bd-sheet"><tr><th>Time</th><th>Who</th><th>Shift</th>'
+    +(anySite?'<th>Site</th>':'')+'<th></th></tr>';
+  for(const fname of famNames){
+    const list=fams[fname].slice().sort(bdRowSort);
+    const c=list[0].fam.color;
+    html+='<tr class="bd-fam"><td colspan="'+cols+'"><span'+(c?' style="background:'+esc(c)+'"':'')+'>'+esc(fname)+'</span></td></tr>';
+    for(const r of list){
+      const t=r.sh.start&&r.sh.end?(esc(r.sh.start)+'–'+esc(r.sh.end)):'<span class="bd-none">no times</span>';
+      // ON NOW is the only thing worth a badge. A "later" pill on every row before 07:00
+      // meant the whole sheet wore one at 02:00 — the time column already says when.
+      let pill='';
+      if(r.since) pill='<span class="bd-pill" title="A shift belongs to the day it starts, so this one began yesterday and has not ended yet.">on now · since yesterday</span>';
+      else if(r.state==='now') pill='<span class="bd-pill">on now</span>';
+      html+='<tr class="bd-r'+(r.state==='now'?' on':'')+'">'
+        +'<td class="bd-t">'+t+'</td>'
+        +'<td class="bd-p">'+bdPerson(r.u)+'</td>'
+        +'<td class="bd-s">'+esc(r.sh.label||r.id)+'</td>'
+        +(anySite?'<td class="bd-site">'+esc(r.site)+'</td>':'')
+        +'<td style="text-align:right">'+pill+'</td></tr>';
+    }
+  }
+  html+='</table></div>';
+  body.innerHTML=html;
+
+  const notes=[];
+  if(short) notes.push('<b style="color:var(--red)">'+short+' place'+(short===1?'':'s')+' short</b> of what today asks for');
+  if(tDay.legacy) notes.push('this month is still in the old storage format — the grid is read-only until it is converted');
+  if(!yDay.ready) notes.push('yesterday is in a month still loading, so an overnight shift that started then may be missing');
+  if(foot) foot.innerHTML=notes.join(' · ');
 }
+
+// One drawer at a time — the whole point of §93 is that this page stays quiet.
+window.bdToggle=function(key,el){
+  const d=document.getElementById('bdDrawer-'+key); if(!d) return;
+  const opening=d.hasAttribute('hidden');
+  const ds=document.querySelectorAll('.bd-drawer'); for(let i=0;i<ds.length;i++) ds[i].setAttribute('hidden','');
+  const bs=document.querySelectorAll('.bd-stat'); for(let i=0;i<bs.length;i++) bs[i].classList.remove('on');
+  if(opening){ d.removeAttribute('hidden'); if(el) el.classList.add('on'); }
+};
+
 function bdStartTicker(){
   if(_bdTick) return;
   // Marks dirty only — the flush renders the board just when it is the visible panel, and
