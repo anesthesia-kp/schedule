@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 80;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 81;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -230,6 +230,29 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
 .dash-sub{font-size:12px;color:var(--t2);margin-bottom:10px}
 .dash-list{font-size:12px;color:var(--t2)}
 .dash-list .rowline{padding:5px 0}
+/* [81 - S6] THE DAY BOARD. auto-fit + minmax is the whole responsive story: one column on a
+   phone, as many as fit on a monitor, with no breakpoint to maintain. Defect 17 says this
+   page has no responsive rule anywhere - this block does not fix that, it just declines to
+   add to it. */
+.bd-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.bd-site{border:1px solid var(--b1);border-radius:10px;padding:10px 12px;background:var(--s2)}
+.bd-site h4{margin:0 0 2px;font-size:11px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em}
+.bd-site .bd-count{font-size:11px;color:var(--t3);margin-bottom:4px}
+.bd-row{padding:7px 0;border-top:1px dashed var(--b1);font-size:12.5px}
+.bd-row.first{border-top:0}
+.bd-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.bd-pill{font-size:9.5px;font-weight:800;letter-spacing:.04em;border-radius:999px;padding:1px 7px;text-transform:uppercase;white-space:nowrap}
+.bd-now{background:#dcfce7;color:#065f46}
+.bd-later{background:var(--s3);color:var(--t2)}
+.bd-done{background:var(--s3);color:var(--t3)}
+.bd-untimed{background:#fef3c7;color:#92400e}
+.bd-short{color:var(--red);font-weight:800}
+.bd-ok{color:var(--t3)}
+.bd-people{margin-top:3px;color:var(--t1);line-height:1.6}
+.bd-people a{color:var(--t1);text-decoration:none;border-bottom:1px dotted var(--b2)}
+.bd-people a:hover{border-bottom-style:solid}
+.bd-none{color:var(--t3);font-style:italic}
+.bd-strip{font-size:12px;color:var(--t2);margin-top:12px;line-height:1.6}
 .day-flash{animation:dayFlash 1.6s ease-out}
 @keyframes dayFlash{0%,35%{background:#fef08a!important}100%{background:inherit}}
 
@@ -285,7 +308,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
 <body>
 <nav>
   <div class="brand">SCHEDULER ADMIN</div>
-  <a onclick="nav('dash',this)" class="on">📊 Dashboard</a>
+  <a onclick="nav('dash',this)" class="on">📋 Today</a>
   <a onclick="nav('grid',this)">📅 Schedule Grid</a>
   <a onclick="nav('requests',this)">📥 Requests <span id="reqBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
   <a onclick="nav('swaps',this)">🔁 Swaps <span id="swapBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
@@ -317,8 +340,26 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
 
   <!-- DASHBOARD -->
   <div class="panel on" id="panel-dash">
-    <div class="page-title" style="font-size:16px;margin-bottom:4px">Dashboard</div>
-    <div class="page-sub" style="margin-bottom:12px">Everything at a glance — click any card to jump to its full page.</div>
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Today</div>
+    <div class="page-sub" style="margin-bottom:12px">Who is on, where, and who is on right now.</div>
+
+    <!-- [81 · S6] THE DAY BOARD — the landing block. -->
+    <div class="card" id="bdCard">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:2px">
+        <div class="card-title" style="margin:0">The day board</div>
+        <div id="bdDateLine" style="font-size:14px;font-weight:800"></div>
+        <div id="bdClock" style="font-size:11.5px;color:var(--t3)"></div>
+        <span style="flex:1"></span>
+        <a onclick="nav('grid',document.querySelector('nav a[onclick*=grid]'))"
+           style="font-size:11.5px;color:var(--t2);cursor:pointer;text-decoration:underline">Any other day → Schedule Grid</a>
+      </div>
+      <div id="bdSummary" class="dash-sub" style="margin-bottom:10px">&nbsp;</div>
+      <div id="bdBody"></div>
+      <div id="bdStrips"></div>
+      <div id="bdFoot" style="font-size:11px;color:var(--t3);margin-top:12px;line-height:1.55"></div>
+    </div>
+
+    <div class="page-sub" style="margin:18px 0 10px">Everything else at a glance — click any card to jump to its full page.</div>
     <div class="dash-cols">
 
       <div class="card big-card" onclick="nav('requests',document.querySelector('nav a[onclick*=requests]'))">
@@ -1624,6 +1665,8 @@ window.nav=function(id,el){
 // ── Month ──
 function setMonth(ym){
   curYM=ym;
+  monthLoaded=false;   // [81] see recombine() below
+  if(typeof bdEnsureSubs==='function') bdEnsureSubs();
   if(unsubMonth) unsubMonth();
   monthData={days:{}};
   // [59] TWO listeners now: the day subcollection, and the old month document —
@@ -1635,6 +1678,7 @@ function setMonth(ym){
   const recombine=()=>{
     monthLegacy=!!legacyDays;
     monthData={days:legacyDays||subDays};
+    monthLoaded=true;   // [81] the day board must not read an unarrived month as an empty one
     renderAll();
   };
   const unsubA=onSnapshot(monthRef(ym),snap=>{
@@ -1648,7 +1692,7 @@ function setMonth(ym){
 }
 // True while the month on screen is still in the pre-59 single-document format.
 // Every writer checks this. It is not a warning — it is a lock (see monthLockRefuse).
-let monthLegacy=false;
+let monthLegacy=false, monthLoaded=false;
 function monthLockRefuse(){
   if(!monthLegacy) return false;
   schedToast('This month is still in the old storage format. Convert it first — the banner above the grid has the button.','err');
@@ -4680,8 +4724,215 @@ function renderDash(){
 // The [64]/[55] mid-edit guards are UNCHANGED — they still protect the visible panel.
 // Test hooks: window.__lastFlush (keys rendered in the most recent flush),
 // window.__flushCount. Both exist for the battery, not for the page.
+// ═══════════════════════════════════════════════════════════════════════════
+// §S19 · THE DAY BOARD [81 · S6] — who is on today, at which site, and who is on NOW
+// ═══════════════════════════════════════════════════════════════════════════
+// Approved 18 Aug ("build and yes"), scoped by §90 (base features before defect polish) and
+// §91 (NO contact number — the only per-person data here is the display name and the KP
+// e-mail this site already holds; a field that does not exist is not invented, §22).
+//
+// IT IS THE LANDING BLOCK, not a bolt-on panel: it is the first thing on the page the admin
+// opens on. The five dashboard cards keep their place underneath it.
+//
+// WHAT "NOW" MEANS — decided here, in the code, because the brief asked for a decision and
+// not a guess:
+//  · A shift belongs to the day it STARTS. `Call 24` dated Tuesday runs Tue 19:00 to Wed
+//    07:00, so at 02:00 on Wednesday the person on duty is on YESTERDAY's shift. A board
+//    that read only today's record would show an empty hospital at exactly the hour someone
+//    needs to know who is in it. So the board reads the PREVIOUS day too and lists those
+//    people under "still on from yesterday" — but only while they are genuinely still there.
+//  · A shift with no times cannot be put on a clock. It is shown as on today, marked "no
+//    times", and never guessed at.
+//
+// WHAT IT READS. Assignments live one document per day (build 59). Whenever a day it needs
+// is inside the month the grid already has open — the normal case, since the grid opens on
+// today — it reads that state and costs NOTHING. Only for a month the grid is not showing
+// does it open its own listeners, and then it watches ONE DOCUMENT PER DAY plus the month's
+// marker document; it never lists a month's day collection, because it needs two days, not
+// thirty. Per the [66] dirty-flag rule it never fetches per render: a one-minute ticker only
+// marks it dirty so the running/not-running line stays true as the clock moves.
+//
+// GAPS COME FROM demandOn() — the SAME function the Coverage report and the grid's coverage
+// strip use. Build 78 exists because auto-populate had grown its own idea of what a day
+// needs; this board does not get a third one.
+let bdSubs={}, _bdTick=null;
+function bdPrevDay(dt){ return new Date(dt.getFullYear(),dt.getMonth(),dt.getDate()-1); }
+
+// Pure, and the whole "now" decision in one place so a test can drive it without a browser.
+// Returns 'now' | 'later' | 'done' | 'untimed' | '' (this shift is not on that date at all).
+function bdShiftState(st,en,dateKey,todayKey,yestKey,minsNow){
+  if(!st||!en) return 'untimed';
+  const s=hhmmToMin(st), e=hhmmToMin(en), crosses=crossesMidnight(st,en);
+  if(dateKey===todayKey){
+    // A shift dated today that crosses midnight has not started until its start time —
+    // the one running at 02:00 is yesterday's, handled by the branch below.
+    if(crosses) return minsNow>=s?'now':'later';
+    if(minsNow<s) return 'later';
+    return minsNow<e?'now':'done';
+  }
+  if(dateKey===yestKey&&crosses) return minsNow<e?'now':'done';
+  return '';
+}
+window.bdShiftState=bdShiftState;   // module scope is invisible to tests — HANDOFF trap 1
+
+// One entry per month the board needs and the grid is NOT already showing.
+function bdSubFor(ym,dds){
+  const st={legacyDays:null,days:{},loaded:{},unsubs:[],dds:dds.slice(),unsub:null};
+  const bump=()=>markDirty('board');
+  st.unsubs.push(onSnapshot(monthRef(ym),snap=>{
+    const md=snap.exists()?snap.data():null;
+    st.legacyDays=(md&&md.days&&Object.keys(md.days).length&&md.v2!==true)?md.days:null;
+    bump();
+  }));
+  for(const dd of dds) st.unsubs.push(onSnapshot(dayRef(ym,dd),snap=>{
+    st.days[dd]=snap.exists()?snap.data():{}; st.loaded[dd]=true; bump();
+  }));
+  st.unsub=()=>{ for(const u of st.unsubs){ try{ u(); }catch(_e){} } };
+  return st;
+}
+function bdEnsureSubs(){
+  if(!curYM) return;                      // nothing is signed in yet — never subscribe early
+  const now=new Date(), want={};
+  for(const dt of [bdPrevDay(now),now]){
+    const ym=ymKey(dt);
+    if(ym===curYM) continue;              // the grid already holds this month
+    if(!want[ym]) want[ym]=[];
+    want[ym].push(pad(dt.getDate()));
+  }
+  for(const ym in bdSubs){
+    if(!want[ym]||want[ym].join()!==bdSubs[ym].dds.join()){ try{ bdSubs[ym].unsub(); }catch(_e){} delete bdSubs[ym]; }
+  }
+  for(const ym in want) if(!bdSubs[ym]) bdSubs[ym]=bdSubFor(ym,want[ym]);
+}
+// {cells, legacy, ready} for one date. `ready` is the honest one: false means the answer has
+// not arrived, which must never render as "nobody is on".
+function bdCellsOn(dt){
+  const ym=ymKey(dt), dd=pad(dt.getDate());
+  if(ym===curYM) return {cells:((monthData.days||{})[dd])||{},legacy:monthLegacy,ready:monthLoaded};
+  const s=bdSubs[ym];
+  if(!s) return {cells:{},legacy:false,ready:false};
+  if(s.legacyDays) return {cells:s.legacyDays[dd]||{},legacy:true,ready:true};
+  return {cells:s.days[dd]||{},legacy:false,ready:!!s.loaded[dd]};
+}
+function bdPerson(u){
+  const em=emailsData[u]||'';
+  const nm=esc(displayName(u));
+  return em?('<a href="mailto:'+esc(em)+'" title="'+esc(em)+'">'+nm+'</a>'):(nm+' <span class="bd-none" title="No KP e-mail on the Users page">· no e-mail</span>');
+}
+function bdPillHtml(state){
+  if(state==='now')     return '<span class="bd-pill bd-now">on now</span>';
+  if(state==='later')   return '<span class="bd-pill bd-later">later today</span>';
+  if(state==='done')    return '<span class="bd-pill bd-done">finished</span>';
+  if(state==='untimed') return '<span class="bd-pill bd-untimed">no times</span>';
+  return '';
+}
+function renderBoard(){
+  const body=document.getElementById('bdBody'); if(!body) return;
+  const dateLine=document.getElementById('bdDateLine'), clock=document.getElementById('bdClock');
+  const sum=document.getElementById('bdSummary'), strips=document.getElementById('bdStrips'), foot=document.getElementById('bdFoot');
+  const now=new Date(), todayKey=dKey(now);
+  if(dateLine) dateLine.innerHTML=esc(DOW_SHORT[now.getDay()]+' '+now.getDate()+' '+MS[now.getMonth()]+' '+now.getFullYear())
+    +(isHoliday(todayKey)?' <span class="bd-pill bd-untimed">holiday</span>':'');
+  if(clock) clock.textContent='as of '+pad(now.getHours())+':'+pad(now.getMinutes());
+  bdEnsureSubs();
+  bdStartTicker();
+
+  if(!namesLoaded){ body.innerHTML='<div class="bd-none">Loading the roster…</div>'; if(sum) sum.innerHTML='&nbsp;'; if(strips) strips.innerHTML=''; if(foot) foot.innerHTML=''; return; }
+  if(!Object.keys(catalog.shifts||{}).length){
+    body.innerHTML='<div class="bd-none">There are no shifts in the catalog yet, so there is nothing to be on. Add them on the Shift Catalog page.</div>';
+    if(sum) sum.innerHTML='&nbsp;'; if(strips) strips.innerHTML=''; if(foot) foot.innerHTML=''; return;
+  }
+
+  const yest=bdPrevDay(now), yestKey=dKey(yest);
+  const minsNow=now.getHours()*60+now.getMinutes();
+  const tDay=bdCellsOn(now), yDay=bdCellsOn(yest);
+
+  if(!tDay.ready){ body.innerHTML='<div class="bd-none">Loading today’s assignments…</div>'; if(sum) sum.innerHTML='&nbsp;'; if(strips) strips.innerHTML=''; if(foot) foot.innerHTML=''; return; }
+
+  const onToday={}, spill={};
+  for(const u in tDay.cells) for(const id of shiftsOf(tDay.cells[u])){ if(!onToday[id]) onToday[id]=[]; onToday[id].push(u); }
+  for(const u in yDay.cells) for(const id of shiftsOf(yDay.cells[u])){
+    const sh=(catalog.shifts||{})[id]||{};
+    if(bdShiftState(sh.start,sh.end,yestKey,todayKey,yestKey,minsNow)==='now'){ if(!spill[id]) spill[id]=[]; spill[id].push(u); }
+  }
+
+  const bySite={}, peopleToday={}; let runningNow=0, gapCount=0, needTotal=0, demandedShifts=0;
+  for(const [id,sh] of shiftList()){
+    if(demandRules(sh).length) demandedShifts++;
+    const need=demandOn(sh,now);
+    const who=(onToday[id]||[]).slice().sort(), still=(spill[id]||[]).slice().sort();
+    if(need===null&&!who.length&&!still.length) continue;   // never asked for, nobody on it (§9)
+    const state=bdShiftState(sh.start,sh.end,todayKey,todayKey,yestKey,minsNow);
+    for(const u of who) peopleToday[u]=true;
+    if(state==='now') runningNow+=who.length;
+    runningNow+=still.length;
+    if(need!==null){ needTotal+=need; if(who.length<need) gapCount+=(need-who.length); }
+    const site=sh.site||'';
+    if(!bySite[site]) bySite[site]=[];
+    bySite[site].push({id:id,sh:sh,who:who,still:still,need:need,state:state});
+  }
+
+  const order=siteList().slice();
+  for(const site in bySite) if(site&&order.indexOf(site)<0) order.push(site);
+  if(bySite['']) order.push('');
+  let html='';
+  for(const site of order){
+    const rows=bySite[site]; if(!rows||!rows.length) continue;
+    let onHere=0; for(const r of rows) onHere+=r.who.length+r.still.length;
+    let inner='';
+    rows.forEach((r,i)=>{
+      const times=(r.sh.start&&r.sh.end)?(esc(r.sh.start)+'–'+esc(r.sh.end)):'';
+      let cover='';
+      if(r.need!==null){
+        cover=r.who.length<r.need
+          ? '<span class="bd-short">'+r.who.length+' of '+r.need+' · '+(r.need-r.who.length)+' short</span>'
+          : '<span class="bd-ok">'+r.who.length+' of '+r.need+'</span>';
+      }
+      let people=r.who.length?r.who.map(bdPerson).join(' · '):'<span class="bd-none">nobody assigned</span>';
+      if(r.still.length) people+='<div style="margin-top:2px"><span class="bd-pill bd-now">still on from yesterday</span> '+r.still.map(bdPerson).join(' · ')+'</div>';
+      inner+='<div class="bd-row'+(i?'':' first')+'">'
+        +'<div class="bd-head">'+chipHtml(r.id)
+        +(times?'<span class="mono" style="font-size:11px;color:var(--t2)">'+times+'</span>':'')
+        +bdPillHtml(r.state)+cover+'</div>'
+        +'<div class="bd-people">'+people+'</div></div>';
+    });
+    html+='<div class="bd-site"><h4>'+(site?esc(site):'No site set')+'</h4>'
+      +'<div class="bd-count">'+onHere+' '+(onHere===1?'person':'people')+' on</div>'+inner+'</div>';
+  }
+  body.innerHTML=html?('<div class="bd-cols">'+html+'</div>')
+    :'<div class="bd-none">Nothing is assigned today, and no shift is being asked for today.</div>';
+
+  const vac=vacationDays(), onVac=names.filter(u=>vac[u+'|'+todayKey]);
+  const free=names.filter(u=>!peopleToday[u]&&!vac[u+'|'+todayKey]);
+  if(strips) strips.innerHTML=
+     '<div class="bd-strip"><b>On vacation today · '+onVac.length+'</b> — '
+      +(onVac.length?onVac.map(u=>esc(displayName(u))).join(', '):'<span class="bd-none">nobody</span>')+'</div>'
+    +'<div class="bd-strip"><b>Not on anything today · '+free.length+'</b> — '
+      +(free.length?free.map(u=>esc(displayName(u))).join(', '):'<span class="bd-none">nobody</span>')+'</div>';
+
+  const nOn=Object.keys(peopleToday).length;
+  let s1=nOn+' '+(nOn===1?'person is':'people are')+' on today · '+runningNow+' on right now';
+  if(!demandedShifts) s1+=' · nothing is being asked for yet (no shift has demand rules, which is not the same as being covered)';
+  else if(!needTotal)  s1+=' · nothing is asked for on this day';
+  else s1+=' · '+(gapCount?('<span class="bd-short">'+gapCount+' place'+(gapCount===1?'':'s')+' short</span>'):'fully covered against what is asked for');
+  if(sum) sum.innerHTML=s1;
+
+  const notes=['“On now” uses each shift’s catalog times, and a shift belongs to the day it starts — so an overnight shift that began yesterday counts as on now until it ends.'];
+  if(tDay.legacy) notes.push('This month is still stored in the old per-month format. The board reads it, but the grid stays read-only until it is converted.');
+  if(!yDay.ready) notes.push('Yesterday is in a month this page has not finished loading, so any overnight shift that started then is not shown yet.');
+  notes.push('Shortfalls use the same demand rules as the Coverage page. Contact numbers are deliberately not held anywhere on this site (§91).');
+  if(foot) foot.innerHTML=notes.map(t=>'· '+esc(t)).join('<br>');
+}
+function bdStartTicker(){
+  if(_bdTick) return;
+  // Marks dirty only — the flush renders the board just when it is the visible panel, and
+  // no Firestore read happens either way. This is what keeps "on now" true after midnight
+  // and at every shift change without anyone touching the page.
+  _bdTick=setInterval(()=>{ try{ markDirty('board'); }catch(_e){} },60000);
+}
+
 const RENDER_FN={
-  dash:renderDash, grid:renderGrid, baseline:renderBaseline,
+  dash:renderDash, board:renderBoard, grid:renderGrid, baseline:renderBaseline,
   cellmodal:()=>{ if(cellSel) renderCellModal(); },
   legacyBanner:renderLegacyBanner, rehearsal:renderRehearsal, catLock:renderCatLock,
   requests:renderRequests, swaps:renderSwaps, open:renderOpenAdmin, openSel:fillOpenShiftSel,
@@ -4690,7 +4941,7 @@ const RENDER_FN={
   coverage:renderCoverage, audit:renderAudit, reports:renderReports, badges:renderBadges,
 };
 const PANEL_KEYS={
-  dash:['dash'], grid:['grid','baseline','cellmodal','legacyBanner'],
+  dash:['board','dash'], grid:['grid','baseline','cellmodal','legacyBanner'],
   requests:['requests'], swaps:['swaps'], open:['open','openSel'],
   users:['users','usersLock','adminAccess'], elig:['elig'],
   catalog:['catalog','catLock'], families:['families'], stats:['stats'],
