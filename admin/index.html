@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 78;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 79;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -2853,6 +2853,30 @@ async function syncEmailToUserFromLogin(){
     return false;
   }
 }
+// [79 · S-hygiene] KP-ADDRESS NORMALISATION, ported verbatim from auction build 270 · M3.
+// The LOGIN (Google) address has been trimmed + lower-cased at all four writers since build 47,
+// because firestore.rules matches it case-sensitively. The KP address — which shares
+// vacations/emails with the auction and is read back by BOTH sites — got neither: `.trim()` and
+// nothing else, not even an "@" check. So this page could write a mixed-case or malformed KP
+// address into a document the auction has normalised since ITS build 270. The auction lower-cases
+// at READ time as a backstop, so the damage was masked rather than absent.
+// Scope is deliberately identical to the auction's — trim, lower-case, and refuse only five
+// UNARGUABLE shapes. NO domain policy of any kind (owner ruling, 17 Aug 2026). Keeping the two
+// implementations character-identical is the point: two sites writing one document must agree on
+// what that document may contain, and a "slightly better" copy here would be a divergence.
+function _normKpEmail(raw){
+  const v=String(raw==null?'':raw).trim().toLowerCase();
+  if(!v||!v.includes('@')) return null;           // same floor the old check enforced
+  if(/\s/.test(v)) return null;                   // whitespace inside
+  const at=v.indexOf('@');
+  if(v.indexOf('@',at+1)!==-1) return null;       // more than one @
+  const local=v.slice(0,at), dom=v.slice(at+1);
+  if(!dom.includes('.')) return null;             // domain without a dot
+  if(local.startsWith('.')||local.endsWith('.')||dom.startsWith('.')||dom.endsWith('.')) return null; // leading/trailing dot
+  return v;
+}
+window.normKpEmailProbe=_normKpEmail;   // module scope, so the suite can execute the real one
+
 window.addSchedUser=async function(){
   if(usersLockedRefuse()) return;
   // [75 · AUD-L, 20 Aug 2026] The duplicate-login-email refusal below consults the
@@ -2866,7 +2890,11 @@ window.addSchedUser=async function(){
   const fullName=document.getElementById('uFullName').value.trim();
   // Login e-mail is lower-cased so the security rules' case-sensitive match works.
   const loginEmail=(document.getElementById('uLoginEmail')?.value||'').trim().toLowerCase();
-  const email=document.getElementById('uEmail').value.trim();
+  // [79 · S-hygiene] normalise, and remember whether a typed address was REFUSED so the
+  // user is still created rather than the whole add failing on a secondary field.
+  const emailRaw=document.getElementById('uEmail').value.trim();
+  const email=emailRaw?_normKpEmail(emailRaw):'';
+  const emailRefused=!!emailRaw&&!email;
   const fteRaw=(document.getElementById('uFteNew')?.value||'').trim();
   if(!initials){ msg.textContent='Enter initials.'; msg.style.color='var(--red)'; return; }
   if(initials.length>10){ msg.textContent='Initials — max 10 characters.'; msg.style.color='var(--red)'; return; }
@@ -2889,7 +2917,7 @@ window.addSchedUser=async function(){
     // e-mail, secondary e-mail. FTE is this site's own and is NOT synced.
     if(fullName) await setDoc(usernamesRef,{[initials]:fullName},{merge:true});
     if(loginEmail){ await setDoc(loginEmailsRef,{[initials]:loginEmail},{merge:true}); await syncEmailToUserFromLogin(); }
-    if(email) await setDoc(emailsRef,{[initials]:email},{merge:true});
+    if(email) await setDoc(emailsRef,{[initials]:email},{merge:true});   // [79] normalised
     if(fteVal!==null) await mergeFields(schedFteRef,{[initials]:fteVal});
   }catch(e){
     msg.style.color='var(--red)';
@@ -2900,6 +2928,10 @@ window.addSchedUser=async function(){
   }
   ['uInitials','uFullName','uLoginEmail','uEmail','uFteNew'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   msg.style.color='var(--green)'; msg.textContent='Added '+initials+(fteVal===null?' — set their FTE here when ready.':'.');
+  // [79 · S-hygiene] Same degradation the auction chose: the person IS added, and the bad
+  // address is refused out loud rather than stored. Failing the whole add over a secondary
+  // e-mail would be worse than the thing it prevents.
+  if(emailRefused) schedToast('User added, but the KP e-mail was NOT saved — "'+emailRaw+'" is not a valid address. Set it on the Users page.','err');
   auditLog('user.add','Added user '+initials+(fullName?' ('+fullName+')':''));
 };
 // [77 · defect 26] window.saveSchedUser WAS HERE AND IS DELETED. Its only call site — a
@@ -3008,12 +3040,17 @@ window.saveSchedField=async function(u,kind){
     auditLog('user.loginEmail','Set '+u+"'s Google login e-mail to "+(v||'(cleared)')+' — also re-synced the auction bid-security map');
     schedToast('Saved login e-mail · '+u,'ok');
   } else if(kind==='em'){
-    const v=(document.getElementById('uem_'+u)?.value||'').trim();
+    // [79 · S-hygiene] normalised on the way in; a blank box still clears the field.
+    const raw=(document.getElementById('uem_'+u)?.value||'').trim();
+    const v=raw?_normKpEmail(raw):'';
+    if(raw&&!v){ schedToast('NOT saved — "'+raw+'" is not a valid e-mail address','err'); return; }
     try{ if(v) await setDoc(emailsRef,{[u]:v},{merge:true}); else await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{}); }
     catch(e){ return sharedErr(e); }
     auditLog('user.kpEmail','Set '+u+"'s KP e-mail to "+(v||'(cleared)'));
     schedToast('Saved KP e-mail · '+u,'ok');
   } else if(kind==='fte'){
+    // [79 · defect 29] same gate as its three siblings — a blank box here is deleteField().
+    if(!schedFteLoaded){ schedToast('Still loading — try again in a moment','err'); return; }
     const raw=(document.getElementById('ufte_'+u)?.value||'').trim();
     if(raw===''){ await mergeFields(schedFteRef,{[u]:deleteField()}); }
     else { const val=parseFloat(raw); if(isNaN(val)||val<0||val>1){ schedToast('FTE must be a number between 0 and 1','err'); return; } await mergeFields(schedFteRef,{[u]:Math.round(val*10)/10}); }
@@ -3029,12 +3066,21 @@ window.saveAllSchedUsers=async function(){
   if(usersLockedRefuse()) return;
   // [H-12] Never write the shared docs from a grid that hasn't loaded yet — blanks
   // would become deleteField() and wipe names / logins / e-mails for everyone.
-  if(!(usernamesLoaded&&emailsLoaded&&loginEmailsLoaded)){ schedToast('Still loading user data — try again in a moment','err'); return; }
+  // [79 · defect 29] schedFteLoaded joins the gate. It has been SET since the FTE listener
+  // was written and READ by nothing — while this very function turns a blank FTE box into
+  // deleteField(). Before that snapshot arrives every box is blank, so one click on Save All
+  // in the cold-load window would have wiped every FTE in dailysched/fteMap. Exactly the
+  // [48] shape, on the one flag that already existed for the job.
+  if(!(usernamesLoaded&&emailsLoaded&&loginEmailsLoaded&&schedFteLoaded)){ schedToast('Still loading user data — try again in a moment','err'); return; }
   const unameMap={}, lemMap={}, emMap={}, fteMap={}; const bad=[];
   for(const u of names){
     const fn=(document.getElementById('ufn_'+u)?.value||'').trim();
     const lem=(document.getElementById('ulem_'+u)?.value||'').trim().toLowerCase();
-    const em=(document.getElementById('uem_'+u)?.value||'').trim();
+    const emRaw=(document.getElementById('uem_'+u)?.value||'').trim();
+    // [79 · S-hygiene] a bad KP address now fails the BATCH, like a bad login e-mail or FTE —
+    // it was the one field with no validation at all, so a typo saved silently.
+    const em=emRaw?_normKpEmail(emRaw):'';
+    if(emRaw&&!em) bad.push(u+' — KP e-mail');
     const raw=(document.getElementById('ufte_'+u)?.value||'').trim();
     if(lem && !lem.includes('@')) bad.push(u+' — login e-mail');
     // [build 47 · DUPLICATE-LOGIN-EMAIL CRITICAL] catch duplicates INSIDE the submitted batch
