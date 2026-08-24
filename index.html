@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 36;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 37;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -817,14 +817,15 @@ function renderOpenShifts(){
   const el=document.getElementById('openList'); if(!el) return;
   const open=(openShifts.list||[]).filter(o=>o.status==='open').sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   if(!open.length){ el.innerHTML='<div style="font-size:12px;color:var(--t3)">No open shifts right now.</div>'; return; }
-  const applied=new Set((requests.list||[]).filter(r=>r.user===me&&r.type==='claim'&&r.status==='pending').map(r=>r.openId));
+  // [37 · defect 15] keep the claim's id, not just a flag — the row now offers to withdraw it
+  const appliedById=new Map((requests.list||[]).filter(r=>r.user===me&&r.type==='claim'&&r.status==='pending').map(r=>[r.openId,r.id]));
   el.innerHTML=open.map(o=>`
     <div class="rowline">
       <span class="mono" style="font-size:12px">${esc(o.date)}</span>
       ${chip(o.shiftId)}
       ${o.note?'<span style="color:var(--t2)">'+esc(o.note)+'</span>':''}
-      <span style="margin-left:auto">${applied.has(o.id)
-        ?'<span class="status-pending">⏳ applied</span>'
+      <span style="margin-left:auto">${appliedById.has(o.id)
+        ?'<span class="status-pending">⏳ applied</span> <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawRequest(\''+esc(appliedById.get(o.id))+'\')">✗ Withdraw</button>'
         :'<button class="btn btn-primary" style="font-size:12px;padding:4px 12px" onclick="applyOpen(\''+esc(o.id)+'\')">Apply</button>'}</span>
     </div>`).join('');
 }
@@ -857,6 +858,33 @@ window.applyOpen=async function(openId){
   }catch(e){ _writeFail(e); }
 };
 
+// [37 · defect 15] WITHDRAW. Until now a request, once submitted, could only be decided by an
+// admin — there was no way to take it back. In practice people ask for a day off and then no
+// longer need it, and the only route was to message the admin and hope. The guard runs on FRESH
+// data inside the transaction, not on the rendered row: by the time the click lands an admin may
+// already have decided it, and a withdrawal must never undo a decision.
+// Scope, deliberately: only while it is still PENDING, and only your own.
+window.withdrawRequest=async function(id){
+  if(!me) return;
+  await txUpdateItem(reqItemsCol, requestsRef, id, item=>{
+    if(item.user!==me) return null;                 // not yours — no-op
+    if(item.status!=='pending') return null;        // already decided — the decision stands
+    return {...item,status:'withdrawn',withdrawnTs:Date.now()};
+  });
+};
+// [37 · defect 15] The swap twin. Only the INITIATOR, and only before anyone else has agreed —
+// once it is pending_admin the other side has accepted and retracting it unilaterally would
+// undo someone else's agreement, so that case is deliberately not offered.
+window.withdrawSwap=async function(id){
+  if(!me) return;
+  await txUpdateItem(swapItemsCol, swapsRef, id, item=>{
+    const initiator=item.type==='3way'?(item.participants||[])[0]:item.from;
+    if(initiator!==me) return null;                 // only the person who proposed it
+    if(item.status!=='pending_target') return null; // someone has already accepted — leave it
+    return {...item,status:'withdrawn',withdrawnTs:Date.now()};
+  });
+};
+
 function renderMyRequests(){
   const badge=document.getElementById('reqNavBadge');
   if(badge&&me){ const n=(requests.list||[]).filter(r=>r.user===me&&r.status==='pending').length; badge.textContent=n||''; badge.style.display=n?'inline-block':'none'; }
@@ -868,7 +896,13 @@ function renderMyRequests(){
       <span class="mono" style="font-size:12px">${esc(r.date||'—')}</span>
       <span style="font-weight:700">${typeLbl[r.type]||esc(r.type)}${r.shiftId?': '+esc(shiftLabel(r.shiftId)):''}</span>
       ${r.note?'<span style="color:var(--t2)">“'+esc(r.note)+'”</span>':''}
-      <span style="margin-left:auto" class="status-${r.status}">${r.status==='pending'?'⏳ pending':r.status==='approved'?'✅ approved':'❌ denied'}</span>
+      ${(r.status==='denied'&&(r.reason||r.autoDenied))?'<span style="color:#b42318;font-size:12px">— '+esc(r.reason||r.autoDenied)+'</span>':''}
+      <span style="margin-left:auto" class="status-${r.status}">${
+        r.status==='pending'
+          ? '⏳ pending <button class="btn btn-danger" style="font-size:11px;padding:3px 9px;margin-left:6px" onclick="withdrawRequest(\''+esc(r.id)+'\')">✗ Withdraw</button>'
+          : r.status==='approved' ? '✅ approved'
+          : r.status==='withdrawn' ? '↩︎ withdrawn'
+          : '❌ denied'}</span>
     </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No requests yet.</div>';
 }
 // A user "still owes a decision" on a 3-way swap if they're one of the two
@@ -890,11 +924,16 @@ function renderMySwaps(){
     if(s.status==='pending_target'){
       if(s.to===me) return `<button class="btn btn-success" style="font-size:12px" onclick="acceptSwap('${esc(s.id)}')">✓ Accept</button>
         <button class="btn btn-danger" style="font-size:12px" onclick="declineSwap('${esc(s.id)}')">✗ Decline</button>`;
+      // [37 · defect 15] the proposer can take it back while it is still only on the target
+      if(s.from===me) return `<span class="status-pending">⏳ waiting on ${esc(displayName(s.to))}</span>
+        <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawSwap('${esc(s.id)}')">✗ Withdraw</button>`;
       return `<span class="status-pending">⏳ waiting on ${esc(displayName(s.to))}</span>`;
     }
     if(s.status==='pending_admin') return '<span class="status-pending">⏳ waiting on admin</span>';
     if(s.status==='declined_by_target') return `<span class="status-denied">❌ ${esc(displayName(s.to))} declined</span>`;
     if(s.status==='approved') return '<span class="status-approved">✅ approved</span>';
+    if(s.status==='withdrawn') return '<span class="status-denied">↩︎ withdrawn</span>';
+    if(s.reason) return `<span class="status-denied">❌ denied by admin — ${esc(s.reason)}</span>`;
     return '<span class="status-denied">❌ denied by admin</span>';
   };
   const statusHtml3=s=>{
@@ -903,11 +942,16 @@ function renderMySwaps(){
       if(my3wayTurn(s)) return `<button class="btn btn-success" style="font-size:12px" onclick="acceptSwap3('${esc(s.id)}')">✓ Accept</button>
         <button class="btn btn-danger" style="font-size:12px" onclick="declineSwap3('${esc(s.id)}')">✗ Decline</button>`;
       const waiting=[b,c].filter(u=>!s.acceptances?.[u]);
-      return `<span class="status-pending">⏳ waiting on ${waiting.map(u=>esc(displayName(u))).join(' &amp; ')}</span>`;
+      const wait=`<span class="status-pending">⏳ waiting on ${waiting.map(u=>esc(displayName(u))).join(' &amp; ')}</span>`;
+      // [37 · defect 15] participants[0] proposed it; anyone else's turn is handled above
+      if(me===a) return wait+` <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawSwap('${esc(s.id)}')">✗ Withdraw</button>`;
+      return wait;
     }
     if(s.status==='pending_admin') return '<span class="status-pending">⏳ waiting on admin</span>';
     if(s.status==='declined_by_target') return `<span class="status-denied">❌ ${esc(displayName(s.declinedBy))} declined</span>`;
     if(s.status==='approved') return '<span class="status-approved">✅ approved</span>';
+    if(s.status==='withdrawn') return '<span class="status-denied">↩︎ withdrawn</span>';
+    if(s.reason) return `<span class="status-denied">❌ denied by admin — ${esc(s.reason)}</span>`;
     return '<span class="status-denied">❌ denied by admin</span>';
   };
   const row2=s=>`
