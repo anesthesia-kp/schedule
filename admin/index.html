@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 77;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 78;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -1012,7 +1012,11 @@ const openRef     = doc(db,"dailysched","openShifts"); // LEGACY {list:[]} — n
 const reqItemsCol  = collection(db,"dailysched","requests","items");
 const swapItemsCol = collection(db,"dailysched","swaps","items");
 const openItemsCol = collection(db,"dailysched","openShifts","items");
-const totalsRef   = doc(db,"dailysched","callTotals"); // legacy counter — no longer used for fairness (see windowShiftCounts)
+// [78 · defect 25] dailysched/callTotals and its listener are GONE. It was a legacy
+// fairness counter, superseded by windowShiftCounts(), left subscribed on every page
+// load and feeding a variable with ZERO read sites — a live Firestore read paying for
+// nothing, the same shape as the passcodes listener deleted in staff 35. The document
+// itself is untouched in Firestore; nothing writes it either.
 const callBaselineRef = doc(db,"dailysched","callBaseline"); // {user:{shiftId:n}} admin-set STARTING baseline (prior call not yet in the schedule)
 // ╔════════════════════════════════════════════════════════════════════════════╗
 // ║ §S00 · SECTION MAP — grep the §S tag to jump. Added build 65 (UX-PLAN S1).   ║
@@ -1230,9 +1234,11 @@ function recombineAudit(){
   auditLogData={log:all};
   renderAudit(); renderDash();
 }
-let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, totals={}, monthData={days:{}};
+let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, monthData={days:{}};
 let curYM=null, unsubMonth=null, cellSel=null;
 let statsMode='month', statsYearLoadedFor=null, statsYearData=null;
+// [78 · defect 13] the year currently being fetched, or null. See renderStatsYear().
+let statsYearInFlight=null;
 let schedFte={}, schedFteLoaded=false, namesLoaded=false, baselineData={};
 let tagsData=null, compPool={};   // [51] Reports — see tagsRef / compPoolRef above
 // [H-12] Track whether the shared roster docs have actually loaded. Until they do,
@@ -2213,7 +2219,14 @@ window.autoPopulate=async function(){
   if(monthLockRefuse()) return;                    // [59] never fill an unconverted month
   const [y,m]=curYM.split('-').map(Number);
   const nDays=new Date(y,m,0).getDate();
-  if(!confirm('Auto-populate '+MS[m-1]+' '+y+'?\n\nFills every empty slot for every shift in the catalog using eligibility + even call distribution. Existing assignments are kept. Users see changes immediately.')) return;
+  const _anyDemand=anyDemandConfigured();
+  // [78 · defect 5] The dialog now says what the button will actually do. It used to promise
+  // "every shift in the catalog", which was true and was the defect.
+  if(!confirm('Auto-populate '+MS[m-1]+' '+y+'?\n\n'
+    +(_anyDemand
+      ? 'Fills what the DEMAND RULES ask for on each day, using eligibility + even call distribution. A shift with no rule for a day is not asked for and is left empty (§9).'
+      : 'No shift has demand rules yet, so this falls back to filling every shift every day, to shift capacity. Set demand rules in the Shift Catalog to control which days are actually asked for.')
+    +'\n\nExisting assignments are kept. Users see changes immediately.')) return;
   const vac=vacationDays();
   const days=JSON.parse(JSON.stringify(monthData.days||{}));
   // Rolling 12-month fairness: 11 prior months of real schedule + the admin baseline…
@@ -2221,16 +2234,18 @@ window.autoPopulate=async function(){
   const cnt=(u,s)=>counts[u+'|'+s]||0;
   // …plus THIS month's already-placed assignments (the 12th month of the window).
   for(const dd in days) for(const u in days[dd]) for(const id of shiftsOf(days[dd][u])) counts[u+'|'+id]=(counts[u+'|'+id]||0)+1;
-  let filled=0, unfillable=[];
+  let filled=0, unfillable=[], notAsked=0;
   const changed={}; // [M-20] only the cells THIS run actually assigns, so we don't clobber concurrent edits
   for(let d=1;d<=nDays;d++){
     const dd=pad(d), dk=curYM+'-'+dd;
     days[dd]=days[dd]||{};
+    const _dt=new Date(y,m-1,d);
     for(const [id,s] of shiftList()){
       const slot=s.kind==='call'?'call':'day';
-      const capacity=s.capacity||1;
-      // fill up to capacity — most shifts (capacity 1) stop after the first pick, same as before
+      // [78 · defect 5] what this day actually asks for, not the shift's static capacity
+      const capacity=autoTargetFor(s,_dt,_anyDemand);
       let have=Object.values(days[dd]).filter(c=>holdsShift(c,id)).length;
+      if(capacity<=0){ notAsked++; continue; }   // §9: silence is not a gap
       while(have<capacity){
         const cands=names.filter(u=>allowed(u,id)
           &&!vac[u+'|'+dk]
@@ -2255,8 +2270,13 @@ window.autoPopulate=async function(){
   const byDay={};
   for(const key in changed){ const [dd,u]=key.split('.'); (byDay[dd]=byDay[dd]||{})[u]=days[dd][u]; }
   for(const dd in byDay) await mergeFields(dayRef(curYM,dd),byDay[dd]);
-  auditLog('autopopulate.month','Auto-populated '+MS[m-1]+' '+y+' — '+filled+' assignments'+(unfillable.length?', '+unfillable.length+' unfillable':''));
-  alert('Auto-populate complete — '+filled+' assignments made.'+(unfillable.length?'\n\n⚠️ Could not fill (no eligible user):\n'+unfillable.slice(0,15).join('\n')+(unfillable.length>15?'\n…and '+(unfillable.length-15)+' more':''):''));
+  auditLog('autopopulate.month','Auto-populated '+MS[m-1]+' '+y+' — '+filled+' assignments'+(unfillable.length?', '+unfillable.length+' unfillable':'')+(notAsked?', '+notAsked+' shift-days not asked for':''));
+  // [78] Say what was SKIPPED as well as what was filled. "Complete — 12 assignments" while
+  // 900 shift-days were deliberately passed over is the kind of true-sounding sentence that
+  // sends someone hunting for a bug that is not there. Same reasoning as [59]'s named months.
+  alert('Auto-populate complete — '+filled+' assignments made.'
+    +(notAsked?'\n\n⏭️ '+notAsked+' shift-day(s) were not asked for by any demand rule and were left empty (§9).':'')
+    +(unfillable.length?'\n\n⚠️ Could not fill (no eligible user):\n'+unfillable.slice(0,15).join('\n')+(unfillable.length>15?'\n…and '+(unfillable.length-15)+' more':''):''));
 };
 // Same fill as autoPopulate() above, run for all 12 months of the viewed
 // year in calendar order, chaining fairness counts in memory month-to-month
@@ -2268,11 +2288,14 @@ window.autoPopulate=async function(){
 window.autoPopulateYear=async function(){
   if(rehearsalRefuse()) return;
   const year=curYM?Number(curYM.split('-')[0]):new Date().getFullYear();
-  if(!confirm('Auto-populate ALL 12 months of '+year+' (January–December)?\n\nRuns the same fill as Auto-Populate Month, one month at a time in order, keeping existing assignments and balancing call fairness across the whole year. This can take a few seconds and writes to all 12 months.')) return;
+  const _anyDemand=anyDemandConfigured();
+  if(!confirm('Auto-populate ALL 12 months of '+year+' (January–December)?\n\nRuns the same fill as Auto-Populate Month, one month at a time in order, keeping existing assignments and balancing call fairness across the whole year. '
+    +(_anyDemand?'Only what the demand rules ask for is filled (§9). ':'No shift has demand rules yet, so every shift is filled every day to its capacity. ')
+    +'This can take a few seconds and writes to all 12 months.')) return;
   const vac=vacationDays();
   const _cache={}; // ym -> days; updated as we fill each month so later rolling windows see this run's fresh fills
   const skippedLegacy=[]; // [59] months still in the pre-split format — skipped, and named at the end
-  let grandFilled=0; const grandUnfillable=[];
+  let grandFilled=0, grandNotAsked=0; const grandUnfillable=[];
   for(let m=1;m<=12;m++){
     const ym=year+'-'+pad(m);
     const nDays=new Date(year,m,0).getDate();
@@ -2291,10 +2314,12 @@ window.autoPopulateYear=async function(){
     for(let d=1;d<=nDays;d++){
       const dd=pad(d), dk=ym+'-'+dd;
       days[dd]=days[dd]||{};
+      const _dt=new Date(year,m-1,d);
       for(const [id,s] of shiftList()){
         const slot=s.kind==='call'?'call':'day';
-        const capacity=s.capacity||1;
+        const capacity=autoTargetFor(s,_dt,_anyDemand);   // [78 · defect 5]
         let have=Object.values(days[dd]).filter(c=>holdsShift(c,id)).length;
+        if(capacity<=0){ grandNotAsked++; continue; }     // §9: silence is not a gap
         while(have<capacity){
           const cands=names.filter(u=>allowed(u,id)&&!vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!shiftsOf(days[dd][u]).length); // [53 · §45] one per person per day, total
           if(!cands.length){ grandUnfillable.push(dk+' '+s.label+(capacity>1?' ('+(capacity-have)+' more needed)':'')); break; }
@@ -2314,10 +2339,11 @@ window.autoPopulateYear=async function(){
     for(const dd in byDay) await mergeFields(dayRef(ym,dd),byDay[dd]);
     _cache[ym]=days; // so later months' rolling windows include this month's fresh fills
   }
-  auditLog('autopopulate.year','Auto-populated all of '+year+' — '+grandFilled+' assignments'+(grandUnfillable.length?', '+grandUnfillable.length+' unfillable':''));
+  auditLog('autopopulate.year','Auto-populated all of '+year+' — '+grandFilled+' assignments'+(grandUnfillable.length?', '+grandUnfillable.length+' unfillable':'')+(grandNotAsked?', '+grandNotAsked+' shift-days not asked for':''));
   alert('Auto-populate year complete for '+year+' — '+grandFilled+' assignments made across '+(12-skippedLegacy.length)+' of 12 months.'
     // [59] Skipped months are named, not quietly passed over. "Complete" while four months
     // were never touched is the kind of true-sounding sentence that costs a day to unpick.
+    +(grandNotAsked?'\n\n⏭️ '+grandNotAsked+' shift-day(s) were not asked for by any demand rule and were left empty (§9).':'')
     +(skippedLegacy.length?'\n\n⏭️ SKIPPED — still in the old storage format, nothing was written to '+(skippedLegacy.length>1?'these months':'this month')+':\n'+skippedLegacy.join(', ')+'\n\nOpen each one in Schedule and press Convert, then run this again.':'')+(grandUnfillable.length?'\n\n⚠️ Could not fill (no eligible user) — '+grandUnfillable.length+' slot(s):\n'+grandUnfillable.slice(0,15).join('\n')+(grandUnfillable.length>15?'\n…and '+(grandUnfillable.length-15)+' more':''):''));
 };
 window.clearMonth=async function(){
@@ -3465,6 +3491,33 @@ function ruleText(r){
 }
 window.shiftsOfDemandProbe=demandOn;   // module scope — HANDOFF trap 1
 
+// [78 · defect 5] HOW MANY PEOPLE AUTO-POPULATE SHOULD PLACE ON THIS SHIFT, THIS DAY.
+// The coverage report has read demandOn() since build 58. Auto-populate never did: it used
+// the static per-shift `capacity` for EVERY day of the month. So a weekdays-only shift was
+// filled on Saturdays and Sundays, and a shift with NO demand rules — which §9 defines as
+// "not being asked for at all", not "nobody needed" — still had somebody assigned to it
+// every single day, and then appeared in the `unfillable` warnings for slots nobody had ever
+// requested. The filler and the report were working from two different definitions of what a
+// day needs, and only one of them was the owner's.
+//   demandOn() === null → not asked for on this day: place NOBODY.
+//   demandOn() === 0    → explicitly nobody needed:  place NOBODY.
+//   demandOn() === n    → place n.
+// FALLBACK, and it is deliberate: if NOT ONE shift in the catalog carries demand rules, the
+// department has not told us anything yet, and honouring demand would make auto-populate do
+// nothing at all — a silent, baffling regression. In that case ONLY, fall back to the old
+// `capacity` behaviour. The condition is the same `shiftsWithDemand` count coverageRows()
+// uses for `demanded`, so the two cannot drift apart.
+function anyDemandConfigured(){
+  for(const [,sh] of shiftList()) if(demandRules(sh).length) return true;
+  return false;
+}
+function autoTargetFor(sh,dt,anyDemand){
+  if(!anyDemand) return Math.max(0,Number(sh&&sh.capacity)||1);
+  const n=demandOn(sh,dt);
+  return n===null?0:Math.max(0,n);
+}
+window.autoTargetProbe=autoTargetFor;      // module scope, same reason as the probe above
+
 function parseHHMM(raw){
   const t=String(raw==null?'':raw).trim().replace(/\s+/g,'');
   if(!t) return {ok:true,val:''};                       // blank is a real answer
@@ -4262,7 +4315,9 @@ window.setStatsMode=function(mode){
   document.getElementById('statsRefreshBtn').style.display = mode==='year'?'inline-block':'none';
   renderStats();
 };
-window.refreshStatsYear=function(){ statsYearLoadedFor=null; renderStats(); };
+// [78 · defect 13] clearing the in-flight marker too, so a deliberate Refresh is always
+// honoured even while a fetch is running — the guard is for accidental re-entry only.
+window.refreshStatsYear=function(){ statsYearLoadedFor=null; statsYearInFlight=null; renderStats(); };
 // ═══════════════════════════════════════════════════════════════════════════
 // §S15 · STATS — read-only aggregation over months (see UX-PLAN: family-collapse due)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4348,8 +4403,19 @@ async function renderStatsYear(){
   document.getElementById('statsMonth').textContent=y+' (full year)';
   document.getElementById('statsHint').textContent='Assignments per user, added up across all 12 months of '+y+'. Call columns highlighted — watch these for even distribution over the year. Hit Refresh if you\'ve made changes since this loaded.';
   if(statsYearLoadedFor===y){ renderStatsYearTable(y); return; }
+  // [78 · defect 13] ONE twelve-month fetch at a time. statsYearLoadedFor is only set AFTER
+  // the Promise.all below resolves, so every re-entry before then started ANOTHER twelve
+  // reads: a second click on Year, or any of the ~9 listeners that call renderAll() while
+  // this panel is open. The staleness check further down catches a fetch for a DIFFERENT
+  // year — it cannot see a duplicate of the SAME one, because mode and year both still
+  // match. Failure mode was a read-cost storm plus last-writer-wins rendering.
+  // A deliberate Refresh still forces a re-fetch: refreshStatsYear() clears this marker,
+  // so an action the admin asked for beats the guard while accidental re-entry does not.
+  if(statsYearInFlight===y) return;
+  statsYearInFlight=y;
   document.getElementById('statsLoading').style.display='block';
   g.innerHTML='';
+  try{
   const vac=vacationDays();
   const monthKeys=[]; for(let m=1;m<=12;m++) monthKeys.push(y+'-'+pad(m));
   const months=await Promise.all(monthKeys.map(mk=>readMonth(mk).catch(()=>null)));
@@ -4373,6 +4439,7 @@ async function renderStatsYear(){
   statsYearLoadedFor=y;
   document.getElementById('statsLoading').style.display='none';
   renderStatsYearTable(y);
+  } finally { if(statsYearInFlight===y) statsYearInFlight=null; }
 }
 function renderStatsYearTable(y){
   const g=document.getElementById('statsGrid'); if(!g||!statsYearData) return;
@@ -5501,7 +5568,6 @@ authReady.then(()=>{
   onSnapshot(swapItemsCol,qs=>{ _swapItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeSwap(); });
   onSnapshot(openRef,snap=>{ const d=snap.exists()?snap.data():{}; _openLegacy=Array.isArray(d.list)?d.list:[]; _reMergeOpen(); });
   onSnapshot(openItemsCol,qs=>{ _openItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeOpen(); });
-  onSnapshot(totalsRef,snap=>{ totals=snap.exists()?snap.data():{}; });
   onSnapshot(callBaselineRef,snap=>{ baselineData=snap.exists()?snap.data():{}; markDirty('baseline'); });
   // [51] Reports. Both are dailysched documents — this site's own. Absent is a valid state:
   // no tags doc means reports use the owner's starting set, and no compPool doc means
