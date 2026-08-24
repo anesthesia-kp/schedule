@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 83;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 87;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -437,6 +437,19 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       <span style="font-size:11px;color:var(--t2)">Density</span>
       <button class="btn" id="densDetail" style="font-size:11.5px" onclick="setGridDensity('detail')">Detail</button>
       <button class="btn btn-ghost" id="densCompact" style="font-size:11.5px" onclick="setGridDensity('compact')">Compact</button>
+      <span style="width:1px;height:18px;background:var(--b1)"></span>
+      <!-- [84 · S5c] THE FILTER BAR. Name/text only, plus coverage — a person carries NO role
+           and NO site on this site (only a display name and an FTE), so filtering by those is
+           not blocked by taste, it is blocked by there being nothing to filter on. That half
+           waits for Stage 4; do not design around an attribute that does not exist (§22). -->
+      <input type="text" class="inp" id="gridFilter" autocomplete="off" placeholder="Filter by name…"
+             style="font-size:12px;padding:5px 8px;width:150px" oninput="setGridFilter(this.value)">
+      <select class="sel" id="gridCovFilter" style="font-size:11.5px" onchange="setGridCov(this.value)"
+              title="Show only the days that are short of what demand asks for">
+        <option value="all">All days</option>
+        <option value="short">Short days only</option>
+        <option value="covered">Fully covered days</option>
+      </select>
       <span style="flex:1"></span>
       <!-- [53] Auto-Populate and Clear Month moved to Testing → Simulator (DECISIONS §45).
            They are testing tools, not daily work, and this is a page people use every day. -->
@@ -445,6 +458,15 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     </div>
     <!-- [59 · §47] Shown ONLY while the month on screen is still stored the old way.
          It is a lock, not a nag: everything below is read-only until Convert is pressed. -->
+    <!-- [84 · S5c] Shown ONLY while a filter is on. A grid with rows or days hidden looks
+         EXACTLY like a month that is empty or a roster that has lost people, and that
+         confusion is the whole risk of adding a filter — so the state is stated out loud,
+         with the way out next to it. -->
+    <div id="gridFilterNote" style="display:none;margin-bottom:10px;padding:7px 12px;border-radius:8px;
+         background:#eff6ff;border:1px solid #bfdbfe;font-size:12px;color:#1e3a8a">
+      <span id="gridFilterNoteText"></span>
+      <button class="btn btn-ghost" style="font-size:11px;padding:2px 8px;margin-left:8px" onclick="clearGridFilters()">Clear filters</button>
+    </div>
     <div id="legacyBanner" class="card" style="display:none;padding:12px 14px;margin-bottom:10px;border:2px solid #f59e0b;background:#fffbeb">
       <div style="font-size:13px;font-weight:800;color:#92400e">⚠️ <span id="legacyMonthName">This month</span> is stored in the old format — it is read-only until you convert it</div>
       <div style="font-size:12px;color:#92400e;margin-top:6px;line-height:1.5">
@@ -641,7 +663,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         A header row is ignored if you paste one. Times use the same 24-hour rules as everywhere else: <b>0730</b>, <b>7:30</b> or <b>07.30</b>.<br>
         <b>Nothing is written until you have read the preview and pressed the button under it</b> (§3).
       </div>
-      <textarea class="inp" id="catPaste" rows="6" style="width:100%;font-family:'SF Mono',Consolas,monospace;font-size:12px" placeholder="D10&#9;0730&#9;1730&#9;Oakland&#10;Call 16&#9;1530&#9;0730&#9;Oakland&#10;Eye Call&#9;0730&#9;1530"></textarea>
+      <textarea class="inp" id="catPaste" rows="6" style="width:100%;font-family:'SF Mono',Consolas,monospace;font-size:12px" placeholder="D10&#9;0730&#9;1730&#9;Oakland&#9;Weekday daytime&#9;MD&#9;1&#10;Call 16&#9;1530&#9;0730&#9;Oakland&#9;Call&#9;MD&#10;Eye Call&#9;0730&#9;1530"></textarea>
       <div class="row" style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
         <button class="btn" style="font-size:12px" onclick="previewPaste()">👁 Preview what this would do</button>
         <label style="font-size:11.5px;color:var(--t2);display:flex;align-items:center;gap:5px;cursor:pointer">
@@ -676,7 +698,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <button class="btn btn-ghost" id="catRoleFilter_Both" style="font-size:11px" onclick="setCatalogRoleFilter('Both')">Both</button>
         <span style="width:14px"></span>
         <span style="font-size:11px;color:var(--t2)">Sort</span>
-        <button class="btn btn-ghost" id="catSort_family" style="font-size:11px" onclick="setCatSort('family')" title="Group the list by clinical family — all ICU together, all OB together, and so on">by family</button>
+        <span style="font-size:11px;color:var(--t2);margin-right:2px">Edit</span><button class="btn" id="catMode_read" style="font-size:11.5px" onclick="setCatEditMode('read')" title="One quiet line per shift; the ✎ opens one row">One at a time</button><button class="btn btn-ghost" id="catMode_all" style="font-size:11.5px" onclick="setCatEditMode('all')" title="Every shift editable at once — for a whole-catalog pass">Batch — edit all</button><span style="width:1px;height:18px;background:var(--b1);margin:0 4px"></span><button class="btn btn-ghost" id="catSort_family" style="font-size:11px" onclick="setCatSort('family')" title="Group the list by clinical family — all ICU together, all OB together, and so on">by family</button>
         <button class="btn btn-ghost" id="catSort_order"  style="font-size:11px" onclick="setCatSort('order')"  title="The catalog's own running order">catalog order</button>
         <button class="btn btn-ghost" id="catSort_label"  style="font-size:11px" onclick="setCatSort('label')"  title="Straight A–Z by name">A–Z</button>
       </div>
@@ -696,6 +718,19 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
           <span style="width:64px">👥 Cap</span>
           <span style="width:104px">Family</span>
           <span style="width:64px">Role</span>
+        </div>
+        <!-- [85 · S7] Column headers at last. Every meaning on this page used to live in a
+             hover tooltip, which is invisible on a touch screen and to anyone in a hurry. -->
+        <div class="catheadrow" style="position:sticky;top:0;z-index:3;display:flex;gap:10px;align-items:center;
+             padding:6px 10px;background:var(--s3);border-bottom:1px solid var(--b1);font-size:10px;
+             font-weight:800;letter-spacing:.05em;color:var(--t2);text-transform:uppercase">
+          <span style="min-width:96px;text-align:center">Shift</span><span style="min-width:30px">Kind</span>
+          <span style="min-width:150px">Times</span><span style="min-width:78px">Site</span>
+          <span style="min-width:74px">Demand</span><span style="min-width:34px">Cap</span>
+          <span style="min-width:52px">Role</span><span style="flex:1">Needs attention</span><span>Edit</span>
+        </div>
+        <div id="catDenseNote" style="display:none;margin:0 10px 8px;padding:7px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fcd34d;font-size:11.5px;color:#92400e">
+          <b>Batch mode.</b> Every shift is editable at once, so you can tab straight down the list — this is the dense view, and on a big catalog it is a lot of controls. Switch back to <b>One at a time</b> when you are done.
         </div>
         <div id="catList" style="padding:0 10px 10px"></div>
       </div>
@@ -1277,6 +1312,12 @@ try{ const _gd=localStorage.getItem('dsGridDensity'); if(_gd==='compact'||_gd===
 // asked for both, so neither is the "real" one.
 let gridView='people';
 try{ const _gv=localStorage.getItem('dsGridView'); if(_gv==='shifts'||_gv==='people') gridView=_gv; }catch(_){}
+// [86 · §95] READ-FIRST IS THE DEFAULT; DENSE IS FOR A BIG PASS. Remembered like the two
+// above, and for the same reason: it changes how the SAME data looks, not what you can see.
+// (The catalog's problem FILTER is not remembered — that one hides shifts. Same distinction
+// the grid draws in [84].)
+let catEditMode='read';
+try{ const _ce=localStorage.getItem('dsCatEditMode'); if(_ce==='read'||_ce==='all') catEditMode=_ce; }catch(_){}
 let auditLogData={log:[]};      // the MERGED view every renderer already reads
 let auditLegacy=[], auditEntries=[];
 // Newest first, de-duplicated by id — an entry written before build 63 exists only in the
@@ -1435,8 +1476,11 @@ function catalogList(){
   return rows.sort((a,b)=>{
     const fa=famLabelOf(a[1].family), fb=famLabelOf(b[1].family);
     const na=a[1].family?0:1, nb=b[1].family?0:1;
-    if(na!==nb) return na-nb;
-    if(fa!==fb) return fa.localeCompare(fb);
+    if(na!==nb) return na-nb;                       // "No family" stays last, as the leftovers it is
+    // [85 · §94] The owner's named family order reaches the THIRD place families are listed.
+    // The day board and the Shift Families page have used it since 83; leaving this page on
+    // A–Z would mean the same catalog reads in two different orders on two adjacent pages.
+    if(fa!==fb){ const r=bdFamRank(fa)-bdFamRank(fb); if(r) return r; return fa.localeCompare(fb); }
     return (a[1].order??99)-(b[1].order??99) || String(a[1].label||a[0]).localeCompare(String(b[1].label||b[0]));
   });
 }
@@ -1463,13 +1507,56 @@ function cellBlocksHtml(c,onVac){
 // [70 - S5b] One row per SHIFT, cells naming who holds it. Read-only by design: a cell
 // here can hold several people, and there is no obvious single thing a click should edit,
 // so editing stays in the people view rather than inventing a second editor.
-function gridShiftRows(y,m,nDays,todayDD){
-  let out='';
+// ═══ [84 · S5c] THE GRID FILTERS ═══════════════════════════════════════════════════════
+// Two of them, and they act on different axes: the text box hides ROWS, the coverage select
+// hides DAY COLUMNS. Both are PURE functions so the battery can drive them without a browser.
+//
+// NEITHER IS REMEMBERED ACROSS A RELOAD, and that is deliberate. The view and density toggles
+// ([69], [70]) are remembered because they change how the same data LOOKS. A filter changes
+// WHAT YOU CAN SEE, and a remembered one greets you tomorrow with a grid that is missing
+// people for a reason you have forgotten. The banner above the grid says a filter is on; a
+// remembered filter would need that banner to be read on a day when nobody is expecting it.
+let gridFilterText='', gridCovFilter='all';
+// Matches the display name OR the initials (people), the label OR the shift id (shifts) —
+// admins type both, and an initials-only match is how you find one person in 35 quickly.
+function gridRowMatch(q,label,key){
+  const t=String(q==null?'':q).trim().toLowerCase();
+  if(!t) return true;
+  return String(label==null?'':label).toLowerCase().indexOf(t)>=0
+      || String(key==null?'':key).toLowerCase().indexOf(t)>=0;
+}
+// The coverage filters are INERT when no shift carries demand rules — §9's "nothing is being
+// asked for" is not the same as "everything is covered", so filtering to short days when
+// nothing is asked for would hide the whole month and imply a judgement nobody has made.
+function gridVisibleDays(nDays,covBy,mode,demanded){
+  const out=[];
+  for(let d=1;d<=nDays;d++){
+    const dd=pad(d), cv=(covBy&&covBy[dd])||{};
+    if(demanded&&mode==='short'&&!(Number(cv.short)>0)) continue;
+    if(demanded&&mode==='covered'&&!(Number(cv.need)>0&&Number(cv.short)<=0)) continue;
+    out.push(dd);
+  }
+  return out;
+}
+window.gridRowMatch=gridRowMatch; window.gridVisibleDays=gridVisibleDays;   // HANDOFF trap 1
+window.setGridFilter=function(v){ gridFilterText=String(v==null?'':v); markDirty('grid'); };
+window.setGridCov=function(v){ gridCovFilter=String(v||'all'); markDirty('grid'); };
+window.clearGridFilters=function(){
+  gridFilterText=''; gridCovFilter='all';
+  const a=document.getElementById('gridFilter'); if(a) a.value='';
+  const b=document.getElementById('gridCovFilter'); if(b) b.value='all';
+  markDirty('grid');
+};
+
+function gridShiftRows(y,m,nDays,todayDD,vis){
+  let out='', shown=0;
   for(const [id,sh] of shiftList()){
+    if(!gridRowMatch(gridFilterText,sh.label||id,id)) continue;
+    shown++;
     out+='<tr><td class="stick1 srow1" title="'+esc(sh.label||id)+'">'
        +'<span class="swatch" style="background:'+esc(shiftColor(sh))+'"></span>'+esc(sh.label||id)+'</td>';
-    for(let d=1;d<=nDays;d++){
-      const dd=pad(d), wd=new Date(y,m-1,d).getDay(), dt=new Date(y,m-1,d);
+    for(const dd of vis){
+      const d=Number(dd), wd=new Date(y,m-1,d).getDay(), dt=new Date(y,m-1,d);
       const dayCells=(monthData.days&&monthData.days[dd])||{};
       const who=[];
       for(const u of names) if(holdsShift(dayCells[u]||{},id)) who.push(u);
@@ -1491,7 +1578,7 @@ function gridShiftRows(y,m,nDays,todayDD){
     }
     out+='</tr>';
   }
-  return out;
+  return {html:out,shown:shown,total:shiftList().length};
 }
 window.setGridView=function(mode){
   if(mode!=='people'&&mode!=='shifts') return;
@@ -1901,14 +1988,15 @@ function renderGrid(){
   // [69 - S5a] The coverage strip reads the SAME coverageRows the coverage report uses.
   const _cov=coverageRows(curYM,monthData.days||{});
   const covBy=_cov.byDay||{}, showCov=!!_cov.demanded;
+  const vis=gridVisibleDays(nDays,covBy,gridCovFilter,showCov);
   let head='<thead><tr class="dayrow"><th class="stick1" style="text-align:left">User</th>';
-  for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); const dd=pad(d);
+  for(const dd of vis){ const d=Number(dd); const wd=new Date(y,m-1,d).getDay();
     const hol=isHoliday(curYM+'-'+dd);
     head+='<th data-day="'+dd+'" class="'+((wd===0||wd===6)?'wkend':'')+(dd===todayDD?' today':'')+'"'+(hol?' title="Holiday"':'')+'>'+d+(hol?'<span class="hol"></span>':'')+'<br>'+DS[wd]+'</th>'; }
   head+='</tr>';
   if(showCov){
     head+='<tr class="covrow"><th class="stick1" title="Unfilled demand for each day">Coverage</th>';
-    for(let d=1;d<=nDays;d++){ const dd=pad(d); const cv=covBy[dd]||{need:0,have:0,short:0};
+    for(const dd of vis){ const cv=covBy[dd]||{need:0,have:0,short:0};
       let cls='cov-none', txt='&middot;', ttl='No demand set for this day';
       if(cv.need>0){
         if(cv.short<=0){ cls='cov-ok'; txt='&#10003;'; ttl='Fully covered - '+cv.have+' of '+cv.need; }
@@ -1920,14 +2008,17 @@ function renderGrid(){
     head+='</tr>';
   }
   head+='</thead>';
-  let rows='';
-  if(gridView==='shifts'){ rows=gridShiftRows(y,m,nDays,todayDD); }
+  let rows='', shownRows=0, totalRows=0;
+  if(gridView==='shifts'){ const r=gridShiftRows(y,m,nDays,todayDD,vis); rows=r.html; shownRows=r.shown; totalRows=r.total; }
   else for(const u of names){
+    totalRows++;
+    if(!gridRowMatch(gridFilterText,displayName(u),u)) continue;
+    shownRows++;
     // [50] Sticky, like the eligibility grid's. At 31 day columns the name scrolled out
     // of view and you lost track of whose row you were editing.
     rows+='<tr><td class="stick1" style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>';
-    for(let d=1;d<=nDays;d++){
-      const dd=pad(d), dk=curYM+'-'+dd, wd=new Date(y,m-1,d).getDay();
+    for(const dd of vis){
+      const d=Number(dd), dk=curYM+'-'+dd, wd=new Date(y,m-1,d).getDay();
       const c=cellOf(u,dd); const onVac=!!vac[u+'|'+dk]; let inner;
       if(gridDensity==='compact'){ inner=cellBlocksHtml(c,onVac); }
       else {
@@ -1940,7 +2031,27 @@ function renderGrid(){
     }
     rows+='</tr>';
   }
+  // A filter that empties the grid must SAY it emptied the grid. Silence here reads as
+  // "this month has nothing in it", which is the one wrong answer this feature could give.
+  if(!rows) rows='<tr><td style="padding:14px;font-size:12.5px;color:var(--t2)">Nothing matches the filters — '
+    +(gridFilterText?('no '+(gridView==='shifts'?'shift':'person')+' matching “'+esc(gridFilterText)+'”'):'no day matching that coverage')
+    +'. Use <b>Clear filters</b> above.</td></tr>';
   g.innerHTML=head+'<tbody>'+rows+'</tbody>';
+  const note=document.getElementById('gridFilterNote'), noteText=document.getElementById('gridFilterNoteText');
+  if(note&&noteText){
+    const on=!!gridFilterText||gridCovFilter!=='all';
+    note.style.display=on?'block':'none';
+    if(on){
+      const bits=[];
+      if(gridFilterText) bits.push('<b>'+shownRows+' of '+totalRows+'</b> '+(gridView==='shifts'?'shifts':'people')+' matching “'+esc(gridFilterText)+'”');
+      if(gridCovFilter!=='all'){
+        bits.push(showCov
+          ? ('<b>'+vis.length+' of '+nDays+'</b> days — '+(gridCovFilter==='short'?'short of what demand asks for':'fully covered'))
+          : 'the day filter is doing nothing: no shift has demand rules yet, so no day can be short or covered');
+      }
+      noteText.innerHTML='Filtered — showing '+bits.join(' · ')+'.';
+    }
+  }
   const bP=document.getElementById('viewPeople'), bS=document.getElementById('viewShifts');
   if(bP) bP.className='btn'+(gridView==='people'?'':' btn-ghost');
   if(bS) bS.className='btn'+(gridView==='shifts'?'':' btn-ghost');
@@ -3876,7 +3987,11 @@ function parsePasteRows(raw){
     const cells=line.split(/\t|,/).map(c=>c.trim());
     // Drop a header row if the first cell plainly names a column rather than a shift.
     if(i===0 && /^(label|shift|name)$/i.test(cells[0]||'')) return;
-    const [label,st,en,site]=cells;
+    // [87 · §95] label · start · end · site · FAMILY · ROLE · CAPACITY. The first four are
+    // build 56's and are unchanged, so every list anyone has already written still pastes.
+    // The three new ones exist because a pasted block used to land half-configured and need a
+    // second pass by hand — which is the whole thing §95 asks to stop.
+    const [label,st,en,site,fam,role,cap]=cells;
     if(!label) return;
     const row={line:i+1,label,raw:line};
     const ps=parseHHMM(st||''), pe=parseHHMM(en||'');
@@ -3887,6 +4002,26 @@ function parsePasteRows(raw){
       const match=siteList().find(x=>x.toLowerCase()===site.toLowerCase());
       if(!match){ row.reject='site "'+site+'" is not one of '+siteList().join(' or '); out.push(row); return; }
       row.site=match;
+    }
+    if(fam){
+      // Matched against families that EXIST, by label or by key. A paste does not CREATE a
+      // family: one typo would otherwise scatter shifts into a near-duplicate nobody meant,
+      // and creating a family is a deliberate act with a colour attached to it (§22).
+      const fams=Object.entries(catalog.families||{});
+      const hit=fams.find(([k,f])=>String(f&&f.label||'').toLowerCase()===fam.toLowerCase()||k.toLowerCase()===fam.toLowerCase());
+      if(!hit){ row.reject='family "'+fam+'" does not exist yet — make it on the Shift Families page first'
+                 +(fams.length?' (known: '+fams.map(([,f])=>f.label).join(', ')+')':''); out.push(row); return; }
+      row.family=hit[0];
+    }
+    if(role){
+      const r=['MD','CRNA','Both'].find(x=>x.toLowerCase()===role.toLowerCase());
+      if(!r){ row.reject='role "'+role+'" is not MD, CRNA or Both'; out.push(row); return; }
+      row.role=r;
+    }
+    if(cap){
+      const n=Number(cap);
+      if(!Number.isInteger(n)||n<1||n>20){ row.reject='capacity "'+cap+'" must be a whole number from 1 to 20'; out.push(row); return; }
+      row.capacity=n;
     }
     row.id=label.toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'');
     if(!row.id){ row.reject='that label has no letters or numbers in it, so it cannot be an id'; out.push(row); return; }
@@ -3910,9 +4045,15 @@ function pastePlan(){
     const ex=catalog.shifts?.[r.id];
     if(!ex){ create.push(r); continue; }
     if(!doUpdate){ skip.push({...r,why:'already exists, and "update existing" is off'}); continue; }
-    const before={start:ex.start||'',end:ex.end||'',site:ex.site||''};
-    const after={start:r.start||'',end:r.end||'',site:r.site!==undefined?r.site:(ex.site||'')};
-    if(before.start===after.start&&before.end===after.end&&before.site===after.site){
+    // [87] Every field a paste can now carry takes part in before/after, so "already exactly
+    // this" stays TRUE — a row that only changes a family must not be reported as no change.
+    const before={start:ex.start||'',end:ex.end||'',site:ex.site||'',family:ex.family||'',role:ex.role||'',capacity:ex.capacity||1};
+    const after={start:r.start||'',end:r.end||'',site:r.site!==undefined?r.site:(ex.site||''),
+                 family:r.family!==undefined?r.family:(ex.family||''),
+                 role:r.role!==undefined?r.role:(ex.role||''),
+                 capacity:r.capacity!==undefined?r.capacity:(ex.capacity||1)};
+    if(before.start===after.start&&before.end===after.end&&before.site===after.site
+       &&before.family===after.family&&before.role===after.role&&before.capacity===after.capacity){
       skip.push({...r,why:'already exactly this'}); continue;
     }
     update.push({...r,before,after,label:ex.label||r.label});
@@ -3927,7 +4068,8 @@ window.previewPaste=function(){
   const t=(x,c)=>'<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:'+c+'">'+x+'</span>';
   const fmt=r=>esc(r.label)+' <span class="mono" style="font-size:11px;color:var(--t2)">'
     +(r.start&&r.end?esc(r.start)+'–'+esc(r.end)+' · '+esc(fmtDur(shiftMinutes(r.start,r.end))):(r.start||r.end)?'<b style="color:#b91c1c">half a time</b>':'no times')
-    +(r.site?' · '+esc(r.site):'')+'</span>';
+    +(r.site?' · '+esc(r.site):'')+(r.family?' · '+esc(famLabelOf(r.family)):'')
+    +(r.role?' · '+esc(r.role):'')+(r.capacity?' · 👥'+r.capacity:'')+'</span>';
   let h='<div style="margin-top:11px;padding:11px 13px;border:1px solid var(--b1);border-radius:10px;background:var(--s2)">';
   h+='<div style="font-weight:800;font-size:12.5px;margin-bottom:8px">This would '
     +[p.create.length?p.create.length+' new':'',p.update.length?p.update.length+' changed':'',p.skip.length?p.skip.length+' left alone':'',p.reject.length?p.reject.length+' rejected':'']
@@ -3937,12 +4079,15 @@ window.previewPaste=function(){
   if(p.update.length) h+='<div style="margin:9px 0 5px">'+t('CHANGED','#fef3c7;color:#92400e')+'</div>'
     +p.update.map(r=>'<div style="font-size:12px;padding:2px 0">'+esc(r.label)+' <span class="mono" style="font-size:11px">'
       +esc(r.before.start||'—')+'–'+esc(r.before.end||'—')+(r.before.site?' · '+esc(r.before.site):'')
-      +' <b style="color:#92400e">→</b> '+esc(r.after.start||'—')+'–'+esc(r.after.end||'—')+(r.after.site?' · '+esc(r.after.site):'')+'</span></div>').join('');
+      +' <b style="color:#92400e">→</b> '+esc(r.after.start||'—')+'–'+esc(r.after.end||'—')+(r.after.site?' · '+esc(r.after.site):'')
+      +(r.after.family!==r.before.family?' · family '+esc(famLabelOf(r.after.family)):'')
+      +(r.after.role!==r.before.role?' · role '+esc(r.after.role||'—'):'')
+      +(r.after.capacity!==r.before.capacity?' · 👥'+r.after.capacity:'')+'</span></div>').join('');
   if(p.skip.length) h+='<div style="margin:9px 0 5px">'+t('LEFT ALONE','#f1f5f9;color:#5b6b7c')+'</div>'
     +p.skip.map(r=>'<div style="font-size:11.5px;color:var(--t2);padding:2px 0">'+esc(r.label)+' — '+esc(r.why)+'</div>').join('');
   if(p.reject.length) h+='<div style="margin:9px 0 5px">'+t('REJECTED','#fee2e2;color:#991b1b')+'</div>'
     +p.reject.map(r=>'<div style="font-size:11.5px;color:#991b1b;padding:2px 0">line '+r.line+': <b>'+esc(r.label||r.raw)+'</b> — '+esc(r.reject)+'</div>').join('');
-  h+='<div style="font-size:11.5px;color:var(--t2);margin-top:9px">Rejected rows are skipped; everything else still goes through. Demand rules and capacity are never touched by a paste — only labels, times and sites.</div>';
+  h+='<div style="font-size:11.5px;color:var(--t2);margin-top:9px">Rejected rows are skipped; everything else still goes through. Columns: <b>label · start · end · site · family · role · capacity</b> — tab or comma separated, and you can stop after any of them. <b>Demand rules are never touched by a paste</b>: they are a per-shift editor, not a text field.</div>';
   if(p.create.length||p.update.length)
     h+='<div style="margin-top:11px"><button class="btn btn-primary" style="font-size:12.5px" onclick="applyPaste()">Apply — '
       +[p.create.length?'add '+p.create.length:'',p.update.length?'change '+p.update.length:''].filter(Boolean).join(' and ')+'</button></div>';
@@ -3957,18 +4102,29 @@ window.applyPaste=async function(){
     +(p.create.length?'ADD '+p.create.length+' new shift'+(p.create.length===1?'':'s')+': '+p.create.map(r=>r.label).join(', ')+'\n\n':'')
     +(p.update.length?'CHANGE the times or site of '+p.update.length+': '+p.update.map(r=>r.label).join(', ')+'\n\n':'')
     +(p.reject.length?p.reject.length+' rejected row'+(p.reject.length===1?'':'s')+' will be skipped.\n\n':'')
-    +'Demand rules and capacity are not touched.')) return;
+    +'Demand rules are not touched.')) return;
   const patch={};
   let order=Math.max(0,...Object.values(catalog.shifts||{}).map(x=>x.order??0));
   for(const r of p.create){
     order++;
-    patch['shifts.'+r.id]={label:r.label,kind:'day',color:PALETTE[0],family:'',role:'',order,capacity:1,
-      start:r.start||'',end:r.end||'',timesProvisional:false,site:r.site||''};
+    // A shift's colour comes from its family when it has one — the same rule Add Shift
+    // follows, so a pasted shift is indistinguishable from a hand-made one.
+    const famCol=r.family?((catalog.families&&catalog.families[r.family]&&catalog.families[r.family].color)||PALETTE[0]):PALETTE[0];
+    patch['shifts.'+r.id]={label:r.label,kind:'day',color:famCol,family:r.family||'',role:r.role||'',order,
+      capacity:r.capacity||1,start:r.start||'',end:r.end||'',timesProvisional:false,site:r.site||''};
   }
   for(const r of p.update){
     patch['shifts.'+r.id+'.start']=r.after.start;
     patch['shifts.'+r.id+'.end']=r.after.end;
-    if(r.after.site!==(catalog.shifts?.[r.id]?.site||'')) patch['shifts.'+r.id+'.site']=r.after.site;
+    if(r.after.site!==r.before.site) patch['shifts.'+r.id+'.site']=r.after.site;
+    if(r.after.family!==r.before.family){
+      patch['shifts.'+r.id+'.family']=r.after.family;
+      // Colour follows the family, exactly as setShiftFamily does — otherwise a pasted move
+      // between families would leave the old colour behind and break §94's colour reading.
+      if(r.after.family) patch['shifts.'+r.id+'.color']=(catalog.families&&catalog.families[r.after.family]&&catalog.families[r.after.family].color)||PALETTE[0];
+    }
+    if(r.after.role!==r.before.role) patch['shifts.'+r.id+'.role']=r.after.role;
+    if(r.after.capacity!==r.before.capacity) patch['shifts.'+r.id+'.capacity']=r.after.capacity;
   }
   try{
     await mergeFields(catalogRef,patch);
@@ -4160,58 +4316,108 @@ function refreshCatDerived(){
   }
   renderCatSummary();
 }
+// ═══ [85 · S7] READ-FIRST CATALOG ROWS ═════════════════════════════════════════════════
+// The page rendered ELEVEN live controls for every shift, all the time — about a thousand of
+// them on a real catalog, with no column headers, so what each one meant lived in a hover
+// tooltip. Now each shift is ONE QUIET LINE and only the row you are editing has inputs.
+//
+// This is not only a tidiness fix. Every input on this page is a re-render hazard: a snapshot
+// arriving while you tab through 92 shifts destroys the element you were about to reach ([55],
+// and defect 12 before it). One open row is one hazard instead of ninety-two.
+//
+// THE PROBLEM BADGES ARE THE SAME QUESTIONS THE SUMMARY CARD COUNTS, computed by ONE function
+// so a badge on a row and a number in the card can never disagree — the build-78 lesson, where
+// two definitions of "what a day needs" drifted apart in two different readers.
+let catOpenRow='', catCollapsedFams={}, catProblem='';
+function catShiftProblems(s,ruleCount){
+  const out=[];
+  const st=s&&s.start, en=s&&s.end;
+  if(!st&&!en) out.push('notimes');
+  else if(!st||!en) out.push('halfset');
+  else if(s.timesProvisional) out.push('provisional');
+  if(!(s&&s.site)) out.push('nosite');
+  if(!ruleCount) out.push('nodemand');
+  return out;
+}
+const CAT_PROBLEM_LABEL={notimes:'no times',halfset:'half set',provisional:'provisional',nosite:'no site',nodemand:'no demand'};
+window.catShiftProblems=catShiftProblems;   // HANDOFF trap 1
+// The [55] guard defers re-rendering the list while a field has focus, so a Firestore
+// snapshot cannot destroy what you are typing. But these four are the ADMIN's own deliberate
+// clicks — asking for the list to change IS the request — and honouring the guard there made
+// the button appear dead until focus happened to leave. Found by build55-test, not by reading.
+function catUserAction(){ _catEditing=false; try{ clearTimeout(_catBlurT); }catch(_e){} }
+window.catEditRow=function(id){ catUserAction(); catOpenRow=(catOpenRow===id?'':id); renderCatalog(); };
+// §95: "I need a way to do both edit 1 at a time and big batch edits." Dense mode renders every
+// row as its editor — the pre-85 page, on demand. It is the expensive one (about eleven controls
+// per shift) and that is the POINT of it: one uninterrupted tab-through for a whole-catalog
+// sweep. The [55] mid-edit guard protects it exactly as it always did.
+window.setCatEditMode=function(m){
+  if(m!=='read'&&m!=='all') return;
+  catUserAction();
+  catEditMode=m; catOpenRow='';
+  try{ localStorage.setItem('dsCatEditMode',m); }catch(_){}
+  renderCatalog();
+};
+window.catToggleFam=function(f){ catUserAction(); catCollapsedFams[f]=!catCollapsedFams[f]; renderCatalog(); };
+window.setCatProblem=function(k){ catUserAction(); catProblem=(catProblem===k?'':k); catOpenRow=''; renderCatalog(); };
+
 function renderCatSummary(){
   const sum=document.getElementById('catTimeSummary'); if(!sum) return;
   const all=shiftList();
-  const timed=all.filter(([,x])=>x.start&&x.end).length;
-  const half=all.filter(([,x])=>(x.start?1:0)+(x.end?1:0)===1).length;
-  const prov=all.filter(([,x])=>x.start&&x.end&&x.timesProvisional).length;
-  const sited=all.filter(([,x])=>x.site).length;
-  const nodemand=all.filter(([,x])=>!demandRules(x).length).length;
+  // [85 · S7] Every count here now comes from catShiftProblems() — the SAME function that puts
+  // a badge on a row. They used to be five separate filter expressions, which is how a card
+  // and a row start disagreeing about the same shift (build 78's lesson, in miniature).
+  const probs=all.map(([,x])=>catShiftProblems(x,demandRules(x).length));
+  const nWith=k=>probs.filter(p=>p.indexOf(k)>=0).length;
+  const half=nWith('halfset'), prov=nWith('provisional'), nodemand=nWith('nodemand');
+  const timed=all.length-nWith('notimes')-half;
+  const sited=all.length-nWith('nosite');
+  // [85 · S7] The counts are now BUTTONS. A number that tells you something is wrong and
+  // leaves you to find it by eye is half a feature; these filter the list to exactly the
+  // shifts they are counting. Clicking the active one clears it.
+  const btn=(k,txt,col)=>'<button class="btn btn-ghost" style="font-size:11.5px;padding:1px 7px;'
+    +(catProblem===k?'background:#1e293b;color:#fff;':'')+(col&&catProblem!==k?'color:'+col+';':'')
+    +'" onclick="setCatProblem(\''+k+'\')">'+txt+'</button>';
   sum.innerHTML = all.length
     ? '<b>'+timed+' of '+all.length+'</b> shifts have times set'
-      +(prov?' · <span style="color:#92400e"><b>'+prov+'</b> provisional</span>':'')
-      +(half?' · <span style="color:#b91c1c"><b>'+half+'</b> half set — a start with no end counts as nothing</span>':'')
+      +(prov?' · '+btn('provisional','<b>'+prov+'</b> provisional','#92400e'):'')
+      +(half?' · '+btn('halfset','<b>'+half+'</b> half set — a start with no end counts as nothing','#b91c1c'):'')
+      +((all.length-timed-half)>0?' · '+btn('notimes','<b>'+(all.length-timed-half)+'</b> with no times','#92400e'):'')
       +(timed<all.length?' · <span style="color:var(--t3)">the rest are blank, which is a real answer (§38)</span>':' · <b style="color:#065f46">all timed</b>')
       +'<br><b>'+sited+' of '+all.length+'</b> have a site'
-      +(sited<all.length?' · <span style="color:var(--t3)">§18 makes site a property of a whole day</span>':' · <b style="color:#065f46">all sited</b>')
+      +(sited<all.length?' · '+btn('nosite','<b>'+(all.length-sited)+'</b> with no site','#92400e')
+          +' <span style="color:var(--t3)">§18 makes site a property of a whole day</span>':' · <b style="color:#065f46">all sited</b>')
       +'<br><b>'+(all.length-nodemand)+' of '+all.length+'</b> have demand rules'
-      +(nodemand?' · <span style="color:var(--t3)">'+nodemand+' are never asked for at all, which is different from needing nobody (§9)</span>':' · <b style="color:#065f46">all set</b>')
+      +(nodemand?' · '+btn('nodemand','<b>'+nodemand+'</b> never asked for','#92400e')
+          +' <span style="color:var(--t3)">which is different from needing nobody (§9)</span>':' · <b style="color:#065f46">all set</b>')
     : '';
 }
 
-function renderCatalog(){
-  const el=document.getElementById('catList'); if(!el) return;
-  // [55] DO NOT REBUILD THIS LIST WHILE THE ADMIN IS WORKING IN IT.
-  //
-  // Saving a time fires a Firestore snapshot → renderAll() → renderCatalog(). Rebuilding
-  // the rows replaces every <input> with a NEW element, which means: focus dies, and the
-  // anti-autofill guard at the top of this page re-arms the new one as readonly through a
-  // MutationObserver — so the next keystroke goes nowhere. Tabbing down 92 shifts becomes
-  // impossible. Same shape as defect 12, where renderAll() eats unsaved typing in Users.
-  //
-  // Restoring focus afterwards was tried and is NOT enough: the element the admin tabbed to
-  // is destroyed before they ever arrive on it. The only reliable answer is to leave the
-  // rows alone and refresh just the derived text, then rebuild once they leave.
-  if(_catEditing){ refreshCatDerived(); return; }
-  ['','MD','CRNA','Both'].forEach(r=>{ const b=document.getElementById('catRoleFilter_'+r); if(b) b.className='btn '+(catalogRoleFilter===r?'btn-primary':'btn-ghost'); });
-  ['family','order','label'].forEach(v=>{ const b=document.getElementById('catSort_'+v); if(b) b.className='btn '+(catSort===v?'btn-primary':'btn-ghost'); });
-  const list=catalogList().filter(([,s])=>!catalogRoleFilter||s.role===catalogRoleFilter||(catalogRoleFilter!=='Both'&&s.role==='Both'));
-  // [62] A heading whenever the family changes, so "grouped by family" is visible rather
-  // than merely true. Only in family mode — a heading under an A–Z sort would be a lie.
-  let _lastFam=null;
-  const famHead=(s)=>{
-    if(catSort!=='family') return '';
-    const f=famLabelOf(s.family);
-    if(f===_lastFam) return '';
-    _lastFam=f;
-    const col=(s.family&&catalog.families?.[s.family]?.color)||'#e2e8f0';
-    return '<div style="display:flex;align-items:center;gap:8px;margin:12px 0 4px">'
-      +'<span style="width:12px;height:12px;border-radius:4px;background:'+esc(col)+';border:1px solid var(--b2)"></span>'
-      +'<b style="font-size:12px;color:var(--t1)">'+esc(f)+'</b>'
-      +'<span style="flex:1;height:1px;background:var(--b1)"></span></div>';
-  };
-  el.innerHTML=list.length?list.map(([id,s])=>famHead(s)+`
+
+// One quiet line per shift: colour pill, times, site, demand, capacity, and a badge for each
+// thing that is missing. The ✎ opens THIS row — and only this row — into the full editor,
+// which is the same markup it has always been, unchanged and still driving the same handlers.
+function catReadRowHtml(id,s){
+  const rules=demandRules(s).length;
+  const probs=catShiftProblems(s,rules);
+  const times=(s.start&&s.end)
+    ? '<span class="mono" style="font-size:11px;color:var(--t2)">'+esc(s.start)+'–'+esc(s.end)+'</span>'
+      +'<span style="font-size:10.5px;color:var(--t3)"> '+esc(fmtDur(shiftMinutes(s.start,s.end)))+(crossesMidnight(s.start,s.end)?' ⏰':'')+'</span>'
+    : '<span style="font-size:11px;color:var(--t3)">—</span>';
+  const badges=probs.map(k=>'<span class="chipp" style="background:#fef3c7;color:#92400e;font-size:10px">'+esc(CAT_PROBLEM_LABEL[k]||k)+'</span>').join(' ');
+  return '<div class="rowline catread" data-shift="'+esc(id)+'">'
+    +'<span class="chipp catlabel" style="min-width:96px;text-align:center;background:'+esc(shiftColor(s))+'">'+esc(s.label||id)+'</span>'
+    +'<span style="font-size:10.5px;color:var(--t3);min-width:30px">'+(s.kind==='call'?'call':'day')+'</span>'
+    +'<span style="min-width:150px">'+times+'</span>'
+    +'<span style="font-size:11px;color:var(--t2);min-width:78px">'+(s.site?esc(s.site):'<span style="color:var(--t3)">no site</span>')+'</span>'
+    +'<span style="font-size:11px;color:var(--t2);min-width:74px">'+(rules?(rules+' rule'+(rules===1?'':'s')):'<span style="color:var(--t3)">no demand</span>')+'</span>'
+    +'<span style="font-size:11px;color:var(--t2);min-width:34px" title="How many people can hold this shift on the same day">👥'+(s.capacity||1)+'</span>'
+    +'<span style="font-size:11px;color:var(--t3);min-width:52px">'+(s.role?esc(s.role):'')+'</span>'
+    +'<span style="flex:1">'+badges+'</span>'
+    +'<button class="btn btn-ghost" style="font-size:11px;padding:2px 9px" title="Edit this shift" onclick="catEditRow(\''+esc(id)+'\')">✎ Edit</button>'
+    +'</div>';
+}
+function catEditRowHtml(id,s){ return `
     <div class="rowline">
       <input type="text" class="inp" id="lb_${esc(id)}" value="${esc(s.label)}" title="What people call this shift. The internal id stays ${esc(id)} — see the note under the list."
              style="width:112px;font-size:11.5px;font-weight:700;padding:3px 7px;border-radius:999px;text-align:center;background:${esc(shiftColor(s))};border:1px solid var(--b2)"
@@ -4246,7 +4452,73 @@ function renderCatalog(){
         <option value="Both"${s.role==='Both'?' selected':''}>Both</option>
       </select>
       <span style="margin-left:auto"><button class="btn btn-ghost" style="font-size:11px;color:var(--red)" onclick="delShift('${esc(id)}')">Delete</button></span>
-    </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No shifts yet — add one above.</div>';
+    </div>`; }
+// The list, assembled: problem filter → collapsible family bands → one row each, read-first.
+function catRowsHtml(list,famHead){
+  const filtered=list.filter(([,s])=>!catProblem||catShiftProblems(s,demandRules(s).length).indexOf(catProblem)>=0);
+  if(!filtered.length){
+    return '<div style="font-size:12px;color:var(--t3);padding:10px 0">'
+      +(catProblem?('No shift has that problem — <b>'+esc(CAT_PROBLEM_LABEL[catProblem]||catProblem)+'</b>. <button class="btn btn-ghost" style="font-size:11px;padding:1px 7px" onclick="setCatProblem(\''+catProblem+'\')">Show all</button>')
+                  :'No shifts yet — add one above.')+'</div>';
+  }
+  const counts={};
+  for(const [,s] of filtered){ const f=famLabelOf(s.family); counts[f]=(counts[f]||0)+1; }
+  let out='', lastFam=null;
+  for(const [id,s] of filtered){
+    const f=famLabelOf(s.family);
+    if(catSort==='family'&&f!==lastFam){
+      lastFam=f;
+      const col=(s.family&&catalog.families&&catalog.families[s.family]&&catalog.families[s.family].color)||'#e2e8f0';
+      const shut=!!catCollapsedFams[f];
+      out+='<div class="catband" onclick="catToggleFam('+JSON.stringify(f).replace(/"/g,'&quot;')+')" '
+        +'style="display:flex;align-items:center;gap:8px;margin:12px 0 4px;cursor:pointer;padding:4px 8px;border-radius:8px;background:'+esc(col)+'33">'
+        +'<span style="font-size:10px;color:var(--t2);width:10px">'+(shut?'▸':'▾')+'</span>'
+        +'<span style="width:12px;height:12px;border-radius:4px;background:'+esc(col)+';border:1px solid var(--b2)"></span>'
+        +'<b style="font-size:12px;color:var(--t1)">'+esc(f)+'</b>'
+        +'<span style="font-size:10.5px;color:var(--t3)">'+counts[f]+'</span>'
+        +'<span style="flex:1;height:1px;background:var(--b1)"></span></div>';
+    }
+    if(catSort==='family'&&catCollapsedFams[f]) continue;
+    out+=((catEditMode==='all'||catOpenRow===id)?catEditRowHtml(id,s):catReadRowHtml(id,s));
+  }
+  return out;
+}
+
+function renderCatalog(){
+  const el=document.getElementById('catList'); if(!el) return;
+  // [55] DO NOT REBUILD THIS LIST WHILE THE ADMIN IS WORKING IN IT.
+  //
+  // Saving a time fires a Firestore snapshot → renderAll() → renderCatalog(). Rebuilding
+  // the rows replaces every <input> with a NEW element, which means: focus dies, and the
+  // anti-autofill guard at the top of this page re-arms the new one as readonly through a
+  // MutationObserver — so the next keystroke goes nowhere. Tabbing down 92 shifts becomes
+  // impossible. Same shape as defect 12, where renderAll() eats unsaved typing in Users.
+  //
+  // Restoring focus afterwards was tried and is NOT enough: the element the admin tabbed to
+  // is destroyed before they ever arrive on it. The only reliable answer is to leave the
+  // rows alone and refresh just the derived text, then rebuild once they leave.
+  if(_catEditing){ refreshCatDerived(); return; }
+  ['','MD','CRNA','Both'].forEach(r=>{ const b=document.getElementById('catRoleFilter_'+r); if(b) b.className='btn '+(catalogRoleFilter===r?'btn-primary':'btn-ghost'); });
+  ['family','order','label'].forEach(v=>{ const b=document.getElementById('catSort_'+v); if(b) b.className='btn '+(catSort===v?'btn-primary':'btn-ghost'); });
+  ['read','all'].forEach(v=>{ const b=document.getElementById('catMode_'+v); if(b) b.className='btn '+(catEditMode===v?'btn-primary':'btn-ghost'); });
+  const dn=document.getElementById('catDenseNote');
+  if(dn) dn.style.display=(catEditMode==='all')?'block':'none';
+  const list=catalogList().filter(([,s])=>!catalogRoleFilter||s.role===catalogRoleFilter||(catalogRoleFilter!=='Both'&&s.role==='Both'));
+  // [62] A heading whenever the family changes, so "grouped by family" is visible rather
+  // than merely true. Only in family mode — a heading under an A–Z sort would be a lie.
+  let _lastFam=null;
+  const famHead=(s)=>{
+    if(catSort!=='family') return '';
+    const f=famLabelOf(s.family);
+    if(f===_lastFam) return '';
+    _lastFam=f;
+    const col=(s.family&&catalog.families?.[s.family]?.color)||'#e2e8f0';
+    return '<div style="display:flex;align-items:center;gap:8px;margin:12px 0 4px">'
+      +'<span style="width:12px;height:12px;border-radius:4px;background:'+esc(col)+';border:1px solid var(--b2)"></span>'
+      +'<b style="font-size:12px;color:var(--t1)">'+esc(f)+'</b>'
+      +'<span style="flex:1;height:1px;background:var(--b1)"></span></div>';
+  };
+  el.innerHTML=catRowsHtml(list,famHead);
   renderCatSummary();
   renderCatFamilyOptions();
   renderHolidays();
