@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 76;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 77;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -2876,47 +2876,15 @@ window.addSchedUser=async function(){
   msg.style.color='var(--green)'; msg.textContent='Added '+initials+(fteVal===null?' — set their FTE here when ready.':'.');
   auditLog('user.add','Added user '+initials+(fullName?' ('+fullName+')':''));
 };
-window.saveSchedUser=async function(u){
-  if(usersLockedRefuse()) return;
-  // [build 48 · audit] Same loaded-gate as saveSchedField/saveAllSchedUsers: before the shared
-  // docs load, a blank grid would deleteField() real values AND the duplicate guard below would
-  // be checking against an empty cache (vacuous).
-  if(!(usernamesLoaded&&emailsLoaded&&loginEmailsLoaded)){ schedToast('Still loading user data — try again in a moment','err'); return; }
-  const fn=document.getElementById('ufn_'+u).value.trim();
-  // Lower-cased so the security rules' case-sensitive match against the signed-in Google e-mail works.
-  const lem=(document.getElementById('ulem_'+u)?.value||'').trim().toLowerCase();
-  const em=document.getElementById('uem_'+u).value.trim();
-  const fteEl=document.getElementById('ufte_'+u);
-  const fteRaw=fteEl?fteEl.value.trim():'';
-  if(lem && !lem.includes('@')){ alert('Login e-mail must be a valid address.'); return; }
-  // Validate the FTE BEFORE writing anything, so a mistyped FTE aborts the whole
-  // save instead of silently committing the name/e-mail changes first (the login
-  // e-mail is shared with the Vacation Auction, so a stray commit there matters).
-  let fteVal=null; const fteClear=(fteRaw==='');
-  if(!fteClear){
-    const v=parseFloat(fteRaw);
-    if(isNaN(v)||v<0||v>1){ alert('FTE must be a number between 0 and 1.'); return; }
-    fteVal=Math.round(v*10)/10;
-  }
-  // [M-12] Shared-roster writes can be denied for a schedule-only admin — surface it
-  // (specific toast) instead of dying as a silent unhandled rejection mid-save.
-  try{
-    // [build 47 · DUPLICATE-LOGIN-EMAIL CRITICAL] refuse before ANY of the shared docs write,
-    // so a duplicate can't half-save the row
-    if(lem){ const _h=_schedLoginEmailOwner(lem,u); if(_h){ schedToast('NOT saved — '+lem+' is already the login e-mail for '+_h,'err'); return; } }
-    if(fn) await setDoc(usernamesRef,{[u]:fn},{merge:true}); else await updateDoc(usernamesRef,{[u]:deleteField()}).catch(()=>{});
-    // Login (Google) e-mail is shared with the Vacation Auction — writing it here
-    // updates it there too, and vice-versa.
-    if(lem) await setDoc(loginEmailsRef,{[u]:lem},{merge:true}); else await updateDoc(loginEmailsRef,{[u]:deleteField()}).catch(()=>{});
-    await syncEmailToUserFromLogin();
-    if(em) await setDoc(emailsRef,{[u]:em},{merge:true}); else await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
-  }catch(e){
-    schedToast((e&&e.code==='permission-denied')?'Not saved — shared name/e-mail fields need a Vacation Auction admin':'Not saved — please try again','err');
-    return;
-  }
-  if(fteClear) await mergeFields(schedFteRef,{[u]:deleteField()}); else await mergeFields(schedFteRef,{[u]:fteVal});
-  schedToast('Saved '+u,'ok');
-};
+// [77 · defect 26] window.saveSchedUser WAS HERE AND IS DELETED. Its only call site — a
+// row-level Save button in the Users grid — was removed in July 2026 when the grid moved to
+// per-field saves, so it had been unreachable for a year while still carrying live roster
+// writes, the [47] duplicate-login guard and the [48] loaded-gate. It was also one of the SIX
+// sanctioned handlers in tests/sched/isolation-test.mjs — the cardinal-rule allowlist for
+// writing the roster the LIVE auction reads — so a sixth of that allowlist described code no
+// click could reach. The sanctioned set is now FIVE, and it is exactly the reachable surface.
+// The live per-field/batch writers (saveSchedField, saveAllSchedUsers, addSchedUser,
+// removeSchedUser) are unchanged. Git has the body if a row-level save is ever wanted back.
 
 // Brief floating confirmation for the per-field / batch saves below.
 // ══ Users page lock [build 50] ══════════════════════════════════════════════
@@ -4649,6 +4617,22 @@ function renderBaseline(){
 }
 window.saveBaseline=async function(){
   const callShifts=[...shiftList()].filter(([id,s])=>s.kind==='call');
+  // [77] REFUSE UNLESS THE TABLE REALLY RENDERED. This write REPLACES the document — the table
+  // is the full source of truth and a blank box means zero, so a merge would make blanking
+  // impossible and is NOT the fix here. But renderBaseline() emits no inputs at all when the
+  // roster is empty or the catalog holds no call shifts, and this button stays live either way,
+  // so one click during a slow, empty or permission-denied load used to write an empty map and
+  // erase every baseline. dailysched/callBaseline is the ONE input that cannot be recomputed
+  // from the schedule — it exists to record call worked BEFORE the system. Missing even one
+  // expected box means the DOM and the data disagree, so refuse the whole write rather than
+  // save a partial table over a complete one. Same id derivation as the loop below, so this
+  // can never disagree with what the writer would actually find.
+  let _missing=0;
+  for(const u of names){ for(const [id] of callShifts){ if(!document.getElementById('bl_'+u+'_'+id)) _missing++; } }
+  if(!names.length || !callShifts.length || _missing){
+    if(typeof schedToast==='function') schedToast('Baseline NOT saved — the table has not finished loading. Reopen this panel and try again.','err');
+    return;
+  }
   const map={};
   for(const u of names){
     for(const [id] of callShifts){
