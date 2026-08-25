@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 96;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 98;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -628,6 +628,8 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Shift Eligibility</div>
     <div class="page-sub" style="margin-bottom:12px">Who can work each shift — by group, by one side of a group, or by naming a person. Auto-populate, cell assignment and request approval all respect this.</div>
     <div class="card" style="padding:10px 12px">
+      <div class="card-title secth" onclick="toggleSect('eligfilters')" title="Click to open or close the filters"><span class="secta" id="secta_eligfilters">▸</span>Filters<span class="sectsum" id="sectsum_eligfilters"></span></div>
+      <div id="sect_eligfilters" style="display:none">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
         <span style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.05em">Family</span>
         <div class="eg-chips" id="eligFamChips"></div>
@@ -654,8 +656,9 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <span style="width:1px;height:20px;background:var(--b2)"></span>
         <button class="btn" style="font-size:12px;padding:4px 10px" onclick="resetEligFilters()">Reset filters</button>
       </div>
+      </div>
       <div id="eligBoard"></div>
-      <div class="eg-legend">
+      <div class="eg-legend" id="eligLegend" style="display:none">
         <span class="k"><span class="box" style="background:#dbeafe"> </span> a group, or one side of it</span>
         <span class="k"><span class="box" style="background:#dcfce7">+</span> allowed individually</span>
         <span class="k"><span class="box" style="background:#fee2e2">−</span> blocked individually — blocking always wins</span>
@@ -1929,6 +1932,11 @@ window.nav=function(id,el){
   document.getElementById('panel-'+id).classList.add('on');
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
   if(el) el.classList.add('on');
+  // [97 · §104] The ONE thing that resets on navigation. Sections stay as he left them, but an
+  // eligibility row does not: "it then stays open until closed intentionally or when page
+  // navigates to other section." The difference is scale — there are a handful of sections and
+  // dozens of shift rows.
+  if(id!=='elig'&&typeof _eligOpen!=='undefined'&&_eligOpen){ _eligOpen=''; }
   // [66 · S2] entering a panel renders it fresh — data may have changed while hidden.
   if(typeof PANEL_KEYS!=='undefined'&&PANEL_KEYS[id]) markDirty(...PANEL_KEYS[id]);
 };
@@ -3702,21 +3710,35 @@ function renderElig(){
         +'<span class="chipp eligname" style="background:'+esc(shiftColor(s2))+';min-width:96px;text-align:center">'+esc(s2.label||id)+'</span>'
         +'<span style="font-size:10.5px;color:var(--t3)">'+(s2.kind==='call'?'call':'day')+(s2.site?' · '+esc(s2.site):'')+'</span>'
         +'<span style="flex:1"></span>'
+        // [97] A closed row still has to answer "what does this ask for?" without the chips —
+        // §104: a collapsed thing that says nothing trades clutter for a guessing game.
+        +((!open&&keys.length)
+            ? '<span style="font-size:11px;color:var(--t3)">asks for '
+              +keys.slice(0,2).map(k=>esc(reqLabelOf(k))).join(', ')
+              +(keys.length>2?(' +'+(keys.length-2)):'')
+              +(keys.length>1?(' · '+(mode==='all'?'all':'any one')):'')+'</span>'
+            : '')
         +(keys.length||allowList.length
             ? '<span style="font-size:11.5px;'+(who.length?'color:var(--t2)':'color:#b91c1c;font-weight:800')+'">'+who.length+' can work it</span>'
             : '<span class="chipp" style="background:#fef3c7;color:#92400e">not set up — nobody can work it</span>')
         +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 8px" onclick="eligOpenRow(\''+esc(id)+'\')">'+(open?'Done':'✎ Edit')+'</button>'
       +'</div>'
-      +'<div style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap">'
+      // [97 · §104] EVERYTHING BELOW THE HEADER LINE IS FOR AN OPEN ROW ONLY. Owner: "shift
+      // eligibility needs to be cleaner, to many words visible and too crowded. each shift should
+      // start collpased and be opened by admin." A closed row used to render up to FOUR lines —
+      // requirement chips, allow/block chips, and a dot-separated list of up to SIXTEEN doctors —
+      // so twenty-four shifts became a wall of names. `_eligOpen` gated only the EDITING controls,
+      // which is why closing a row barely changed the page.
+      +(open?'<div style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap">'
         +keys.map(k=>chip(esc(reqLabelOf(k)),'#dbeafe',"eligDropReq('"+esc(id)+"','"+esc(k)+"')")).join('')
         +(keys.length>1
             ?'<span style="font-size:11px;color:var(--t2)">needs</span>'
              +'<button class="btn '+(mode==='any'?'btn-primary':'btn-ghost')+'" style="font-size:10.5px;padding:1px 7px" onclick="eligSetMode(\''+esc(id)+'\',\'any\')">any one</button>'
              +'<button class="btn '+(mode==='all'?'btn-primary':'btn-ghost')+'" style="font-size:10.5px;padding:1px 7px" onclick="eligSetMode(\''+esc(id)+'\',\'all\')">all</button>'
             :'')
-        +(open?'<select class="sel" id="eligAddReq_'+esc(id)+'" style="font-size:11px" onchange="eligAddReq(\''+esc(id)+'\',this.value)">'+reqOptions(id)+'</select>':'')
-      +'</div>'
-      +((allowList.length||blockList.length)
+        +'<select class="sel" id="eligAddReq_'+esc(id)+'" style="font-size:11px" onchange="eligAddReq(\''+esc(id)+'\',this.value)">'+reqOptions(id)+'</select>'
+      +'</div>':'')
+      +((open&&(allowList.length||blockList.length))
         ?'<div style="margin-top:5px;display:flex;align-items:center;gap:5px;flex-wrap:wrap">'
           +allowList.map(u=>chip('+ '+esc(displayName(u)),'#dcfce7',"eligSetPerson('"+esc(id)+"','"+esc(u)+"','')")).join('')
           +blockList.map(u=>chip('− '+esc(displayName(u)),'#fee2e2',"eligSetPerson('"+esc(id)+"','"+esc(u)+"','')")).join('')
@@ -3726,10 +3748,31 @@ function renderElig(){
         +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="eligSetPerson(\''+esc(id)+'\',document.getElementById(\'eligAddPer_'+esc(id)+'\').value,\'allow\')" title="This person can work it whatever groups they are in">Allow this person</button>'
         +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px;color:var(--red)" onclick="eligSetPerson(\''+esc(id)+'\',document.getElementById(\'eligAddPer_'+esc(id)+'\').value,\'block\')" title="This person cannot, even if a group of theirs can">Block this person</button>'
       +'</div>':'')
-      +(who.length?'<div style="font-size:11.5px;color:var(--t3);margin-top:5px">'
+      +((open&&who.length)?'<div style="font-size:11.5px;color:var(--t3);margin-top:5px">'
         +who.slice(0,16).map(u=>esc(displayName(u))).join(' · ')+(who.length>16?(' … +'+(who.length-16)):'')+'</div>':'')
       +'</div>';
   }).join('');
+  // [97 · §104] A closed Filters bar has to say what is filtering. A short board with no visible
+  // reason is the worst version of this page, not the cleanest — the owner would be looking at
+  // four shifts wondering where the other twenty went.
+  {
+    const act=[];
+    if(_eligFam) act.push(eligFamLabelOf(_eligFam));
+    if(_eligKind) act.push(_eligKind==='call'?'call only':'day only');
+    const q1=(document.getElementById('eligQShift')||{}).value, q2=(document.getElementById('eligQUser')||{}).value;
+    if(q1&&q1.trim()) act.push('shift “'+q1.trim()+'”');
+    if(q2&&q2.trim()) act.push('person “'+q2.trim()+'”');
+    if(needsOnly) act.push('only shifts nobody can work');
+    if(_eligView==='people') act.push('by person');
+    if(_eligSort) act.push('sorted');
+    const fs=document.getElementById('sectsum_eligfilters');
+    if(fs) fs.textContent=sectOpen.eligfilters?'':(act.length?act.join(' · '):'none');
+    sectApply('eligfilters');
+    // [97] The legend explains the chips, and since [97] the chips only exist inside an OPEN row.
+    // Showing it above a page of closed one-liners was explaining symbols that were not on screen.
+    const lg=document.getElementById('eligLegend');
+    if(lg) lg.style.display=_eligOpen?'':'none';
+  }
   const setUp=sh.filter(([,s2])=>eligReqKeys(s2).length||Object.keys(shiftElig(s2).allow||{}).length).length;
   if(showEl) showEl.textContent=sh.length+' shift'+(sh.length===1?'':'s')+' shown · '+setUp+' set up · '+(sh.length-setUp)+' not';
 }
@@ -4592,9 +4635,13 @@ function sectApply(k){
 window.toggleSect=function(k){
   sectOpen[k]=!sectOpen[k];
   sectApply(k);
-  // The shifts list is rendered lazily: there is no point building 90 rows into a hidden box,
-  // and the summary line has to be right whether it is open or shut.
-  if(k==='shifts') renderCatalog();
+  // The panel that owns the section has to re-render, because the SUMMARY on the bar is computed
+  // there and it changes with the open state — it names what is inside while shut and steps aside
+  // once you can see the controls. [97] Missing this for the eligibility filters left a stale
+  // summary sitting beside the open filter bar, which the suite caught.
+  if(k.indexOf('grp:')===0){ if(typeof renderGroups==='function') renderGroups(); }
+  else if(k==='eligfilters'){ if(typeof renderElig==='function') renderElig(); }
+  else if(typeof renderCatalog==='function') renderCatalog();
 };
 function sectSummaries(){
   const n=shiftList().length;
@@ -4895,8 +4942,8 @@ function renderCatalog(){
   const hb=document.getElementById('catHeadBatch'), hr=document.getElementById('catHeadRead');
   if(hb) hb.style.display=(catEditMode==='all')?'':'none';
   if(hr) hr.style.display=(catEditMode==='all')?'none':'';
-  // [96] Building 90 rows into a box nobody can see is work for nothing.
-  if(!sectOpen.shifts){ el.innerHTML=''; return; }
+  // [96] Building 90 rows into a box nobody can see is work for nothing — but ONLY the rows.
+  // See the note at el.innerHTML below: returning early here was a real defect.
   const list=catalogList().filter(([,s])=>!catalogRoleFilter||s.role===catalogRoleFilter||(catalogRoleFilter!=='Both'&&s.role==='Both'));
   // [62] A heading whenever the family changes, so "grouped by family" is visible rather
   // than merely true. Only in family mode — a heading under an A–Z sort would be a lie.
@@ -4912,7 +4959,16 @@ function renderCatalog(){
       +'<b style="font-size:12px;color:var(--t1)">'+esc(f)+'</b>'
       +'<span style="flex:1;height:1px;background:var(--b1)"></span></div>';
   };
-  el.innerHTML=catRowsHtml(list,famHead);
+  // [97] ONLY THE LIST IS SKIPPED WHEN THE SECTION IS SHUT, and this line is the whole fix for a
+  // defect the owner found in 96. Build 96 returned early from renderCatalog when Shifts was
+  // collapsed — which is the DEFAULT — and everything below this point died with it: the catalog
+  // summary, the family dropdown, the SITE dropdown, the holidays list, the open demand dialog and
+  // the copy-an-existing-shift picker. Five of the six belong to OTHER sections of this page and
+  // had nothing to do with the shift list at all. He reported it as "the holidays section should
+  // list the holidays with remove feature as well" — the visible tip of six dead renders.
+  // The lesson is the general one: an early return added for one panel silently owns every line
+  // after it. Skip the WORK, never the REST of the function.
+  el.innerHTML = sectOpen.shifts ? catRowsHtml(list,famHead) : '';
   renderCatSummary();
   renderCatFamilyOptions();
   renderHolidays();
@@ -5654,7 +5710,15 @@ function renderGroups(){
         +'</div>';
     };
     return '<div class="bd-site">'
-      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+      +'<div class="secth" style="margin:0 0 6px;padding:2px 4px" onclick="toggleSect('+jsArg('grp:'+key)+')" '
+        +'title="Click to open or close this group">'
+        // [98 · §104] Owner: "same for each group, that should collapse unless i'm adding someone.
+        // If I have 10-20 groups eventually, the page would scroll forever and be cluttered."
+        // He is right about the cost: each card draws a checkbox per person per side, so nine
+        // groups over a 35-person roster is ~315 checkboxes on one screen. Closed, a card is its
+        // header — which already carries the two things you come to it for, the NAME and the
+        // MD/CRNA counts.
+        +'<span class="secta" id="secta_grp:'+esc(key)+'">▸</span>'
         // [91] THE NAME READS FIRST. It was 12.5px sitting between two uppercase "MD SUBGROUP · 0"
         // headings, so nine cards looked identical and the owner read them as all being called
         // "MD subgroup 0". The name is the only thing that identifies a card; it gets the size.
@@ -5665,11 +5729,13 @@ function renderGroups(){
           +(fair?'':';background:#fef3c7;border-color:#fcd34d;color:#92400e;font-weight:700')+'"'
           +' title="'+(fair?'Everyone in this group counts toward the group averages. Click to leave the group out — the per diem and locums setting.'
                             :'Nobody in this group affects anyone else\u2019s average. They are still scheduled and still get their own full report. Click to put the group back in.')+'"'
-          +' onclick="setGroupFairness('+jsArg(key)+','+jsArg(!fair)+')">'
+          +' onclick="event.stopPropagation();setGroupFairness('+jsArg(key)+','+jsArg(!fair)+')">'
           +(fair?'Counts toward averages':'Not in averages')+'</button>'
         +'<span style="flex:1"></span>'
-        +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="renameGroup('+jsArg(key)+')">Rename</button>'
-        +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px;color:var(--red)" onclick="deleteGroup('+jsArg(key)+')">Delete</button>'
+        // [98] These live inside the header, which is now the toggle — so they must stop the
+        // click travelling up, or renaming a group would also open or shut it under the dialog.
+        +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="event.stopPropagation();renameGroup('+jsArg(key)+')">Rename</button>'
+        +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px;color:var(--red)" onclick="event.stopPropagation();deleteGroup('+jsArg(key)+')">Delete</button>'
       +'</div>'
       +(sides.nocat.length?'<div style="font-size:11px;color:#92400e;margin-bottom:4px">'+sides.nocat.length
           +' in this group have no category, so they are on neither side: '+sides.nocat.map(u=>esc(displayName(u))).join(', ')+'</div>':'')
@@ -5677,9 +5743,15 @@ function renderGroups(){
           +'<b>'+odd.length+' individually overridden</b> — '
           +odd.map(u=>esc(displayName(u))+' is set '+(inCompPool(u)?'to count':'not to count')).join('; ')
           +'. <span style="color:var(--t2)">Change these on Reports → Settings.</span></div>':'')
-      +'<div style="display:flex;gap:12px;flex-wrap:wrap">'+col('MD subgroup',sides.md,'MD')+col('CRNA subgroup',sides.crna,'CRNA')+'</div>'
+      +'<div id="sect_grp:'+esc(key)+'" style="display:none">'
+        +'<div style="display:flex;gap:12px;flex-wrap:wrap">'+col('MD subgroup',sides.md,'MD')+col('CRNA subgroup',sides.crna,'CRNA')+'</div>'
+      +'</div>'
       +'</div>';
   }).join('')+'</div>';
+  // [98] innerHTML has just replaced every card, so re-apply the open/closed state. Without this
+  // a Firestore snapshot would silently re-close the group he is working in — the same shape as
+  // the catalog's family bands.
+  for(const [key] of gl) sectApply('grp:'+key);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
