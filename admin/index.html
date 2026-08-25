@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 93;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 94;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -220,7 +220,11 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
 .mono{font-family:var(--mono)}
 .modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:150;padding:16px}
 .modal.on{display:flex}
-.modal .mcard{background:var(--s1);border-radius:14px;max-width:420px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.modal .mcard{background:var(--s1);border-radius:14px;max-width:420px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.4);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow-y:auto}  /* [94] A card taller than the window used to overflow BOTH ends — .modal centres it and
+     never scrolled, so the title and the Done button were simply unreachable. The demand
+     dialog hits this the moment a shift has a few rules, because the 60-day preview is 60
+     cells tall. 32px is .modal's own 16px padding, top and bottom. dvh repeats vh on purpose:
+     browsers that know dvh use the real visible height, the rest keep the vh value. */
 .chipp{display:inline-block;border-radius:4px;padding:0 5px;font-weight:700;color:#1e293b}
 .dash-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:16px}
 .dash-cols>.card{margin-bottom:0;cursor:pointer}
