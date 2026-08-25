@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 98;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 99;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -531,7 +531,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   <div class="panel" id="panel-requests">
     <div class="page-title" style="font-size:16px;margin-bottom:10px">User Requests</div>
     <div class="card"><div class="card-title">Pending</div><div id="reqPending"></div></div>
-    <div class="card"><div class="card-title">Decided</div><div id="reqDecided"></div></div>
+    <div class="card"><div class="card-title secth" onclick="toggleSect('reqdecided')" title="Click to open or close this section"><span class="secta" id="secta_reqdecided">▸</span>Decided<span class="sectsum" id="sectsum_reqdecided"></span></div><div id="sect_reqdecided" style="display:none"><div id="reqDecided"></div></div></div>
   </div>
 
   <!-- SWAPS -->
@@ -539,19 +539,21 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     <div class="page-title" style="font-size:16px;margin-bottom:10px">Swap Requests</div>
     <div class="card"><div class="card-title">Awaiting your approval</div><div id="swapPending"></div></div>
     <div class="card"><div class="card-title">Awaiting the other user</div><div id="swapWaiting"></div></div>
-    <div class="card"><div class="card-title">Decided</div><div id="swapDecided"></div></div>
+    <div class="card"><div class="card-title secth" onclick="toggleSect('swapdecided')" title="Click to open or close this section"><span class="secta" id="secta_swapdecided">▸</span>Decided<span class="sectsum" id="sectsum_swapdecided"></span></div><div id="sect_swapdecided" style="display:none"><div id="swapDecided"></div></div></div>
   </div>
 
   <!-- OPEN SHIFTS -->
   <div class="panel" id="panel-open">
     <div class="page-title" style="font-size:16px;margin-bottom:10px">Open Shifts</div>
     <div class="card">
-      <div class="card-title">Post an open shift</div>
+      <div class="card-title secth" onclick="toggleSect('postopen')" title="Click to open or close this section"><span class="secta" id="secta_postopen">▸</span>Post an open shift</div>
+      <div id="sect_postopen" style="display:none">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="date" class="inp" id="openDate">
         <select class="sel" id="openShift"></select>
         <input type="text" class="inp" id="openNote" placeholder="Note (optional)" style="min-width:180px">
         <button class="btn btn-primary" onclick="postOpen()">Post</button>
+      </div>
       </div>
     </div>
     <div class="card"><div class="card-title">Posted</div><div id="openAdminList"></div></div>
@@ -564,7 +566,8 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     <div id="usersLockBar"></div>
     <div id="usersLockable">
     <div class="card">
-      <div class="card-title">🔐 Admin Access (Google sign-in)</div>
+      <div class="card-title secth" onclick="toggleSect('adminaccess')" title="Click to open or close this section"><span class="secta" id="secta_adminaccess">▸</span>🔐 Admin Access (Google sign-in)</div>
+      <div id="sect_adminaccess" style="display:none">
       <div class="page-sub" style="margin-bottom:10px">Google accounts allowed to open this admin page and make admin decisions — this controls the <strong>Daily Schedule only</strong>. Vacation Auction admins are a separate list, managed on the auction admin site's own Admin Access panel. Every admin here is equal; any admin may grant or revoke any other. The list can never be emptied.</div>
       <div id="adminAccessList" style="margin-bottom:12px"></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -572,9 +575,11 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <button class="btn btn-primary" onclick="addAdminEmail()">Grant Admin Access</button>
       </div>
       <div id="adminAccessMsg" style="font-size:12px;margin-top:8px"></div>
+      </div>
     </div>
     <div class="card">
-      <div class="card-title">Add user</div>
+      <div class="card-title secth" onclick="toggleSect('adduser')" title="Click to open or close this section"><span class="secta" id="secta_adduser">▸</span>Add user</div>
+      <div id="sect_adduser" style="display:none">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="text" class="inp" autocomplete="off" id="uInitials" style="width:100px;text-transform:uppercase" placeholder="Initials *" maxlength="10">
         <input type="text" class="inp" autocomplete="off" id="uFullName" style="width:170px" placeholder="Full name">
@@ -585,6 +590,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       </div>
       <div class="page-sub" style="margin-top:6px">Only <strong>initials</strong> are required. Full name, login e-mail and KP e-mail are shared with the Vacation Auction; FTE here is this site's own.</div>
       <div id="uMsg" style="font-size:12px;margin-top:8px"></div>
+      </div>
     </div>
     <div class="card">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -813,11 +819,13 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Shift Families</div>
     <div class="page-sub" style="margin-bottom:12px">Group shifts by clinical type so they share one consistent color everywhere in the app. Drag a shift into a different family to move it — this is also the legend.</div>
     <div class="card">
-      <div class="card-title">Add a family</div>
+      <div class="card-title secth" onclick="toggleSect('addfamily')" title="Click to open or close this section"><span class="secta" id="secta_addfamily">▸</span>Add a family</div>
+      <div id="sect_addfamily" style="display:none">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="text" class="inp" id="famLabel" placeholder="Family name e.g. Cardiac" style="width:200px">
         <div id="famNewColorPicker" style="display:flex;align-items:center;gap:4px"></div>
         <button class="btn btn-primary" onclick="addFamily()">Add family</button>
+      </div>
       </div>
     </div>
     <div class="card">
@@ -2776,6 +2784,10 @@ function renderRequests(){
   document.getElementById('reqDecided').innerHTML=done.length?done.map(r=>row(r,
     `<span class="status-${r.status}">${decidedLbl(r)}</span>`)).join('')
     :'<div style="font-size:12px;color:var(--t3)">No decisions yet.</div>';
+  // [99] The bar says what is behind it while shut, and steps aside once it is open. Written
+  // LAST, after every panel this function owns — an early return here is what [96] shipped.
+  const rsum=document.getElementById('sectsum_reqdecided');
+  if(rsum) rsum.textContent=sectOpen.reqdecided?'':(done.length?done.length+(done.length===1?' decision':' decisions'):'none yet');
 }
 // Approving a request APPLIES it where it maps to a concrete assignment:
 //  shift/claim → assigns that shift on that date; dayoff → marks OFF;
@@ -2976,6 +2988,9 @@ function renderSwaps(){
     return row(s)(s,decidedLabel);
   }).join('')
     :'<div style="font-size:12px;color:var(--t3)">No decisions yet.</div>';
+  // [99] Same as requests: summary written last, after all three panels this function owns.
+  const ssum=document.getElementById('sectsum_swapdecided');
+  if(ssum) ssum.textContent=sectOpen.swapdecided?'':(done.length?done.length+(done.length===1?' decision':' decisions'):'none yet');
 }
 // Approving a swap exchanges the involved users' day-or-call slot(s).
 // Only ever acts on a swap that's already been accepted by everyone whose
@@ -4626,6 +4641,9 @@ let catOpenRow='', catCollapsedFams={}, catProblem='';
 // no storage key to collide with the auction on this shared origin, and no Firestore read.
 // A section he opens stays open across navigation until he shuts it or reloads.
 const sectOpen={};
+// [99] Sections whose body is STATIC markup: no render function owns them, so a toggle changes
+// nothing but the display. Listed so toggleSect does not fall through to renderCatalog().
+const SECT_STATIC=['adminaccess','adduser','postopen','addfamily'];
 function sectApply(k){
   const body=document.getElementById('sect_'+k), arrow=document.getElementById('secta_'+k);
   if(!body) return;
@@ -4641,6 +4659,13 @@ window.toggleSect=function(k){
   // summary sitting beside the open filter bar, which the suite caught.
   if(k.indexOf('grp:')===0){ if(typeof renderGroups==='function') renderGroups(); }
   else if(k==='eligfilters'){ if(typeof renderElig==='function') renderElig(); }
+  // [99] The two Decided lists own a COUNT on their bar, so their panel re-renders like the
+  // others. The four set-once panels below carry no summary — their titles already say what
+  // they are — so there is nothing to recompute and NOTHING to re-render. They must still be
+  // named here, or they fall through to renderCatalog() and re-draw an unrelated page.
+  else if(k==='reqdecided'){ if(typeof renderRequests==='function') renderRequests(); }
+  else if(k==='swapdecided'){ if(typeof renderSwaps==='function') renderSwaps(); }
+  else if(SECT_STATIC.indexOf(k)>=0){ /* static markup — nothing to re-render */ }
   else if(typeof renderCatalog==='function') renderCatalog();
 };
 function sectSummaries(){
