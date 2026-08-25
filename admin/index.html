@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 90;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 91;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -5287,6 +5287,32 @@ window.setPersonCategory=async function(u,cat){
   await mergeFields(categoriesRef,{[u]:cat});
   auditLog('group.category','Set '+displayName(u)+' to '+cat);
 };
+// [91] SELECT ALL / NONE for one side of one group. Owner, mid-setup: "I will need a select all
+// option" — ticking 35 people into nine groups one box at a time is the friction that makes an
+// admin abandon setup half-done.
+//
+// ADDING is one merged write and needs no dialog: it grants, and every grant is visible and
+// individually undoable. CLEARING is the destructive direction — it can silently drop work
+// somebody spent ten minutes on — so it passes through a confirm that NAMES the count, per §3.5.
+// Neither ever touches the other side of the group, and neither touches anyone whose category is
+// unset: they are on no side, and a bulk action must not quietly decide that for them.
+window.groupSelectAll=async function(key,cat,on){
+  if(groupsGateRefuse()) return;
+  if(cat!=='MD'&&cat!=='CRNA') return;
+  const g=groupsData[key]||{};
+  const pick=names.filter(u=>categoryOf(u)===cat);
+  if(!pick.length){ schedToast('Nobody is marked '+cat+' yet','err'); return; }
+  const changing=pick.filter(u=>inGroup(u,key)!==!!on);
+  if(!changing.length){ schedToast(on?('Every '+cat+' is already in '+(g.label||key)):('No '+cat+' is in '+(g.label||key)),'ok'); return; }
+  if(!on&&!confirm('Remove '+changing.length+' '+cat+(changing.length===1?'':'s')+' from "'+(g.label||key)+'"?\n\n'
+    +changing.map(u=>displayName(u)).join(', ')
+    +'\n\nThey stay on the roster and in every other group. Nothing else changes.')) return;
+  const patch={};
+  for(const u of changing) patch[u+'.'+key]=on?true:deleteField();
+  await mergeFields(groupMembersRef,patch);
+  auditLog('group.member',(on?'Added ':'Removed ')+changing.length+' '+cat+' member(s) '+(on?'to ':'from ')+'the group "'+(g.label||key)+'"');
+  schedToast((on?'Added ':'Removed ')+changing.length+' '+cat+(changing.length===1?'':'s'),'ok');
+};
 window.toggleGroupMember=async function(u,key){
   if(groupsGateRefuse()) return;
   const on=inGroup(u,key);
@@ -5336,8 +5362,15 @@ function renderGroups(){
     const sides=groupSides(key);
     const col=(title,list,cats)=>{
       const pick=names.filter(u=>categoryOf(u)===cats);
+      const nOn=pick.filter(u=>inGroup(u,key)).length;
       return '<div style="flex:1;min-width:150px">'
-        +'<div style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">'+title+' · '+list.length+'</div>'
+        +'<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">'
+          +'<span style="font-size:9.5px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em">'+title+' · '+list.length+'</span>'
+          +(pick.length?('<span style="flex:1"></span>'
+             +(nOn<pick.length?'<button class="btn btn-ghost" style="font-size:9.5px;padding:0 6px" title="Put every '+esc(cats)+' in this group" onclick="groupSelectAll('+jsArg(key)+','+jsArg(cats)+',true)">all</button>':'')
+             +(nOn?'<button class="btn btn-ghost" style="font-size:9.5px;padding:0 6px" title="Take every '+esc(cats)+' out of this group" onclick="groupSelectAll('+jsArg(key)+','+jsArg(cats)+',false)">none</button>':''))
+            :'')
+        +'</div>'
         +(pick.length?pick.map(u=>'<label style="display:flex;align-items:center;gap:5px;font-size:12px;padding:1px 0;cursor:pointer">'
             +'<input type="checkbox" '+(inGroup(u,key)?'checked':'')+' onchange="toggleGroupMember('+jsArg(u)+','+jsArg(key)+')">'
             +esc(displayName(u))+'</label>').join('')
@@ -5349,8 +5382,11 @@ function renderGroups(){
     };
     return '<div class="bd-site">'
       +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
-        +'<b style="font-size:12.5px">'+esc(g.label||key)+'</b>'
-        +'<span style="font-size:10.5px;color:var(--t3)">MD '+sides.md.length+' · CRNA '+sides.crna.length+'</span>'
+        // [91] THE NAME READS FIRST. It was 12.5px sitting between two uppercase "MD SUBGROUP · 0"
+        // headings, so nine cards looked identical and the owner read them as all being called
+        // "MD subgroup 0". The name is the only thing that identifies a card; it gets the size.
+        +'<b style="font-size:15px;font-weight:800;color:var(--t1)">'+esc(g.label||key)+'</b>'
+        +'<span class="chipp" style="background:var(--s3);color:var(--t2);font-size:10px">MD '+sides.md.length+' · CRNA '+sides.crna.length+'</span>'
         +'<span style="flex:1"></span>'
         +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="renameGroup('+jsArg(key)+')">Rename</button>'
         +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px;color:var(--red)" onclick="deleteGroup('+jsArg(key)+')">Delete</button>'
