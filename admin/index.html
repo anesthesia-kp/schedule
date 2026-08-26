@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 103;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 104;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -1713,19 +1713,20 @@ function gridShiftRows(y,m,nDays,todayDD,vis){
       const dayCells=(monthData.days&&monthData.days[dd])||{};
       const who=[];
       for(const u of names) if(holdsShift(dayCells[u]||{},id)) who.push(u);
-      const need=demandOn(sh,dt);
+      const _st=staffingOn(sh,dt);
+      const need=_st?_st.min:null, ceil=_st?_st.max:null;
       let mark='';
       if(need!==null&&need!==undefined&&who.length<need) mark=(who.length>=need/2)?' swarn':' sshort';
       let inner;
       if(gridDensity==='compact'){
         inner=who.length?('<b>'+who.length+'</b>'):'';
-        if(need!==null&&need!==undefined) inner+='<span class="needct">/'+need+'</span>';
+        if(need!==null&&need!==undefined) inner+='<span class="needct">/'+need+((ceil!==null&&ceil>need)?('–'+ceil):'')+'</span>';
       } else {
         inner=who.map(u=>'<span class="who">'+esc(displayName(u))+'</span>').join('');
         if(need!==null&&need!==undefined&&who.length<need) inner+='<span class="needct"> '+who.length+'/'+need+'</span>';
       }
       const ttl=(sh.label||id)+' - '+(who.length?who.map(displayName).join(', '):'nobody')
-        +((need===null||need===undefined)?'':' (needs '+need+')');
+        +((need===null||need===undefined)?'':' (needs '+need+((ceil!==null&&ceil>need)?('–'+ceil):'')+')');
       out+='<td data-day="'+dd+'" class="cell'+((wd===0||wd===6)?' wkend':'')+(dd===todayDD?' today':'')+mark
          +'" title="'+esc(ttl)+'">'+inner+'</td>';
     }
@@ -2336,7 +2337,9 @@ function renderCellModal(){
     : '<div style="font-size:12px;color:var(--t3);font-style:italic;padding:4px 2px">No shifts on this day.</div>';
   const sel=document.getElementById('cmAdd'), keep=sel.value;
   const heldIds=held.map(x=>x.s);
-  const optLabel=(id,s)=>{ const cap=s.capacity||1; if(cap<=1) return s.label;
+  // [103b] The ceiling comes from the day's staffing rule when there is one, and only falls
+  // back to `capacity` for a shift with no rules at all.
+  const optLabel=(id,s)=>{ const cap=shiftCeilingOn(s,ddDate(dd)); if(cap<=1) return s.label;
     return s.label+' ('+shiftOccupancy(dd,id,u)+'/'+cap+' filled)'; };
   const opts=shiftList().filter(([id])=>allowed(u,id)&&heldIds.indexOf(id)<0);
   sel.innerHTML = opts.length
@@ -2394,10 +2397,10 @@ function assignmentWarnings(ym,dd,u,addId,cells){
     // it at all. Owner ruling §51: one rule for "can this person do this shift".
     if(!allowed(u,addId)) msgs.push(displayName(u)+' is not ticked as eligible for '+lbl+' in the Shift Eligibility grid.');
     if(s){
-      const cap=s.capacity||1;
+      const cap=shiftCeilingOn(s,ddDate(cellSel&&cellSel.dd));
       let have=0;
       for(const usr in (cells||{})){ if(usr===u) continue; if(holdsShift(cells[usr],addId)) have++; }
-      if(have>=cap) msgs.push(lbl+' is already staffed by '+have+' — capacity is '+cap+'. This will go over.');
+      if(have>=cap) msgs.push(lbl+' is already staffed by '+have+' — the most it asks for is '+cap+'. This will go over. Nothing stops you: a ceiling is an indicator, not a refusal.');
     }
     if(vacationDays()[u+'|'+dk]) msgs.push(displayName(u)+' is on approved vacation this day — this will schedule a shift on top of it.');
     if(off) msgs.push(displayName(u)+' is marked OFF this day. Adding a shift does not clear that by itself — you would be leaving them both off and assigned.');
@@ -4071,6 +4074,23 @@ function staffingOn(sh,dt){
   return out;
 }
 window.staffingOnProbe=staffingOn;   // module scope — HANDOFF trap 1
+// [103b · §108⑥] THE CEILING, AND IT ABSORBS `capacity`. Two fields meaning "the most this
+// shift can take" is the build-78 defect shape, so there is now ONE question and one answer:
+// if the shift has staffing rules, the rule that matches this day owns the ceiling; only a
+// shift with NO rules at all falls back to the per-shift `capacity` field. `capacity` keeps
+// its old job — the auto-populate fallback — and loses its second one.
+function shiftCeilingOn(sh,dt){
+  const st=staffingOn(sh,dt);
+  if(st) return st.max;
+  return Math.max(1,Number(sh&&sh.capacity)||1);
+}
+window.shiftCeilingProbe=shiftCeilingOn;
+// A day number ('03') back to a Date in the month on screen. The two ceiling readers below
+// both have the day but not the date.
+function ddDate(dd){
+  if(!curYM) return new Date();
+  return new Date(Number(curYM.slice(0,4)), Number(curYM.slice(5))-1, Number(dd));
+}
 function ruleText(r){
   const w=DEMAND_WHENS.find(x=>x.k===r.when);
   const when=r.when==='dow'
@@ -5421,31 +5441,47 @@ function renderStatsYearTable(y){
 function coverageRows(ym,days){
   const [y,m]=ym.split('-').map(Number);
   const nDays=new Date(y,m,0).getDate();
-  const rows=[]; let need=0, have=0, shiftsWithDemand=0;
+  const rows=[]; let need=0, have=0, shiftsWithDemand=0, spare=0;
   // [69 - S5a] Per-day roll-up for the grid's coverage strip. Built in this same loop so
   // the strip can never disagree with the coverage report - one computation, two readers.
   const byDay={};
   for(const [,sh] of shiftList()) if(demandRules(sh).length) shiftsWithDemand++;
   for(let d=1;d<=nDays;d++){
     const dd=pad(d), dt=new Date(y,m-1,d);
-    byDay[dd]={need:0,have:0,short:0};
+    byDay[dd]={need:0,have:0,short:0,spare:0};
     const cell=(days&&days[dd])||{};
     const counts={};
     for(const u in cell) for(const id of shiftsOf(cell[u])) counts[id]=(counts[id]||0)+1;
     for(const [id,sh] of shiftList()){
-      const n=demandOn(sh,dt);
-      if(n===null) continue;               // never asked for — not a gap (§9)
+      const st=staffingOn(sh,dt);
+      if(st===null) continue;              // never asked for — not a gap (§9)
+      const n=st.min, x=st.max;
       const f=counts[id]||0;
+      // The PERCENTAGE still counts minimums, so 100% means every minimum is met. A ceiling
+      // never inflates the denominator — it would make a fully-staffed month read as short.
       need+=n; have+=Math.min(f,n);
       byDay[dd].need+=n; byDay[dd].have+=Math.min(f,n); byDay[dd].short+=Math.max(0,n-f);
-      if(f!==n) rows.push({dd,date:dKey(dt),dow:DOW_SHORT[dt.getDay()],id,label:sh.label||id,
-                           need:n,filled:f,short:n-f,holiday:isHoliday(dKey(dt))});
+      // [103b] THE THIRD READING. At or above the minimum but below the ceiling is ACCEPTABLE
+      // — his ruling, "at min below max okay" — so it is neither a gap nor an over-staffing.
+      // It is COUNTED, not listed: a row per acceptable day would bury the days that need him.
+      if(f<n){
+        rows.push({dd,date:dKey(dt),dow:DOW_SHORT[dt.getDay()],id,label:sh.label||id,
+                   need:n,max:x,filled:f,short:n-f,state:'short',holiday:isHoliday(dKey(dt))});
+      } else if(f>x){
+        // Over means over the CEILING, and the number reported is how far past it — not how
+        // far past the minimum, which would call a legitimate extra person an over-staffing.
+        rows.push({dd,date:dKey(dt),dow:DOW_SHORT[dt.getDay()],id,label:sh.label||id,
+                   need:n,max:x,filled:f,short:-(f-x),state:'over',holiday:isHoliday(dKey(dt))});
+      } else if(f<x){
+        spare++; byDay[dd].spare=(byDay[dd].spare||0)+(x-f);
+      }
     }
   }
-  return {rows,need,have,shiftsWithDemand,byDay,
+  return {rows,need,have,shiftsWithDemand,byDay,spare,
           pct:need?Math.round(have/need*100):null,
           demanded:need>0||shiftsWithDemand>0};
 }
+window.coverageRowsProbe=coverageRows;   // module scope — HANDOFF trap 1
 function dashCoverage(){
   if(!curYM) return {filled:0,total:0,pct:null,demanded:false};
   const c=coverageRows(curYM,monthData.days||{});
@@ -5456,8 +5492,8 @@ function renderCoverage(){
   document.getElementById('covMonth').textContent=MS[Number(curYM.slice(5))-1]+' '+curYM.slice(0,4);
   const c=coverageRows(curYM,monthData.days||{});
   const showOver=!!document.getElementById('covShowOver')?.checked;
-  const short=c.rows.filter(r=>r.short>0);
-  const over=c.rows.filter(r=>r.short<0);
+  const short=c.rows.filter(r=>r.state==='short');
+  const over=c.rows.filter(r=>r.state==='over');
   const sum=document.getElementById('covSummary');
 
   if(!c.demanded){
@@ -5479,7 +5515,8 @@ function renderCoverage(){
     +'<span style="font-size:13px;font-weight:700">'+c.have+' of '+c.need+' asked-for places filled</span></div>'
     +'<div style="font-size:12px;color:var(--t2);margin-top:6px;line-height:1.55">'
     +(short.length?'<b style="color:#991b1b">'+short.length+' gap'+(short.length===1?'':'s')+'</b> — '+short.reduce((a,r)=>a+r.short,0)+' place'+(short.reduce((a,r)=>a+r.short,0)===1?'':'s')+' unfilled.':'<b style="color:#065f46">No gaps.</b> Everything asked for is covered.')
-    +(over.length?' · <b style="color:#92400e">'+over.length+'</b> day'+(over.length===1?'':'s')+' have more people than asked for.':'')
+    +(over.length?' · <b style="color:#92400e">'+over.length+'</b> day'+(over.length===1?'':'s')+' are over the ceiling.':'')
+    +(c.spare?' · <b style="color:#166534">'+c.spare+'</b> more '+(c.spare===1?'place is':'places are')+' available within the ranges — covered, and could take one more.':'')
     +' · Counted against <b>'+c.shiftsWithDemand+'</b> shift'+(c.shiftsWithDemand===1?'':'s')+' with staffing rules; the rest are not asked for and are not counted (§9).</div>';
 
   const rows=[...short,...(showOver?over:[])].sort((a,b)=>a.date.localeCompare(b.date)||a.label.localeCompare(b.label));
@@ -5488,10 +5525,10 @@ function renderCoverage(){
     +rows.map(r=>'<tr>'
       +'<td style="text-align:left;white-space:nowrap"><b>'+esc(r.dow)+' '+esc(r.date.slice(8))+'</b>'+(r.holiday?' <span style="font-size:9.5px;font-weight:800;color:#5b21b6">HOLIDAY</span>':'')+'</td>'
       +'<td style="text-align:left">'+esc(r.label)+'</td>'
-      +'<td>'+r.need+'</td><td>'+r.filled+'</td>'
+      +'<td>'+(r.max>r.need?(r.need+'–'+r.max):r.need)+'</td><td>'+r.filled+'</td>'
       +'<td style="text-align:left">'+(r.short>0
         ?'<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:#fee2e2;color:#991b1b">SHORT '+r.short+'</span>'
-        :'<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:#fef3c7;color:#92400e">'+(-r.short)+' MORE THAN ASKED</span>')
+        :'<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;background:#fef3c7;color:#92400e">'+(-r.short)+(r.max>r.need?' OVER THE CEILING':' MORE THAN ASKED')+'</span>')
       +'</td></tr>').join('');
 }
 
