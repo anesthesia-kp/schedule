@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 101;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 102;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -348,6 +348,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   <a onclick="nav('elig',this)">🎯 Shift Eligibility</a>
   <a onclick="nav('catalog',this)">🧰 Shift Catalog</a>
   <a onclick="nav('families',this)">🎨 Shift Families</a>
+  <a onclick="nav('quotas',this)">🧮 Quotas</a>
   <a onclick="nav('stats',this)">📊 Stats</a>
   <a onclick="nav('coverage',this)">🩺 Coverage</a>
   <div class="nav-section">Testing</div>
@@ -607,6 +608,23 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   </div>
 
   <!-- ELIGIBILITY -->
+  <!-- QUOTAS — [102 · §108/§109]. A READOUT, not a solver: a quota reports, it never fills. -->
+  <div class="panel" id="panel-quotas">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Quotas</div>
+    <div class="page-sub" style="margin-bottom:12px">A <b>quota</b> is a named set of shifts that share one combined total for a day — D and D10 flexing against each other because their sum is fixed. A shift may sit in more than one quota. The total uses the same rule list as staffing, so it can differ on weekends and holidays. <b>A quota reports; it does not fill.</b> Auto-populate still targets each shift's own staffing rules.</div>
+    <div class="card">
+      <div class="card-title secth" onclick="toggleSect('addquota')" title="Click to open or close this section"><span class="secta" id="secta_addquota">▸</span>Add a quota</div>
+      <div id="sect_addquota" style="display:none">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="text" class="inp" id="qtaLabel" placeholder="Quota name e.g. Daytime" style="width:220px">
+          <button class="btn btn-primary" onclick="addQuota()">Add quota</button>
+        </div>
+        <div class="page-sub" style="margin-top:6px">Name it for what it covers. It keeps its internal id if you rename it later.</div>
+      </div>
+    </div>
+    <div class="card"><div class="card-title">Quotas</div><div id="quotaBody"></div></div>
+  </div>
+
   <!-- GROUPS — [88 · Stage 4 part A]. Built INERT: nothing here decides eligibility yet. -->
   <div class="panel" id="panel-groups">
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Groups</div>
@@ -1170,6 +1188,7 @@ const catalogRef  = doc(db,"dailysched","shiftCatalog");
 //   categories    {<initials>:'MD'|'CRNA'}           which of a group's two subgroups
 // A person joins a GROUP; their category decides which subgroup they land in (§97). They are
 // never asked which side — that would be a second way to say what the category already says.
+const quotasRef       = doc(db,"dailysched","quotas");
 const groupsRef       = doc(db,"dailysched","groups");
 const groupMembersRef = doc(db,"dailysched","groupMembers");
 const categoriesRef   = doc(db,"dailysched","categories");
@@ -1435,6 +1454,7 @@ let schedFte={}, schedFteLoaded=false, namesLoaded=false, baselineData={};
 // has arrived writes a document built from an empty page. saveAllSchedUsers turning a blank
 // FTE box into deleteField() (defect 29) is what that costs when it is skipped.
 let groupsData={}, groupMembers={}, categories={};
+let quotasData={}; let quotasLoaded=false; let _renamingQuota='';
 let groupsLoaded=false, membersLoaded=false, categoriesLoaded=false;
 // Stage 4 part A is INERT BY DESIGN (§56): groups can be created, staffed and looked at, and
 // NOTHING reads them to decide eligibility. allowed() is untouched. The cutover switch that
@@ -4643,7 +4663,7 @@ let catOpenRow='', catCollapsedFams={}, catProblem='';
 const sectOpen={};
 // [99] Sections whose body is STATIC markup: no render function owns them, so a toggle changes
 // nothing but the display. Listed so toggleSect does not fall through to renderCatalog().
-const SECT_STATIC=['adminaccess','adduser','postopen','addfamily'];
+const SECT_STATIC=['adminaccess','adduser','postopen','addfamily','addquota'];
 function sectApply(k){
   const body=document.getElementById('sect_'+k), arrow=document.getElementById('secta_'+k);
   if(!body) return;
@@ -4663,6 +4683,7 @@ window.toggleSect=function(k){
   // others. The four set-once panels below carry no summary — their titles already say what
   // they are — so there is nothing to recompute and NOTHING to re-render. They must still be
   // named here, or they fall through to renderCatalog() and re-draw an unrelated page.
+  else if(k.indexOf('qta:')===0){ if(typeof renderQuotas==='function') renderQuotas(); }
   else if(k==='reqdecided'){ if(typeof renderRequests==='function') renderRequests(); }
   else if(k==='swapdecided'){ if(typeof renderSwaps==='function') renderSwaps(); }
   else if(SECT_STATIC.indexOf(k)>=0){ /* static markup — nothing to re-render */ }
@@ -6075,13 +6096,248 @@ function bdStartTicker(){
   _bdTick=setInterval(()=>{ try{ markDirty('board'); }catch(_e){} },60000);
 }
 
+// ── [102 · §108/§109] QUOTAS ────────────────────────────────────────────────────────
+// A QUOTA is a named set of SHIFTS that share one combined staffing total for a day.
+// Owner, §108: "Let's go with quota and this will be its own separate set for times when a
+// variety shifts contribute to the same quota for a day." So membership is MANY-TO-MANY
+// (§109) and a quota is NOT hung on `family` — a family drives colour and ordering, and a
+// shift carries exactly one, so a family-based quota could never span families.
+//
+//   dailysched/quotas  {<key>:{label, order, rules:[{when,need,days?}], shifts:{<id>:true}}}
+//
+// THE TOTAL REUSES THE STAFFING-RULE SHAPE the shifts already use — a stacking list, last
+// match wins — instead of a second mechanism (§3 rule 14). So a quota can be 6 on weekdays
+// and 4 at weekends with no new vocabulary, and `ruleMatches`/`ruleText` are shared.
+//
+// ⚠ THIS BUILD IS A READOUT, NOT A SOLVER, and that is deliberate. Two quotas over one shift
+// on one day BOTH hold, which makes a quota a CONSTRAINT — the shape of Stage 5, which the
+// owner has on hold. So `demandOn()` and its seven consumers are untouched, auto-populate
+// still targets each shift's own staffing rules, and a quota only ever REPORTS.
+function quotaList(){
+  return Object.entries(quotasData||{})
+    .filter(([,q])=>q&&typeof q==='object')
+    .sort((a,b)=>(a[1].order??99)-(b[1].order??99)
+      || String(a[1].label||a[0]).localeCompare(String(b[1].label||b[0])));
+}
+function quotaKeyFrom(label){
+  return String(label||'').trim().toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+}
+function quotaRules(q){ return Array.isArray(q&&q.rules)?q.rules:[]; }
+function quotaShiftIds(q){ const m=(q&&q.shifts)||{}; return Object.keys(m).filter(id=>m[id]); }
+function inQuota(q,id){ return !!(((q&&q.shifts)||{})[id]); }
+// Last match wins, and null means "not asked for on this day" — the same two meanings
+// demandOn() carries, so nobody has to learn a second convention.
+function quotaOn(q,dt){
+  const rules=quotaRules(q);
+  if(!rules.length) return null;
+  const dk=dKey(dt);
+  let need=null;
+  for(const r of rules) if(ruleMatches(r,dt,dk)) need=Math.max(0,Number(r.need)||0);
+  return need;
+}
+window.quotaOnProbe=quotaOn;          // module scope — HANDOFF trap 1
+window.quotaListProbe=quotaList;
+function quotasGateRefuse(){
+  if(quotasLoaded) return false;
+  schedToast('Still loading quotas — try again in a moment','err');
+  return true;
+}
+// THE MONTH READOUT. Placed people are counted from the SAME source coverageRows() reads —
+// shiftsOf(cell[u]) — so a quota and the coverage report can never disagree about who is on a
+// shift. Two computations of one fact is the build-78 defect shape.
+function quotaRows(ym,days){
+  const out={};
+  if(!ym) return out;
+  const [y,m]=ym.split('-').map(Number);
+  const nDays=new Date(y,m,0).getDate();
+  for(const [key,q] of quotaList()){
+    const ids=quotaShiftIds(q);
+    const r={met:0,short:0,over:0,notAsked:0,shortBy:0,days:[]};
+    for(let d=1;d<=nDays;d++){
+      const dd=pad(d), dt=new Date(y,m-1,d);
+      const want=quotaOn(q,dt);
+      if(want===null){ r.notAsked++; continue; }
+      const cell=(days&&days[dd])||{};
+      let placed=0;
+      for(const u in cell) for(const id of shiftsOf(cell[u])) if(ids.indexOf(id)>=0) placed++;
+      const st = placed<want ? 'short' : (placed>want ? 'over' : 'met');
+      r[st]++;
+      if(st==='short') r.shortBy += want-placed;
+      r.days.push({dd,want,placed,st});
+    }
+    out[key]=r;
+  }
+  return out;
+}
+window.quotaRowsProbe=quotaRows;
+window.addQuota=async function(){
+  if(quotasGateRefuse()) return;
+  const el=document.getElementById('qtaLabel');
+  const label=String((el&&el.value)||'').trim();
+  if(!label){ schedToast('A quota needs a name','err'); return; }
+  const key=quotaKeyFrom(label);
+  if(!key){ schedToast('That name has no letters or numbers in it','err'); return; }
+  if(quotasData[key]){ schedToast('There is already a quota called that','err'); return; }
+  const order=Math.max(0,...quotaList().map(([,q])=>Number(q.order)||0))+1;
+  await mergeFields(quotasRef,{[key]:{label:label,order:order,rules:[],shifts:{}}});
+  auditLog('quota.add','Added the quota "'+label+'"');
+  if(el) el.value='';
+  schedToast('Added '+label,'ok');
+};
+window.renameQuota=function(key){
+  if(quotasGateRefuse()) return;
+  if(!quotasData[key]) return;
+  _renamingQuota=key; renderQuotas();
+  const el=document.getElementById('qtaRename_'+key);
+  if(el){ el.focus(); el.select(); }
+};
+window.renameQuotaCancel=function(){ _renamingQuota=''; renderQuotas(); };
+window.renameQuotaSave=async function(key){
+  if(quotasGateRefuse()) return;              // re-read at the write, not at the paint (§5)
+  const q=quotasData[key]; if(!q) return;
+  const el=document.getElementById('qtaRename_'+key);
+  const label=String((el&&el.value)||'').trim();
+  if(!label){ schedToast('A quota needs a name','err'); return; }
+  _renamingQuota='';
+  if(label!==(q.label||key)){
+    await mergeFields(quotasRef,{[key+'.label']:label});
+    auditLog('quota.rename','Renamed the quota "'+(q.label||key)+'" to "'+label+'"');
+    schedToast('Renamed to '+label,'ok');
+  }
+  renderQuotas();
+};
+window.deleteQuota=async function(key){
+  if(quotasGateRefuse()) return;
+  const q=quotasData[key]; if(!q) return;
+  const n=quotaShiftIds(q).length;
+  if(!confirm('Delete the quota "'+(q.label||key)+'"?\n\n'
+    +(n?('It holds '+n+' shift'+(n===1?'':'s')+'. They are not changed — only the quota goes.\n\n'):'')
+    +'Nothing else reads quotas yet, so nothing else changes.')) return;
+  await mergeFields(quotasRef,{[key]:deleteField()});
+  auditLog('quota.delete','Deleted the quota "'+(q.label||key)+'"');
+  schedToast('Deleted','ok');
+};
+window.toggleQuotaShift=async function(key,id){
+  if(quotasGateRefuse()) return;
+  const q=quotasData[key]; if(!q) return;
+  const on=inQuota(q,id);
+  await mergeFields(quotasRef,{[key+'.shifts.'+id]:on?deleteField():true});
+  const sh=(catalog.shifts||{})[id];
+  auditLog('quota.member',(on?'Removed ':'Added ')+((sh&&sh.label)||id)+(on?' from ':' to ')+'the quota "'+(q.label||key)+'"');
+};
+async function saveQuotaRules(key,rules,what){
+  if(quotasGateRefuse()) return false;
+  const q=quotasData[key];
+  await mergeFields(quotasRef,{[key+'.rules']:rules});
+  auditLog('quota.rule',((q&&q.label)||key)+' — '+what+'. Now: '
+    +(rules.length?rules.map(ruleText).join(' · '):'no total set, never reported'));
+  return true;
+}
+window.quotaAddRule=async function(key){
+  if(quotasGateRefuse()) return;
+  const q=quotasData[key]; if(!q) return;
+  const when=(document.getElementById('qtaWhen_'+key)||{}).value||'daily';
+  const need=Math.max(0,Number((document.getElementById('qtaNeed_'+key)||{}).value)||0);
+  const r={when,need};
+  if(when==='dow'){
+    const days=[...document.querySelectorAll('.qtadow_'+key)].filter(c=>c.checked).map(c=>Number(c.value));
+    if(!days.length){ schedToast('Pick at least one day','err'); return; }
+    r.days=days;
+  }
+  await saveQuotaRules(key,[...quotaRules(q),r],'added "'+ruleText(r)+'"');
+};
+window.quotaRemoveRule=async function(key,i){
+  if(quotasGateRefuse()) return;
+  const q=quotasData[key]; if(!q) return;
+  const rules=quotaRules(q).slice();
+  const gone=rules[i]; if(!gone) return;
+  if(!confirm('Remove "'+ruleText(gone)+'" from this quota?')) return;
+  rules.splice(i,1);
+  await saveQuotaRules(key,rules,'removed "'+ruleText(gone)+'"');
+};
+function renderQuotas(){
+  const host=document.getElementById('quotaBody');
+  if(!host) return;
+  if(!quotasLoaded){ host.innerHTML='<div style="font-size:12px;color:var(--t3)">Loading…</div>'; return; }
+  const ql=quotaList();
+  if(!ql.length){
+    host.innerHTML='<div style="font-size:12px;color:var(--t3)">No quotas yet. Add one above — a quota is how you say '
+      +'<b>“these shifts together need six people a day”</b> when the mix between them can change.</div>';
+    return;
+  }
+  const today=new Date();
+  const rows=quotaRows(curYM,(monthData&&monthData.days)||{});
+  const shifts=shiftList();
+  host.innerHTML='<div style="display:flex;flex-direction:column;gap:8px">'+ql.map(([key,q])=>{
+    const ids=quotaShiftIds(q);
+    const nowNeed=quotaOn(q,today);
+    const r=rows[key]||{met:0,short:0,over:0,shortBy:0};
+    const sum = !quotaRules(q).length ? '<span style="color:#92400e">no total set</span>'
+      : (r.short?('<span style="color:#b91c1c">'+r.short+' day'+(r.short===1?'':'s')+' short by '+r.shortBy+'</span>')
+        : '<span style="color:#166534">every day met</span>')
+        + (r.over?(' · <span style="color:#92400e">'+r.over+' over</span>'):'');
+    return '<div class="card" style="padding:9px 11px">'
+      +'<div class="card-title secth" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap" '
+        +'onclick="toggleSect(\'qta:'+esc(key)+'\')" title="Click to open or close this quota">'
+        +'<span class="secta" id="secta_qta:'+esc(key)+'">▸</span>'
+        +'<b style="font-size:15px;font-weight:800;color:var(--t1)">'+esc(q.label||key)+'</b>'
+        +'<span class="chipp" style="background:var(--s3);color:var(--t2);font-size:10px">'+ids.length+' shift'+(ids.length===1?'':'s')+'</span>'
+        +'<span class="chipp" style="background:var(--s3);color:var(--t2);font-size:10px">'+(nowNeed===null?'not asked for today':nowNeed+' today')+'</span>'
+        +'<span style="font-size:11px">'+sum+'</span>'
+        +'<span style="flex:1"></span>'
+        +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="event.stopPropagation();renameQuota('+jsArg(key)+')">Rename</button>'
+        +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px;color:var(--red)" onclick="event.stopPropagation();deleteQuota('+jsArg(key)+')">Delete</button>'
+      +'</div>'
+      +(_renamingQuota===key?('<div class="qtarename" style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap" onclick="event.stopPropagation()">'
+          +'<input class="inp" id="qtaRename_'+esc(key)+'" style="font-size:13px;width:220px" value="'+esc(q.label||key)+'">'
+          +'<button class="btn btn-primary" style="font-size:11px;padding:2px 9px" onclick="event.stopPropagation();renameQuotaSave('+jsArg(key)+')">Save</button>'
+          +'<button class="btn btn-ghost" style="font-size:11px;padding:2px 9px" onclick="event.stopPropagation();renameQuotaCancel()">Cancel</button>'
+          +'<span style="font-size:11px;color:var(--t3)">It keeps its shifts and its internal id ('+esc(key)+').</span>'
+        +'</div>'):'')
+      +'<div id="sect_qta:'+esc(key)+'" style="display:none">'
+        +'<div class="page-sub" style="margin:8px 0 4px"><b>The total</b> — a stacking list, exactly like a shift\'s staffing rules. The LAST rule that matches a day decides it.</div>'
+        +(quotaRules(q).length
+            ? '<div style="display:flex;flex-direction:column;gap:3px">'+quotaRules(q).map((r2,i)=>
+                '<div style="display:flex;align-items:center;gap:7px;font-size:12px">'
+                +'<span class="mono" style="color:var(--t3);font-size:10px">'+(i+1)+'</span>'
+                +'<span>'+esc(ruleText(r2))+'</span>'
+                +(i===quotaRules(q).length-1?'<span class="chipp" style="background:#fef3c7;color:#92400e;font-size:9.5px">wins ties</span>':'')
+                +'<span style="flex:1"></span>'
+                +'<button class="btn btn-ghost" style="font-size:10px;padding:0 6px;color:var(--red)" onclick="quotaRemoveRule('+jsArg(key)+','+i+')">Remove</button>'
+                +'</div>').join('')+'</div>'
+            : '<div style="font-size:11.5px;color:#92400e">No total yet — this quota reports nothing until one rule is added.</div>')
+        +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:7px">'
+          +'<select class="sel" id="qtaWhen_'+esc(key)+'" style="font-size:12.5px">'
+            +DEMAND_WHENS.map(w=>'<option value="'+esc(w.k)+'">'+esc(w.label)+'</option>').join('')+'</select>'
+          +'<span style="font-size:12px;color:var(--t2)">'+DOW_SHORT.map((d,i)=>
+              '<label style="margin-right:5px"><input type="checkbox" class="qtadow_'+esc(key)+'" value="'+i+'"> '+d+'</label>').join('')+'</span>'
+          +'<label style="font-size:12px;color:var(--t2);display:flex;align-items:center;gap:4px">needs'
+            +'<input type="number" class="inp" id="qtaNeed_'+esc(key)+'" value="1" min="0" max="60" step="1" style="width:60px;padding:5px 6px"></label>'
+          +'<button class="btn btn-primary" style="font-size:12.5px" onclick="quotaAddRule('+jsArg(key)+')">+ Add rule</button>'
+        +'</div>'
+        +'<div class="page-sub" style="margin:12px 0 4px"><b>The shifts in it</b> — a shift may sit in more than one quota (§109).</div>'
+        +(shifts.length
+            ? '<div style="display:flex;flex-wrap:wrap;gap:4px 14px">'+shifts.map(([id,sh])=>
+                '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">'
+                +'<input type="checkbox" '+(inQuota(q,id)?'checked':'')+' onchange="toggleQuotaShift('+jsArg(key)+','+jsArg(id)+')">'
+                +esc(sh.label||id)+'</label>').join('')+'</div>'
+            : '<div style="font-size:11.5px;color:var(--t3)">No shifts in the catalog yet.</div>')
+      +'</div>'
+    +'</div>';
+  }).join('')+'</div>';
+  // innerHTML wipes the inline display style, so the open/closed state is re-applied AFTER
+  // the write — the same reason renderGroups does it for its cards [96].
+  for(const [key] of ql) sectApply('qta:'+key);
+}
+window.renderQuotas=renderQuotas;
+
 const RENDER_FN={
   dash:renderDash, board:renderBoard, grid:renderGrid, baseline:renderBaseline,
   cellmodal:()=>{ if(cellSel) renderCellModal(); },
   legacyBanner:renderLegacyBanner, rehearsal:renderRehearsal, catLock:renderCatLock,
   requests:renderRequests, swaps:renderSwaps, open:renderOpenAdmin, openSel:fillOpenShiftSel,
   users:renderUsersGrid, usersLock:renderUsersLock, adminAccess:renderAdminAccess,
-  groups:renderGroups,
+  groups:renderGroups, quotas:renderQuotas,
   elig:renderElig, catalog:renderCatalog, families:renderFamilies, stats:renderStats,
   coverage:renderCoverage, audit:renderAudit, reports:renderReports, badges:renderBadges,
 };
@@ -6089,6 +6345,7 @@ const PANEL_KEYS={
   dash:['board','dash'], grid:['grid','baseline','cellmodal','legacyBanner'],
   requests:['requests'], swaps:['swaps'], open:['open','openSel'],
   users:['users','usersLock','adminAccess'], groups:['groups'], elig:['elig'],
+  quotas:['quotas'],
   catalog:['catalog','catLock'], families:['families'], stats:['stats'],
   coverage:['coverage'], simulator:['rehearsal'], reports:['reports'], audit:['audit'],
 };
@@ -7138,6 +7395,9 @@ authReady.then(()=>{
   // [93 · §43] 'reports' joins these: the fairness flag lives on the GROUP now, so a group
   // edit changes who is in the comparison pool and the Reports picker must not go on showing
   // the answer it had before.
+  // [102] Quotas are read ONLY by their own page in this build — nothing else consumes them
+  // yet, so nothing else is marked dirty. When they gain a consumer, add it here.
+  onSnapshot(quotasRef,snap=>{ quotasData=snap.exists()?snap.data():{}; quotasLoaded=true; markDirty('quotas'); });
   onSnapshot(groupsRef,snap=>{ groupsData=snap.exists()?snap.data():{}; groupsLoaded=true; markDirty('groups','grid','reports'); });
   onSnapshot(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; membersLoaded=true; markDirty('groups','grid','reports'); });
   onSnapshot(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; categoriesLoaded=true; markDirty('groups','grid','reports'); });
