@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 99;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 101;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -457,7 +457,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       <input type="text" class="inp" id="gridFilter" autocomplete="off" placeholder="Filter by name…"
              style="font-size:12px;padding:5px 8px;width:150px" oninput="setGridFilter(this.value)">
       <select class="sel" id="gridCovFilter" style="font-size:11.5px" onchange="setGridCov(this.value)"
-              title="Show only the days that are short of what demand asks for">
+              title="Show only the days that are short of what staffing asks for">
         <option value="all">All days</option>
         <option value="short">Short days only</option>
         <option value="covered">Fully covered days</option>
@@ -717,7 +717,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <span class="lbl" style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em">Start from an existing shift</span>
         <select class="sel" id="catDupFrom" style="font-size:12px;min-width:200px"></select>
         <button class="btn" style="font-size:12px" onclick="dupShiftInto()">⧉ Copy its settings up</button>
-        <span style="font-size:11px;color:var(--t3)">Fills the form above with everything but the label — times, site, demand, family, role, capacity. Change what differs and press Add. Nothing is written until you do.</span>
+        <span style="font-size:11px;color:var(--t3)">Fills the form above with everything but the label — times, site, staffing, family, role, capacity. Change what differs and press Add. Nothing is written until you do.</span>
       </div>
       </div>
     </div>
@@ -745,7 +745,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       <div class="card-title secth" onclick="toggleSect('holidays')" title="Click to open or close this section"><span class="secta" id="secta_holidays">▸</span>Holidays<span class="sectsum" id="sectsum_holidays"></span></div>
       <div id="sect_holidays" style="display:none">
       <div style="font-size:11.5px;color:var(--t2);line-height:1.55;margin-bottom:9px">
-        The eleven US federal holidays are worked out automatically; add or remove any you like. A demand rule can point at “holidays”, so this list is what that rule reads.<br>
+        The eleven US federal holidays are worked out automatically; add or remove any you like. A staffing rule can point at “holidays”, so this list is what that rule reads.<br>
         <b>Both the real date and the federal “observed” day count</b> (§49a) — when a holiday falls at the weekend, the observed day shifts to the Friday or Monday, and <b>both days are treated as holidays</b>: the hospital runs on the real day, and the observed day is the one most of the group is off. Remove either one if that is not how your group works.
       </div>
       <div class="row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px">
@@ -786,7 +786,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
           <span style="width:118px">Length</span>
           <span style="width:18px" title="provisional times">?</span>
           <span style="width:88px">Site</span>
-          <span style="width:96px">Demand</span>
+          <span style="width:96px">Staffing</span>
           <span style="width:64px">👥 Cap</span>
           <span style="width:104px">Family</span>
           <span style="width:64px">Role</span>
@@ -798,7 +798,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
              font-weight:800;letter-spacing:.05em;color:var(--t2);text-transform:uppercase">
           <span style="min-width:96px;text-align:center">Shift</span><span style="min-width:30px">Kind</span>
           <span style="min-width:150px">Times</span><span style="min-width:78px">Site</span>
-          <span style="min-width:74px">Demand</span><span style="min-width:34px">Cap</span>
+          <span style="min-width:74px">Staffing</span><span style="min-width:34px">Cap</span>
           <span style="min-width:52px">Role</span><span style="flex:1">Needs attention</span><span>Edit</span>
         </div>
         <div id="catDenseNote" style="display:none;margin:0 10px 8px;padding:7px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fcd34d;font-size:11.5px;color:#92400e">
@@ -869,7 +869,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   <!-- COVERAGE — stage 2 -->
   <div class="panel" id="panel-coverage">
     <div class="page-title" style="font-size:16px;margin-bottom:4px">🩺 Coverage — <span id="covMonth"></span></div>
-    <div class="page-sub" style="margin-bottom:10px">What the demand rules ask for, against what is actually assigned. <b>A shift with no demand rules is not counted at all</b> — it is not being asked for, which is different from being short (§9).</div>
+    <div class="page-sub" style="margin-bottom:10px">What the staffing rules ask for, against what is actually assigned. <b>A shift with no staffing rules is not counted at all</b> — it is not being asked for, which is different from being short (§9).</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn" onclick="moveMonth(-1)">⟨</button>
       <button class="btn" onclick="moveMonth(1)">⟩</button>
@@ -2198,9 +2198,9 @@ function renderGrid(){
     head+='<th data-day="'+dd+'" class="'+((wd===0||wd===6)?'wkend':'')+(dd===todayDD?' today':'')+'"'+(hol?' title="Holiday"':'')+'>'+d+(hol?'<span class="hol"></span>':'')+'<br>'+DS[wd]+'</th>'; }
   head+='</tr>';
   if(showCov){
-    head+='<tr class="covrow"><th class="stick1" title="Unfilled demand for each day">Coverage</th>';
+    head+='<tr class="covrow"><th class="stick1" title="Unfilled places for each day">Coverage</th>';
     for(const dd of vis){ const cv=covBy[dd]||{need:0,have:0,short:0};
-      let cls='cov-none', txt='&middot;', ttl='No demand set for this day';
+      let cls='cov-none', txt='&middot;', ttl='No staffing set for this day';
       if(cv.need>0){
         if(cv.short<=0){ cls='cov-ok'; txt='&#10003;'; ttl='Fully covered - '+cv.have+' of '+cv.need; }
         else { cls=(cv.have/cv.need>=0.5)?'cov-warn':'cov-bad'; txt='-'+cv.short;
@@ -2256,8 +2256,8 @@ function renderGrid(){
       if(gridFilterText) bits.push('<b>'+shownRows+' of '+totalRows+'</b> '+(gridView==='shifts'?'shifts':'people')+' matching “'+esc(gridFilterText)+'”');
       if(gridCovFilter!=='all'){
         bits.push(showCov
-          ? ('<b>'+vis.length+' of '+nDays+'</b> days — '+(gridCovFilter==='short'?'short of what demand asks for':'fully covered'))
-          : 'the day filter is doing nothing: no shift has demand rules yet, so no day can be short or covered');
+          ? ('<b>'+vis.length+' of '+nDays+'</b> days — '+(gridCovFilter==='short'?'short of what staffing asks for':'fully covered'))
+          : 'the day filter is doing nothing: no shift has staffing rules yet, so no day can be short or covered');
       }
       if(_pf){
         if(gridCat) bits.push('<b>'+esc(gridCat)+'s</b> only');
@@ -2609,8 +2609,8 @@ window.autoPopulate=async function(){
   // "every shift in the catalog", which was true and was the defect.
   if(!confirm('Auto-populate '+MS[m-1]+' '+y+'?\n\n'
     +(_anyDemand
-      ? 'Fills what the DEMAND RULES ask for on each day, using eligibility + even call distribution. A shift with no rule for a day is not asked for and is left empty (§9).'
-      : 'No shift has demand rules yet, so this falls back to filling every shift every day, to shift capacity. Set demand rules in the Shift Catalog to control which days are actually asked for.')
+      ? 'Fills what the STAFFING RULES ask for on each day, using eligibility + even call distribution. A shift with no rule for a day is not asked for and is left empty (§9).'
+      : 'No shift has staffing rules yet, so this falls back to filling every shift every day, to shift capacity. Set staffing rules in the Shift Catalog to control which days are actually asked for.')
     +'\n\nExisting assignments are kept. Users see changes immediately.')) return;
   const vac=vacationDays();
   const days=JSON.parse(JSON.stringify(monthData.days||{}));
@@ -2660,7 +2660,7 @@ window.autoPopulate=async function(){
   // 900 shift-days were deliberately passed over is the kind of true-sounding sentence that
   // sends someone hunting for a bug that is not there. Same reasoning as [59]'s named months.
   alert('Auto-populate complete — '+filled+' assignments made.'
-    +(notAsked?'\n\n⏭️ '+notAsked+' shift-day(s) were not asked for by any demand rule and were left empty (§9).':'')
+    +(notAsked?'\n\n⏭️ '+notAsked+' shift-day(s) were not asked for by any staffing rule and were left empty (§9).':'')
     +(unfillable.length?'\n\n⚠️ Could not fill (no eligible user):\n'+unfillable.slice(0,15).join('\n')+(unfillable.length>15?'\n…and '+(unfillable.length-15)+' more':''):''));
 };
 // Same fill as autoPopulate() above, run for all 12 months of the viewed
@@ -2675,7 +2675,7 @@ window.autoPopulateYear=async function(){
   const year=curYM?Number(curYM.split('-')[0]):new Date().getFullYear();
   const _anyDemand=anyDemandConfigured();
   if(!confirm('Auto-populate ALL 12 months of '+year+' (January–December)?\n\nRuns the same fill as Auto-Populate Month, one month at a time in order, keeping existing assignments and balancing call fairness across the whole year. '
-    +(_anyDemand?'Only what the demand rules ask for is filled (§9). ':'No shift has demand rules yet, so every shift is filled every day to its capacity. ')
+    +(_anyDemand?'Only what the staffing rules ask for is filled (§9). ':'No shift has staffing rules yet, so every shift is filled every day to its capacity. ')
     +'This can take a few seconds and writes to all 12 months.')) return;
   const vac=vacationDays();
   const _cache={}; // ym -> days; updated as we fill each month so later rolling windows see this run's fresh fills
@@ -2728,7 +2728,7 @@ window.autoPopulateYear=async function(){
   alert('Auto-populate year complete for '+year+' — '+grandFilled+' assignments made across '+(12-skippedLegacy.length)+' of 12 months.'
     // [59] Skipped months are named, not quietly passed over. "Complete" while four months
     // were never touched is the kind of true-sounding sentence that costs a day to unpick.
-    +(grandNotAsked?'\n\n⏭️ '+grandNotAsked+' shift-day(s) were not asked for by any demand rule and were left empty (§9).':'')
+    +(grandNotAsked?'\n\n⏭️ '+grandNotAsked+' shift-day(s) were not asked for by any staffing rule and were left empty (§9).':'')
     +(skippedLegacy.length?'\n\n⏭️ SKIPPED — still in the old storage format, nothing was written to '+(skippedLegacy.length>1?'these months':'this month')+':\n'+skippedLegacy.join(', ')+'\n\nOpen each one in Schedule and press Convert, then run this again.':'')+(grandUnfillable.length?'\n\n⚠️ Could not fill (no eligible user) — '+grandUnfillable.length+' slot(s):\n'+grandUnfillable.slice(0,15).join('\n')+(grandUnfillable.length>15?'\n…and '+(grandUnfillable.length-15)+' more':''):''));
 };
 window.clearMonth=async function(){
@@ -4270,7 +4270,7 @@ window.dupShiftInto=function(){
   _dupDemand=demandRules(s).map(r=>({...r}));
   onCatFamilyChange(); onCatTimePreview();
   const lab=document.getElementById('catLabel'); if(lab){ lab.value=''; lab.focus(); }
-  schedToast('Copied '+(s.label||id)+"'s settings"+(_dupDemand.length?' including its '+_dupDemand.length+' demand rule'+(_dupDemand.length===1?'':'s'):'')+' — give it a label','ok');
+  schedToast('Copied '+(s.label||id)+"'s settings"+(_dupDemand.length?' including its '+_dupDemand.length+' staffing rule'+(_dupDemand.length===1?'':'s'):'')+' — give it a label','ok');
 };
 let _dupDemand=null;
 
@@ -4385,7 +4385,7 @@ window.previewPaste=function(){
     +p.skip.map(r=>'<div style="font-size:11.5px;color:var(--t2);padding:2px 0">'+esc(r.label)+' — '+esc(r.why)+'</div>').join('');
   if(p.reject.length) h+='<div style="margin:9px 0 5px">'+t('REJECTED','#fee2e2;color:#991b1b')+'</div>'
     +p.reject.map(r=>'<div style="font-size:11.5px;color:#991b1b;padding:2px 0">line '+r.line+': <b>'+esc(r.label||r.raw)+'</b> — '+esc(r.reject)+'</div>').join('');
-  h+='<div style="font-size:11.5px;color:var(--t2);margin-top:9px">Rejected rows are skipped; everything else still goes through. Columns: <b>label · start · end · site · family · role · capacity</b> — tab or comma separated, and you can stop after any of them. <b>Demand rules are never touched by a paste</b>: they are a per-shift editor, not a text field.</div>';
+  h+='<div style="font-size:11.5px;color:var(--t2);margin-top:9px">Rejected rows are skipped; everything else still goes through. Columns: <b>label · start · end · site · family · role · capacity</b> — tab or comma separated, and you can stop after any of them. <b>Staffing rules are never touched by a paste</b>: they are a per-shift editor, not a text field.</div>';
   if(p.create.length||p.update.length)
     h+='<div style="margin-top:11px"><button class="btn btn-primary" style="font-size:12.5px" onclick="applyPaste()">Apply — '
       +[p.create.length?'add '+p.create.length:'',p.update.length?'change '+p.update.length:''].filter(Boolean).join(' and ')+'</button></div>';
@@ -4400,7 +4400,7 @@ window.applyPaste=async function(){
     +(p.create.length?'ADD '+p.create.length+' new shift'+(p.create.length===1?'':'s')+': '+p.create.map(r=>r.label).join(', ')+'\n\n':'')
     +(p.update.length?'CHANGE the times or site of '+p.update.length+': '+p.update.map(r=>r.label).join(', ')+'\n\n':'')
     +(p.reject.length?p.reject.length+' rejected row'+(p.reject.length===1?'':'s')+' will be skipped.\n\n':'')
-    +'Demand rules are not touched.')) return;
+    +'Staffing rules are not touched.')) return;
   const patch={};
   let order=Math.max(0,...Object.values(catalog.shifts||{}).map(x=>x.order??0));
   for(const r of p.create){
@@ -4498,7 +4498,7 @@ window.addHoliday=async function(){
   if(!date){ schedToast('Pick a date first','err'); return; }
   const cfg=catalog.holidays||{};
   if((cfg.added||[]).some(a=>a&&a.date===date)){ schedToast('That date is already on the list','err'); return; }
-  if(!confirm('Add '+date+' — "'+label+'" — as a holiday?\n\nAny demand rule pointing at "holidays" will start counting it.')) return;
+  if(!confirm('Add '+date+' — "'+label+'" — as a holiday?\n\nAny staffing rule pointing at "holidays" will start counting it.')) return;
   await mergeFields(catalogRef,{'holidays.added':[...(cfg.added||[]),{date,label}]});
   auditLog('holiday','Added holiday '+date+' — '+label);
   document.getElementById('holDate').value=''; document.getElementById('holLabel').value='';
@@ -4540,7 +4540,7 @@ function renderDemand(){
         +'</span></div>').join('')
     : '<div style="font-size:12px;color:var(--t3);font-style:italic;padding:4px 2px">No rules — this shift is never asked for.</div>';
   document.getElementById('dmEmptyNote').innerHTML = rules.length ? ''
-    : '<b>A shift with no rules is never demanded and never counts as uncovered (§9).</b> That is different from “nobody needed”: it is not being asked for at all. Leave it this way if that is what you mean.';
+    : '<b>A shift with no rules is never asked for and never counts as uncovered (§9).</b> That is different from “nobody needed”: it is not being asked for at all. Leave it this way if that is what you mean.';
   renderDemandPreview();
 }
 function renderDemandPreview(){
@@ -4573,7 +4573,7 @@ async function saveDemand(rules,what){
   const sh=catalog.shifts?.[dmShift];
   try{
     await mergeFields(catalogRef,{['shifts.'+dmShift+'.demand']:rules});
-    auditLog('shift.demand',(sh?.label||dmShift)+' — '+what+'. Now: '+(rules.length?rules.map(ruleText).join(' · '):'no rules, never demanded'));
+    auditLog('shift.demand',(sh?.label||dmShift)+' — '+what+'. Now: '+(rules.length?rules.map(ruleText).join(' · '):'no rules, never asked for'));
     return true;
   }catch(e){ schedToast('Could not save that: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); return false; }
 }
@@ -4698,7 +4698,7 @@ function catShiftProblems(s,ruleCount){
   if(!ruleCount) out.push('nodemand');
   return out;
 }
-const CAT_PROBLEM_LABEL={notimes:'no times',halfset:'half set',provisional:'provisional',nosite:'no site',nodemand:'no demand'};
+const CAT_PROBLEM_LABEL={notimes:'no times',halfset:'half set',provisional:'provisional',nosite:'no site',nodemand:'no staffing'};
 window.catShiftProblems=catShiftProblems;   // HANDOFF trap 1
 // The [55] guard defers re-rendering the list while a field has focus, so a Firestore
 // snapshot cannot destroy what you are typing. But these four are the ADMIN's own deliberate
@@ -4746,7 +4746,7 @@ function renderCatSummary(){
       +'<br><b>'+sited+' of '+all.length+'</b> have a site'
       +(sited<all.length?' · '+btn('nosite','<b>'+(all.length-sited)+'</b> with no site','#92400e')
           +' <span style="color:var(--t3)">§18 makes site a property of a whole day</span>':' · <b style="color:#065f46">all sited</b>')
-      +'<br><b>'+(all.length-nodemand)+' of '+all.length+'</b> have demand rules'
+      +'<br><b>'+(all.length-nodemand)+' of '+all.length+'</b> have staffing rules'
       +(nodemand?' · '+btn('nodemand','<b>'+nodemand+'</b> never asked for','#92400e')
           +' <span style="color:var(--t3)">which is different from needing nobody (§9)</span>':' · <b style="color:#065f46">all set</b>')
     : '';
@@ -4769,7 +4769,7 @@ function catReadRowHtml(id,s){
     +'<span style="font-size:10.5px;color:var(--t3);min-width:30px">'+(s.kind==='call'?'call':'day')+'</span>'
     +'<span style="min-width:150px">'+times+'</span>'
     +'<span style="font-size:11px;color:var(--t2);min-width:78px">'+(s.site?esc(s.site):'<span style="color:var(--t3)">no site</span>')+'</span>'
-    +'<span style="font-size:11px;color:var(--t2);min-width:74px">'+(rules?(rules+' rule'+(rules===1?'':'s')):'<span style="color:var(--t3)">no demand</span>')+'</span>'
+    +'<span style="font-size:11px;color:var(--t2);min-width:74px">'+(rules?(rules+' rule'+(rules===1?'':'s')):'<span style="color:var(--t3)">no staffing</span>')+'</span>'
     +'<span style="font-size:11px;color:var(--t2);min-width:34px" title="How many people can hold this shift on the same day">👥'+(s.capacity||1)+'</span>'
     +'<span style="font-size:11px;color:var(--t3);min-width:52px">'+(s.role?esc(s.role):'')+'</span>'
     +'<span style="flex:1">'+badges+'</span>'
@@ -4799,7 +4799,7 @@ function catEditRowHtml(id,s){ return `
         <input type="checkbox" ${s.timesProvisional?'checked':''} onchange="setShiftProvisional('${esc(id)}',this.checked)">?
       </label>
       <select class="sel" style="font-size:11px${s.site?'':';background:#fffbeb;border-color:#fcd34d'}" title="Site (§18 — one site per person per day)" onchange="setShiftSite('${esc(id)}',this.value)">${siteOptionsHtml(s.site||'')}</select>
-      <button class="btn btn-ghost" style="font-size:11px${demandRules(s).length?'':';color:#92400e'}" title="Which days this shift runs, and how many people it needs" onclick="openDemand('${esc(id)}')">📅 ${demandRules(s).length?esc(demandRules(s).length+' rule'+(demandRules(s).length===1?'':'s')):'no demand'}</button>
+      <button class="btn btn-ghost" style="font-size:11px${demandRules(s).length?'':';color:#92400e'}" title="Which days this shift runs, and how many people it needs" onclick="openDemand('${esc(id)}')">📅 ${demandRules(s).length?esc(demandRules(s).length+' rule'+(demandRules(s).length===1?'':'s')):'no staffing'}</button>
       <label style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:3px" title="How many people can hold this shift on the same day">👥
         <input type="number" class="inp" style="width:48px;font-size:11px;padding:3px 4px" value="${s.capacity||1}" min="1" max="20" step="1" onchange="setShiftCapacity('${esc(id)}',this.value)">
       </label>
@@ -5080,7 +5080,7 @@ window.addShift=async function(){
     +(start&&end?' — '+start+'–'+end+' ('+fmtDur(shiftMinutes(start,end))+(crossesMidnight(start,end)?', crosses midnight':'')+')':' — no times set')
     +(timesProvisional?' [provisional]':'')
     +(site?' — '+site:' — no site')
-    +((_dupDemand&&_dupDemand.length)?' — copied '+_dupDemand.length+' demand rule'+(_dupDemand.length===1?'':'s'):'')
+    +((_dupDemand&&_dupDemand.length)?' — copied '+_dupDemand.length+' staffing rule'+(_dupDemand.length===1?'':'s'):'')
     +(capacity>1?' — up to '+capacity+' people/day':''));
   ['catLabel','catRole','catFamily','catStart','catEnd','catSite'].forEach(x=>{ const e=document.getElementById(x); if(e) e.value=''; });
   document.getElementById('catCapacity').value='1';
@@ -5397,14 +5397,14 @@ function renderCoverage(){
 
   if(!c.demanded){
     sum.innerHTML='<div style="font-size:13px;font-weight:800;color:#92400e">Nothing is being asked for yet.</div>'
-      +'<div style="font-size:12px;color:var(--t2);margin-top:5px;line-height:1.55">No shift in the catalog has demand rules, so there is nothing to be short of. '
+      +'<div style="font-size:12px;color:var(--t2);margin-top:5px;line-height:1.55">No shift in the catalog has staffing rules, so there is nothing to be short of. '
       +'This is <b>not</b> the same as being fully covered — it means the question has not been asked. '
-      +'Set demand on the <b>Shift Catalog</b> page: each shift gets a list of rules saying which days it runs and how many people it needs.</div>';
+      +'Set staffing on the <b>Shift Catalog</b> page: each shift gets a list of rules saying which days it runs and how many people it needs.</div>';
     g.innerHTML=''; return;
   }
   if(c.need===0){
     sum.innerHTML='<div style="font-size:13px;font-weight:800">Nothing is asked for this month.</div>'
-      +'<div style="font-size:12px;color:var(--t2);margin-top:5px">'+c.shiftsWithDemand+' shift'+(c.shiftsWithDemand===1?' has':'s have')+' demand rules, but none of them match any day in '
+      +'<div style="font-size:12px;color:var(--t2);margin-top:5px">'+c.shiftsWithDemand+' shift'+(c.shiftsWithDemand===1?' has':'s have')+' staffing rules, but none of them match any day in '
       +MS[Number(curYM.slice(5))-1]+'. Worth checking the 60-day preview on those shifts — a rule that matches nothing looks exactly like a rule that works.</div>';
     g.innerHTML=''; return;
   }
@@ -5415,7 +5415,7 @@ function renderCoverage(){
     +'<div style="font-size:12px;color:var(--t2);margin-top:6px;line-height:1.55">'
     +(short.length?'<b style="color:#991b1b">'+short.length+' gap'+(short.length===1?'':'s')+'</b> — '+short.reduce((a,r)=>a+r.short,0)+' place'+(short.reduce((a,r)=>a+r.short,0)===1?'':'s')+' unfilled.':'<b style="color:#065f46">No gaps.</b> Everything asked for is covered.')
     +(over.length?' · <b style="color:#92400e">'+over.length+'</b> day'+(over.length===1?'':'s')+' have more people than asked for.':'')
-    +' · Counted against <b>'+c.shiftsWithDemand+'</b> shift'+(c.shiftsWithDemand===1?'':'s')+' with demand rules; the rest are not asked for and are not counted (§9).</div>';
+    +' · Counted against <b>'+c.shiftsWithDemand+'</b> shift'+(c.shiftsWithDemand===1?'':'s')+' with staffing rules; the rest are not asked for and are not counted (§9).</div>';
 
   const rows=[...short,...(showOver?over:[])].sort((a,b)=>a.date.localeCompare(b.date)||a.label.localeCompare(b.label));
   if(!rows.length){ g.innerHTML='<tr><td style="font-size:12px;color:#065f46;font-weight:700;padding:8px">Nothing short'+(showOver?' and nothing over-staffed':'')+'.</td></tr>'; return; }
@@ -5462,7 +5462,7 @@ function renderDash(){
   const monthLbl=curYM?(MS[Number(curYM.slice(5))-1]+' '+curYM.slice(0,4)):'';
   document.getElementById('dashCoveragePct').textContent = !curYM ? '—' : (cov.pct===null ? '—' : cov.pct+'%');
   document.getElementById('dashCoverageSub').textContent = !curYM ? ''
-    : !cov.demanded ? 'No shift has demand rules yet, so nothing is being asked for — set them in the Shift Catalog.'
+    : !cov.demanded ? 'No shift has staffing rules yet, so nothing is being asked for — set them in the Shift Catalog.'
     : cov.total===0 ? ('Nothing is asked for in '+monthLbl+' — the rules match no day this month.')
     : (cov.filled+' of '+cov.total+' asked-for places filled — '+monthLbl);
 
@@ -5563,15 +5563,36 @@ window.addGroup=async function(){
   if(el) el.value='';
   schedToast('Added '+label,'ok');
 };
-window.renameGroup=async function(key){
+// [100] Renaming used to call prompt(). A blocking dialog stalls every browser suite that
+// drives this page — build80-test forbids it by name — and it is the one modal the page could
+// not paint. It is now an inline row on the card, using the same single-key "which one is
+// open" shape as _eligOpen rather than a second mechanism (§3 rule 14).
+let _renamingGroup='';
+window.renameGroup=function(key){
+  if(groupsGateRefuse()) return;
+  if(!groupsData[key]) return;
+  _renamingGroup=key;
+  renderGroups();
+  const el=document.getElementById('grpRename_'+key);
+  if(el){ el.focus(); el.select(); }
+};
+window.renameGroupCancel=function(){ _renamingGroup=''; renderGroups(); };
+window.renameGroupSave=async function(key){
+  // The gate is re-read HERE, at the moment of the write — the paint above it is not the
+  // enforcement (§5). Rehearsal or a lost sign-in between opening the row and pressing Save
+  // must still refuse.
   if(groupsGateRefuse()) return;
   const g=groupsData[key]; if(!g) return;
-  const next=prompt('Rename this group. It keeps its members and its internal id ('+key+').',g.label||key);
-  if(next===null) return;
-  const label=String(next).trim();
+  const el=document.getElementById('grpRename_'+key);
+  const label=String((el&&el.value)||'').trim();
   if(!label){ schedToast('A group needs a name','err'); return; }
-  await mergeFields(groupsRef,{[key+'.label']:label});
-  auditLog('group.rename','Renamed the group "'+(g.label||key)+'" to "'+label+'"');
+  _renamingGroup='';
+  if(label!==(g.label||key)){
+    await mergeFields(groupsRef,{[key+'.label']:label});
+    auditLog('group.rename','Renamed the group "'+(g.label||key)+'" to "'+label+'"');
+    schedToast('Renamed to '+label,'ok');
+  }
+  renderGroups();
 };
 window.deleteGroup=async function(key){
   if(groupsGateRefuse()) return;
@@ -5762,6 +5783,14 @@ function renderGroups(){
         +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="event.stopPropagation();renameGroup('+jsArg(key)+')">Rename</button>'
         +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px;color:var(--red)" onclick="event.stopPropagation();deleteGroup('+jsArg(key)+')">Delete</button>'
       +'</div>'
+      // [100] The rename row, in place of the prompt() this build removed. It stops clicks
+      // travelling up for the same reason the buttons above it do: the header is the toggle.
+      +(_renamingGroup===key?('<div class="grprename" style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap" onclick="event.stopPropagation()">'
+          +'<input class="inp" id="grpRename_'+esc(key)+'" style="font-size:13px;width:220px" value="'+esc(g.label||key)+'">'
+          +'<button class="btn btn-primary" style="font-size:11px;padding:2px 9px" onclick="event.stopPropagation();renameGroupSave('+jsArg(key)+')">Save</button>'
+          +'<button class="btn btn-ghost" style="font-size:11px;padding:2px 9px" onclick="event.stopPropagation();renameGroupCancel()">Cancel</button>'
+          +'<span style="font-size:11px;color:var(--t3)">It keeps its members and its internal id ('+esc(key)+').</span>'
+        +'</div>'):'')
       +(sides.nocat.length?'<div style="font-size:11px;color:#92400e;margin-bottom:4px">'+sides.nocat.length
           +' in this group have no category, so they are on neither side: '+sides.nocat.map(u=>esc(displayName(u))).join(', ')+'</div>':'')
       +(odd.length?'<div style="font-size:11px;color:#1e3a8a;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:4px 7px;margin-bottom:4px">'
