@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 104;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 107;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -331,6 +331,36 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
    sign-in security box below. If that attribution is ever removed, this rule must come
    back — showing the badge and carrying the attribution are the only two permitted
    positions, and there is nothing in between. */
+
+/* ── [107] PRINTABLE SHEETS ────────────────────────────────────────────────────
+   The screen preview and the paper are the SAME markup. A preview that renders
+   differently from what comes out of the printer is worse than no preview. */
+.psheet{margin:0 0 18px}
+.psheet-h{font-size:15px;font-weight:800;margin:0 0 6px;color:var(--t1)}
+.psheet-t{width:100%;border-collapse:collapse;font-size:12px}
+.psheet-t th,.psheet-t td{border:1px solid var(--b2);padding:4px 7px;text-align:left;vertical-align:top}
+.psheet-t thead th{background:var(--s3);font-weight:700;font-size:11px}
+.psheet-fam td{background:var(--s2);font-weight:800;font-size:11px;letter-spacing:.03em;text-transform:uppercase}
+.psheet-sh{white-space:nowrap}
+.psheet-tm{white-space:nowrap;color:var(--t2)}
+.psheet-tm2{font-weight:400;color:var(--t3);font-size:10.5px}
+.psheet-none{color:var(--t3)}
+.psheet-unread{color:#b91c1c;font-style:italic}
+.psheet-empty{font-size:12px;color:var(--t3);padding:6px 0}
+.print-warn{font-size:11.5px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:6px 8px;margin-bottom:10px}
+@media print{
+  nav,.print-hide{display:none!important}
+  body{zoom:1;background:#fff}
+  .content{margin:0!important;padding:0!important;max-width:none!important}
+  .content>*:not(.panel){display:none!important}
+  .panel:not(#panel-print){display:none!important}
+  #panel-print>.page-title,#panel-print>.page-sub{display:none!important}
+  #panel-print>.card:not(#printOut){display:none!important}
+  #printOut{border:0!important;box-shadow:none!important;padding:0!important;margin:0!important;background:#fff!important}
+  .psheet{page-break-after:always}
+  .psheet:last-child{page-break-after:auto}
+  .psheet-t{font-size:10.5px}
+}
 </style>
 </head>
 <body>
@@ -338,6 +368,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   <div class="brand">SCHEDULER ADMIN</div>
   <a onclick="nav('dash',this)" class="on">📋 Today</a>
   <a onclick="nav('grid',this)">📅 Schedule Grid</a>
+  <a onclick="nav('print',this)">🖨️ Print</a>
   <a onclick="nav('requests',this)">📥 Requests <span id="reqBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
   <a onclick="nav('swaps',this)">🔁 Swaps <span id="swapBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
   <a onclick="nav('open',this)">📢 Open Shifts</a>
@@ -349,6 +380,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   <a onclick="nav('catalog',this)">🧰 Shift Catalog</a>
   <a onclick="nav('families',this)">🎨 Shift Families</a>
   <a onclick="nav('quotas',this)">🧮 Quotas</a>
+  <a onclick="nav('rules',this)">📐 Rules</a>
   <a onclick="nav('stats',this)">📊 Stats</a>
   <a onclick="nav('coverage',this)">🩺 Coverage</a>
   <div class="nav-section">Testing</div>
@@ -623,6 +655,57 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       </div>
     </div>
     <div class="card"><div class="card-title">Quotas</div><div id="quotaBody"></div></div>
+  </div>
+
+  <!-- RULES — [105 · Stage 5]. It REPORTS. Nothing here blocks anything, ever (§4). -->
+  <div class="panel" id="panel-rules">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Rules</div>
+    <div class="page-sub" style="margin-bottom:12px">A <b>rule</b> is a standing expectation — <i>nobody starts a shift within ten hours of finishing one</i> — checked against every month. You build as many as you like, each pointed at everyone, a category, a group, named people, or any combination. <b>A rule never blocks anything.</b> It warns, it is listed in the report below, and a person decides.</div>
+    <div class="card" style="border:2px solid #bfdbfe;background:#eff6ff">
+      <div style="font-size:12.5px;color:#1e3a8a;line-height:1.55">
+        <b>Nothing in this app is ever hard-blocked.</b> Severity decides where a conflict sits in the report and how loud the confirmation is — <b>Serious</b> asks for a deliberate yes, <b>Warn</b> is named in the ordinary confirmation, <b>Note</b> is listed and never raised. None of the three refuses a change.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title secth" onclick="toggleSect('addrule')" title="Click to open or close this section"><span class="secta" id="secta_addrule">▸</span>Add a rule</div>
+      <div id="sect_addrule" style="display:none">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="text" class="inp" id="ruleLabel" placeholder="Rule name e.g. Rest after call" style="width:230px">
+          <select class="sel" id="ruleType" style="font-size:12.5px"><option value="minRest">Minimum rest</option></select>
+          <button class="btn btn-primary" onclick="addRule()">Add rule</button>
+        </div>
+        <div class="page-sub" style="margin-top:6px">It is born covering <b>everyone</b> at <b>Warn</b>. Open it to narrow who it covers and how loud it is.</div>
+      </div>
+    </div>
+    <div class="card"><div class="card-title">Rules</div><div id="ruleBody"></div></div>
+    <div class="card"><div class="card-title">Conflict report</div><div id="ruleReport"></div></div>
+  </div>
+
+  <!-- PRINT — [107]. The sheet people actually carry. Screen preview and paper are the SAME
+       markup, because a preview that differs from the printout is worse than no preview. -->
+  <div class="panel" id="panel-print">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Print</div>
+    <div class="page-sub" style="margin-bottom:12px">A clean sheet for the wall or the pocket: <b>one sheet per site</b> for a single day, or a whole week at a time. Choose which shifts belong on it once — the choice is saved and used every time after that.</div>
+    <div class="card">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <label style="font-size:12px;color:var(--t2);display:flex;flex-direction:column;gap:3px">Sheet
+          <select class="sel" id="printMode" onchange="setPrintMode(this.value)"><option value="day">One day</option><option value="week">A whole week</option></select></label>
+        <label style="font-size:12px;color:var(--t2);display:flex;flex-direction:column;gap:3px">Site
+          <select class="sel" id="printSite" onchange="setPrintSite(this.value)"></select></label>
+        <label style="font-size:12px;color:var(--t2);display:flex;flex-direction:column;gap:3px">Date
+          <input type="date" class="inp" id="printDate" onchange="setPrintDate(this.value)"></label>
+        <button class="btn btn-primary" onclick="printSheetNow()">🖨️ Print</button>
+      </div>
+      <div class="page-sub" style="margin-top:7px">A week runs <b>Sunday to Saturday</b>, like every other week on this site. Pick any day in a week and the whole week prints.</div>
+    </div>
+    <div class="card">
+      <div class="card-title secth" onclick="toggleSect('printpick')" title="Click to open or close this section"><span class="secta" id="secta_printpick">&#9656;</span>Which shifts <span id="sectsum_printpick" style="font-weight:400;font-size:11px;color:var(--t3);text-transform:none;letter-spacing:0"></span></div>
+      <div id="sect_printpick" style="display:none">
+        <div class="page-sub" style="margin-bottom:8px">Grouped by family. A shift added to the catalog later is <b>on</b> the sheet unless you take it off here — so a new shift is never quietly missing from the paper.</div>
+        <div id="printPick"></div>
+      </div>
+    </div>
+    <div class="card" id="printOut"><div id="printSheet"></div></div>
   </div>
 
   <!-- GROUPS — [88 · Stage 4 part A]. Built INERT: nothing here decides eligibility yet. -->
@@ -1192,6 +1275,8 @@ const catalogRef  = doc(db,"dailysched","shiftCatalog");
 // A person joins a GROUP; their category decides which subgroup they land in (§97). They are
 // never asked which side — that would be a second way to say what the category already says.
 const quotasRef       = doc(db,"dailysched","quotas");
+const printCfgRef     = doc(db,"dailysched","printConfig"); // [107] which shifts appear on a sheet
+const rulesRef        = doc(db,"dailysched","rules");    // [105] Stage 5 rule instances
 const groupsRef       = doc(db,"dailysched","groups");
 const groupMembersRef = doc(db,"dailysched","groupMembers");
 const categoriesRef   = doc(db,"dailysched","categories");
@@ -1458,6 +1543,8 @@ let schedFte={}, schedFteLoaded=false, namesLoaded=false, baselineData={};
 // FTE box into deleteField() (defect 29) is what that costs when it is skipped.
 let groupsData={}, groupMembers={}, categories={};
 let quotasData={}; let quotasLoaded=false; let _renamingQuota='';
+let rulesData={}, rulesLoaded=false;   // [105] Stage 5 — see §S17
+let printCfg={}, printCfgLoaded=false; // [107] printable sheets — see §S18
 let groupsLoaded=false, membersLoaded=false, categoriesLoaded=false;
 // Stage 4 part A is INERT BY DESIGN (§56): groups can be created, staffed and looked at, and
 // NOTHING reads them to decide eligibility. allowed() is untouched. The cutover switch that
@@ -4727,7 +4814,7 @@ let catOpenRow='', catCollapsedFams={}, catProblem='';
 const sectOpen={};
 // [99] Sections whose body is STATIC markup: no render function owns them, so a toggle changes
 // nothing but the display. Listed so toggleSect does not fall through to renderCatalog().
-const SECT_STATIC=['adminaccess','adduser','postopen','addfamily','addquota'];
+const SECT_STATIC=['adminaccess','adduser','postopen','addfamily','addquota','addrule'];
 function sectApply(k){
   const body=document.getElementById('sect_'+k), arrow=document.getElementById('secta_'+k);
   if(!body) return;
@@ -4748,6 +4835,8 @@ window.toggleSect=function(k){
   // they are — so there is nothing to recompute and NOTHING to re-render. They must still be
   // named here, or they fall through to renderCatalog() and re-draw an unrelated page.
   else if(k.indexOf('qta:')===0){ if(typeof renderQuotas==='function') renderQuotas(); }
+  else if(k.indexOf('rul:')===0){ if(typeof renderRules==='function') renderRules(); }
+  else if(k==='printpick'){ if(typeof renderPrint==='function') renderPrint(); }
   else if(k==='reqdecided'){ if(typeof renderRequests==='function') renderRequests(); }
   else if(k==='swapdecided'){ if(typeof renderSwaps==='function') renderSwaps(); }
   else if(SECT_STATIC.indexOf(k)>=0){ /* static markup — nothing to re-render */ }
@@ -6412,13 +6501,729 @@ function renderQuotas(){
 }
 window.renderQuotas=renderQuotas;
 
+// ══════════════════════════════════════════════════════════════════════════════
+// §S17 · STAGE 5 — RULES AND THE CONFLICT REPORT.  [105 · §110 · §111]
+// design/RULES.md is the design; §111 settled the two questions it left open.
+//
+// THE ONE SENTENCE THAT GOVERNS EVERYTHING HERE (§4): "Safety checks warn and let you
+// override. Nothing is hard-blocked." A rule PRODUCES A WARNING. Severity buys a place at
+// the top of the report and a louder confirmation; it never buys a refusal. A later build
+// that makes Serious block is reversing §4, not tightening it.
+//
+// RULE TYPES ARE CODE, RULE INSTANCES ARE DATA — the owner drew that line himself (§11):
+// "Minimum hours between shifts is built once; after that the owner creates as many
+// instances as wanted, for anyone, with any numbers, without a build."  So RULE_TYPES is a
+// small fixed vocabulary and dailysched/rules holds an unlimited number of instances.
+//
+// THIS BUILD SHIPS ONE TYPE ON PURPOSE. Minimum rest is the slice that forces every
+// architectural decision into the open at once — the instance store, the target model, the
+// checker and the report — while needing NO new data: it reads times from the catalog and
+// assignments from the day documents, both of which are already populated. Caps (§111 ②)
+// are the second type and land on a frame that is already proven, for the same reason build
+// 52 refused to change storage and policy together: two changes in one build make a
+// regression impossible to attribute.
+//
+// ⚠ IT REPORTS ONLY. Nothing here is consulted by mutateCell, addCellShift or auto-populate
+// in this build. The warn-and-override path at the MOMENT of a change is its own build, and
+// several assertions in build105-test pin that it has not quietly arrived early.
+// ══════════════════════════════════════════════════════════════════════════════
+const SEVERITIES=[
+  {k:'serious',label:'Serious',color:'#b91c1c',bg:'#fee2e2',rank:0},
+  {k:'warn',   label:'Warn',   color:'#92400e',bg:'#fef3c7',rank:1},
+  {k:'note',   label:'Note',   color:'#475569',bg:'#e2e8f0',rank:2},
+];
+const MON3=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function sevOf(r){
+  const k=(r&&r.severity)||'warn';
+  return SEVERITIES.find(s=>s.k===k)||SEVERITIES[1];
+}
+// Absent means ON. A rule someone bothered to create is live until they say otherwise, and
+// the alternative — absent means off — makes a newly created rule silently check nothing,
+// which is the exact failure design/RULES.md's "a rule that cannot match anything must say
+// so" exists to prevent.
+function ruleEnabled(r){ return !!r && r.off!==true; }
+function ruleList(){
+  return Object.entries(rulesData||{})
+    .filter(([,r])=>r&&typeof r==='object'&&r.type)
+    .sort((a,b)=>((a[1].order??99)-(b[1].order??99))||String(a[1].label||a[0]).localeCompare(String(b[1].label||b[0])));
+}
+function ruleKeyFrom(label){
+  return String(label==null?'':label).toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+}
+// ── WHO A RULE COVERS (§10: everyone · a role · a group · a combination · named people) ──
+// The selectors UNION. Ticking the MD side and also naming one CRNA covers both — that is
+// what §10's "a combination" means, and it is why this is a set of selectors rather than a
+// single dropdown.
+function ruleTargets(r,u){
+  const t=(r&&r.target)||{};
+  if(t.all===true) return true;
+  const c=categoryOf(u);
+  if(c&&((t.cats||{})[c])) return true;
+  const gs=t.groups||{};
+  for(const k in gs) if(gs[k]&&inGroup(u,k)) return true;
+  return !!((t.people||{})[u]);
+}
+function ruleTargetNames(r){ return (names||[]).filter(u=>ruleTargets(r,u)); }
+function ruleTargetText(r){
+  const t=(r&&r.target)||{};
+  if(t.all===true) return 'everyone';
+  const bits=[];
+  for(const c of ['MD','CRNA']) if((t.cats||{})[c]) bits.push('every '+c);
+  const gs=t.groups||{};
+  for(const k in gs) if(gs[k]) bits.push(((groupsData||{})[k]||{}).label||k);
+  const ps=t.people||{};
+  const who=Object.keys(ps).filter(u=>ps[u]);
+  if(who.length) bits.push(who.length===1?displayName(who[0]):(who.length+' named people'));
+  return bits.length?bits.join(' · '):'nobody yet';
+}
+function ruleNum(r,k,def){
+  const v=((r&&r.params)||{})[k];
+  return (v===undefined||v===null||v==='')?def:Number(v);
+}
+// The same reader for a param that is a CHOICE rather than a number. Kept separate rather
+// than made clever: Number('week') is NaN, and one reader that quietly returned NaN for half
+// its callers is how a field ends up meaning two things.
+function ruleVal(r,k,def){
+  const v=((r&&r.params)||{})[k];
+  return (v===undefined||v===null||v==='')?def:String(v);
+}
+// ── TAGS. §25 retired kind:'day'|'call' as the basis for rules, and §27 is the reason it is
+// not academic: Eye Call is NAMED "call", runs 07:30–15:30, and belongs to no overnight-call
+// tag at all. A cap written against `kind` would count it and be wrong in its first month.
+// ONE answer to "what is in the overnight tag": overnightIds() already owns it, seed fallback
+// included. A second copy here would be §19's exact hazard.
+function tagChoices(){
+  const out=[]; const td=tagsData||{};
+  for(const k in td) if(td[k]&&Array.isArray(td[k].shifts)) out.push({k:k,label:td[k].label||k});
+  if(!out.some(x=>x.k==='overnightCall')) out.push({k:'overnightCall',label:'Overnight call'});
+  return out;
+}
+function tagLabel(k){ const c=tagChoices().find(x=>x.k===k); return c?c.label:k; }
+function tagShiftSet(k){
+  if(k==='overnightCall') return overnightSet();
+  const t=(tagsData||{})[k];
+  return new Set(Array.isArray(t&&t.shifts)?t.shifts:[]);
+}
+// Sunday-anchored, because every other week on this platform is (the auction's week 1 is a
+// Sunday and wkDate parses week keys as local time). Two week conventions in one product is
+// the kind of thing nobody notices until a report disagrees with a calendar.
+function weekStartKey(ym,dd){
+  const d=new Date(Number(ym.slice(0,4)),Number(ym.slice(5,7))-1,Number(dd));
+  d.setDate(d.getDate()-d.getDay());
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+}
+// ── THE SHIFTS ONE PERSON HOLDS IN A MONTH, AS A TIMELINE ──────────────────────
+// A cell is a LIST (§8/[52]), so two day shifts on one date are two intervals, not a
+// conflict to resolve here. `skipped` counts shifts this person holds that carry no times:
+// they are invisible to a time-based rule, and a report that never mentions them is the
+// quiet-zero-violations failure RULES.md names.
+function ruleIntervals(days,ym,u){
+  const out=[]; let skipped=0;
+  const Y=Number(ym.slice(0,4)), M=Number(ym.slice(5,7));
+  for(const dd of Object.keys(days||{}).sort()){
+    const cell=days[dd]&&days[dd][u];
+    if(!cell) continue;
+    for(const id of shiftsOf(cell)){
+      const sh=(catalog.shifts||{})[id];
+      if(!sh) continue;
+      const mins=(sh.start&&sh.end)?shiftMinutes(sh.start,sh.end):null;
+      if(mins==null){ skipped++; continue; }
+      const st=new Date(Y,M-1,Number(dd),0,hhmmToMin(sh.start));
+      out.push({id:id,dd:dd,label:sh.label||id,startAt:st,endAt:new Date(st.getTime()+mins*60000)});
+    }
+  }
+  out.sort((a,b)=>a.startAt-b.startAt);
+  return {list:out,skipped:skipped};
+}
+function stampOf(d){
+  return DOW_SHORT[d.getDay()]+' '+d.getDate()+' '+MON3[d.getMonth()]+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+// ── THE TYPE VOCABULARY ────────────────────────────────────────────────────────
+const RULE_TYPES={
+  minRest:{
+    label:'Minimum rest',
+    blurb:'How long somebody must have between the end of one shift and the start of the next.',
+    text:function(r){ return 'At least '+fmtDur(Math.round(ruleNum(r,'hours',10)*60))+' between the end of one shift and the start of the next'; },
+    fields:[{k:'hours',kind:'number',label:'hours of rest',min:0,max:48,step:0.5,def:10}],
+    check:function(r,ctx){
+      const need=Math.round(ruleNum(r,'hours',10)*60);
+      const viol=[]; let considered=0, skipped=0;
+      for(const u of ctx.people){
+        const iv=ruleIntervals(ctx.days,ctx.ym,u);
+        skipped+=iv.skipped; considered+=iv.list.length;
+        for(let i=1;i<iv.list.length;i++){
+          const a=iv.list[i-1], b=iv.list[i];
+          const gap=Math.round((b.startAt-a.endAt)/60000);
+          if(gap>=need) continue;
+          viol.push({u:u,dd:b.dd,dk:ctx.ym+'-'+b.dd,
+            what: gap<0
+              ? (a.label+' and '+b.label+' overlap by '+fmtDur(-gap)+' — '+a.label+' runs to '+stampOf(a.endAt)+', '+b.label+' starts '+stampOf(b.startAt))
+              : (fmtDur(gap)+' between '+a.label+' ending '+stampOf(a.endAt)+' and '+b.label+' starting '+stampOf(b.startAt)+' — the rule asks for '+fmtDur(need))});
+        }
+      }
+      return {violations:viol,considered:considered,skipped:skipped};
+    },
+  },
+  maxPerPeriod:{
+    label:'Not more than',
+    blurb:'A ceiling on how many of a tagged shift somebody may hold in a week or a month.',
+    text:function(r){
+      const n=Math.max(0,Math.round(ruleNum(r,'n',4)));
+      const per=ruleVal(r,'period','month')==='week'?'week (Sunday to Saturday)':'calendar month';
+      return 'No more than '+n+' × '+tagLabel(ruleVal(r,'tag','overnightCall'))+' per '+per;
+    },
+    fields:[
+      {k:'tag',    kind:'choice', label:'shifts tagged', def:'overnightCall', choices:function(){ return tagChoices(); }},
+      {k:'n',      kind:'number', label:'at most',       def:4, min:0, max:60, step:1},
+      {k:'period', kind:'choice', label:'per',           def:'month',
+       choices:function(){ return [{k:'week',label:'week (Sun–Sat)'},{k:'month',label:'calendar month'}]; }},
+    ],
+    check:function(r,ctx){
+      const n=Math.max(0,Math.round(ruleNum(r,'n',4)));
+      const period=ruleVal(r,'period','month');
+      const tag=ruleVal(r,'tag','overnightCall');
+      const ids=tagShiftSet(tag);
+      const notes=[];
+      if(!ids.size) return {violations:[],considered:0,skipped:0,
+        notes:['Not checking anything: the tag “'+tagLabel(tag)+'” has no shifts in it.']};
+      // A week that starts in the previous month is only counted from the 1st, because the
+      // checker is handed ONE month. Said out loud rather than quietly under-counted — the
+      // same reason a rule with no times says so instead of reporting a clean sheet.
+      if(period==='week' && new Date(Number(ctx.ym.slice(0,4)),Number(ctx.ym.slice(5,7))-1,1).getDay()!==0)
+        notes.push('This month does not begin on a Sunday, so its first week is counted from the 1st only.');
+      const viol=[]; let considered=0;
+      for(const u of ctx.people){
+        const hits=[];
+        for(const dd of Object.keys(ctx.days||{}).sort()){
+          const cell=ctx.days[dd]&&ctx.days[dd][u];
+          if(!cell) continue;
+          for(const id of shiftsOf(cell)) if(ids.has(id)) hits.push({dd:dd,id:id});
+        }
+        considered+=hits.length;
+        const buckets={};
+        for(const h of hits){
+          const b=(period==='week')?weekStartKey(ctx.ym,h.dd):ctx.ym;
+          (buckets[b]=buckets[b]||[]).push(h);
+        }
+        // One violation per shift OVER the ceiling, not one per person — so a cap of 4 broken
+        // by two extra calls reads as two rows, each pointing at the day that broke it, which
+        // is what "a click goes to that day cell" needs.
+        for(const b in buckets){
+          const list=buckets[b];
+          for(let i=n;i<list.length;i++){
+            const h=list[i];
+            const where=(period==='week')?('in the week beginning '+b):'this month';
+            viol.push({u:u,dd:h.dd,dk:ctx.ym+'-'+h.dd,
+              what:tagLabel(tag)+' number '+(i+1)+' '+where+' — the rule allows '+n});
+          }
+        }
+      }
+      if(!considered) notes.push('Not checking anything this month: nobody it covers holds a shift tagged “'+tagLabel(tag)+'”.');
+      return {violations:viol,considered:considered,skipped:0,notes:notes};
+    },
+  },
+};
+// ── RUNNING ONE RULE, AND SAYING WHAT IT COULD NOT SEE ─────────────────────────
+// `notes` is the honest half. A rule with nobody in it, or pointed at people whose shifts
+// carry no times, reports ZERO violations — which reads exactly like "all clear" unless the
+// rule says so itself. RULES.md: "A quiet zero-violations report on a rule that never ran is
+// worse than no rule at all."
+function checkRule(key,r,ym,days){
+  const t=RULE_TYPES[r&&r.type];
+  const people=ruleTargetNames(r);
+  const base={key:key,rule:r,violations:[],considered:0,skipped:0,people:people.length,notes:[],ran:false};
+  if(!t){ base.notes.push('Unknown rule type "'+(r&&r.type)+'" — nothing was checked.'); return base; }
+  if(!ruleEnabled(r)){ base.notes.push('Turned off — not checking anything.'); return base; }
+  if(!people.length){ base.notes.push('This rule targets nobody, so it is not checking anything.'); return base; }
+  const out=t.check(r,{people:people,ym:ym,days:days||{}});
+  base.violations=out.violations||[]; base.considered=out.considered||0;
+  base.skipped=out.skipped||0; base.ran=true;
+  if(Array.isArray(out.notes)) for(const nz of out.notes) base.notes.push(nz);
+  if(!base.considered && !base.notes.length) base.notes.push(base.skipped
+    ? ('Not checking anything this month: the '+base.skipped+' shift'+(base.skipped===1?'':'s')+' held by the people it covers '+(base.skipped===1?'has':'have')+' no times set. Set them in the Shift Catalog.')
+    : 'Not checking anything this month: nobody it covers is working.');
+  else if(base.considered && base.skipped) base.notes.push(base.skipped+' shift'+(base.skipped===1?'':'s')+' held by these people '+(base.skipped===1?'has':'have')+' no times set and could not be checked.');
+  return base;
+}
+function checkMonth(ym,days){
+  const byKey={}, all=[];
+  if(!ym) return {byKey:byKey,all:all};
+  for(const [key,r] of ruleList()){
+    const res=checkRule(key,r,ym,days);
+    byKey[key]=res;
+    const sv=sevOf(r);
+    for(const v of res.violations) all.push({...v,key:key,label:r.label||key,sev:sv.k,rank:sv.rank});
+  }
+  all.sort((a,b)=>(a.rank-b.rank)||String(a.dk).localeCompare(String(b.dk))||String(a.u).localeCompare(String(b.u)));
+  return {byKey:byKey,all:all};
+}
+window.checkMonthProbe=checkMonth;      // module scope — HANDOFF trap 1
+window.checkRuleProbe=checkRule;
+window.ruleTargetsProbe=ruleTargets;
+window.ruleIntervalsProbe=ruleIntervals;
+// ── WRITERS. Every one audits, because a rule is a policy and "who changed it" is the
+// first question anybody asks the day it fires unexpectedly (§8's reasoning, applied here).
+let _renamingRule='';
+window.addRule=async function(){
+  const el=document.getElementById('ruleLabel');
+  const label=(el&&el.value||'').trim();
+  if(!label){ schedToast('Give the rule a name first.','err'); return; }
+  const key=ruleKeyFrom(label);
+  if(!key){ schedToast('That name has no letters or numbers in it.','err'); return; }
+  if((rulesData||{})[key]){ schedToast('There is already a rule called '+(rulesData[key].label||key),'err'); return; }
+  const type=(document.getElementById('ruleType')||{}).value||'minRest';
+  const t=RULE_TYPES[type]; if(!t){ schedToast('Unknown rule type.','err'); return; }
+  const params={};
+  for(const f of t.fields) params[f.k]=f.def;
+  const order=Math.max(0,...Object.values(rulesData||{}).map(r=>(r&&r.order)||0))+1;
+  // Born covering EVERYONE and at Warn. A rule created targeting nobody is a rule that
+  // silently checks nothing, and "everyone" is the answer the admin can narrow by ticking
+  // rather than the one they have to discover is missing.
+  await mergeFields(rulesRef,{[key]:{label:label,type:type,order:order,severity:'warn',target:{all:true},params:params}});
+  auditLog('rule.add','Created the rule "'+label+'" ('+t.label+')');
+  if(el) el.value='';
+  schedToast('Rule "'+label+'" added — open it to set who it covers and how loud it is.','ok');
+};
+window.renameRule=function(key){ _renamingRule=key; renderRules(); };
+window.renameRuleCancel=function(){ _renamingRule=''; renderRules(); };
+window.renameRuleSave=async function(key){
+  const box=document.getElementById('rulRename_'+key);
+  const label=(box&&box.value||'').trim();
+  if(!label){ schedToast('A rule needs a name.','err'); return; }
+  const was=((rulesData||{})[key]||{}).label||key;
+  await mergeFields(rulesRef,{[key+'.label']:label});
+  auditLog('rule.rename','Renamed the rule "'+was+'" to "'+label+'"');
+  _renamingRule=''; renderRules();
+};
+window.deleteRule=async function(key){
+  const r=(rulesData||{})[key]; if(!r) return;
+  if(!confirm('Delete the rule "'+(r.label||key)+'"?\n\nIt stops being checked immediately. Nothing already on the schedule changes.')) return;
+  await mergeFields(rulesRef,{[key]:deleteField()});
+  auditLog('rule.delete','Deleted the rule "'+(r.label||key)+'"');
+  schedToast('Rule deleted.','ok');
+};
+window.setRuleSeverity=async function(key,v){
+  const r=(rulesData||{})[key]; if(!r) return;
+  if(!SEVERITIES.some(s=>s.k===v)) return;
+  await mergeFields(rulesRef,{[key+'.severity']:v});
+  auditLog('rule.severity','"'+(r.label||key)+'" is now '+(SEVERITIES.find(s=>s.k===v)||{}).label);
+};
+window.setRuleOff=async function(key,off){
+  const r=(rulesData||{})[key]; if(!r) return;
+  await mergeFields(rulesRef,{[key+'.off']:!!off});
+  auditLog('rule.enable','"'+(r.label||key)+'" was turned '+(off?'off':'on'));
+};
+window.setRuleParam=async function(key,f,val){
+  const r=(rulesData||{})[key]; if(!r) return;
+  const spec=(RULE_TYPES[r.type]||{fields:[]}).fields.find(x=>x.k===f); if(!spec) return;
+  let store, shown;
+  if(spec.kind==='choice'){
+    const opts=(typeof spec.choices==='function'?spec.choices():(spec.choices||[]));
+    const hit=opts.find(o=>o.k===String(val));
+    // An unknown choice is REFUSED, not stored. A params value that is not in the list would
+    // read back as the default for ever and look like the box had simply not saved.
+    if(!hit){ schedToast('That is not one of the choices.','err'); renderRules(); return; }
+    store=hit.k; shown=hit.label;
+  } else {
+    const n=Number(val);
+    if(!isFinite(n)){ schedToast('That is not a number.','err'); renderRules(); return; }
+    store=Math.max(spec.min,Math.min(spec.max,n)); shown=store;
+  }
+  await mergeFields(rulesRef,{[key+'.params.'+f]:store});
+  auditLog('rule.param','"'+(r.label||key)+'": '+spec.label+' set to '+shown);
+};
+// The target editor writes ONE selector at a time. Switching to "everyone" does not erase
+// the tick boxes underneath — they are kept, so narrowing and widening again is not a
+// retyping exercise. `all` simply wins while it is set, which is what ruleTargets reads.
+window.setRuleAll=async function(key,all){
+  const r=(rulesData||{})[key]; if(!r) return;
+  await mergeFields(rulesRef,{[key+'.target.all']:!!all});
+  auditLog('rule.target','"'+(r.label||key)+'" now covers '+(all?'everyone':'a chosen set'));
+};
+window.toggleRuleTarget=async function(key,bucket,id){
+  const r=(rulesData||{})[key]; if(!r) return;
+  if(['cats','groups','people'].indexOf(bucket)<0) return;
+  const on=!!(((r.target||{})[bucket]||{})[id]);
+  await mergeFields(rulesRef,{[key+'.target.'+bucket+'.'+id]:on?deleteField():true});
+  auditLog('rule.target','"'+(r.label||key)+'": '+(on?'removed ':'added ')+id);
+};
+
+function sevChip(k){
+  const s=SEVERITIES.find(x=>x.k===k)||SEVERITIES[1];
+  return '<span class="chipp" style="background:'+s.bg+';color:'+s.color+';font-size:10px;font-weight:700">'+esc(s.label)+'</span>';
+}
+function renderRules(){
+  const host=document.getElementById('ruleBody');
+  const rep=document.getElementById('ruleReport');
+  if(!host) return;
+  const sel=document.getElementById('ruleType');
+  if(sel && sel.options.length!==Object.keys(RULE_TYPES).length){
+    const was=sel.value;
+    sel.innerHTML=Object.entries(RULE_TYPES).map(([k,v])=>'<option value="'+esc(k)+'">'+esc(v.label)+'</option>').join('');
+    if(was) sel.value=was;
+  }
+  if(!rulesLoaded){ host.innerHTML='<div style="font-size:12px;color:var(--t3)">Loading…</div>'; if(rep) rep.innerHTML=''; return; }
+  const rl=ruleList();
+  const days=(monthData&&monthData.days)||{};
+  const res=checkMonth(curYM,days);
+  if(!rl.length){
+    host.innerHTML='<div style="font-size:12px;color:var(--t3)">No rules yet. Add one above — a rule is how you say '
+      +'<b>“nobody starts a shift within ten hours of finishing one”</b> and have every month checked against it. '
+      +'A rule never blocks anything; it warns, and the report below lists what is standing.</div>';
+    if(rep) rep.innerHTML='<div style="font-size:12px;color:var(--t3)">Nothing to report — there are no rules yet.</div>';
+    return;
+  }
+  const groups=groupList();
+  host.innerHTML='<div style="display:flex;flex-direction:column;gap:8px">'+rl.map(([key,r])=>{
+    const t=RULE_TYPES[r.type]||{label:'Unknown',fields:[],text:()=>'—'};
+    const c=res.byKey[key]||{violations:[],notes:[],people:0};
+    const n=c.violations.length;
+    const sv=sevOf(r);
+    const state = !ruleEnabled(r) ? '<span style="color:var(--t3)">off</span>'
+      : (c.notes.length ? '<span style="color:#92400e">not checking anything</span>'
+        : (n ? '<span style="color:'+sv.color+';font-weight:700">'+n+' standing</span>'
+             : '<span style="color:#166534">nothing standing</span>'));
+    return '<div class="card" style="padding:9px 11px'+(ruleEnabled(r)?'':';opacity:.62')+'">'
+      +'<div class="card-title secth" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap" '
+        +'onclick="toggleSect(\'rul:'+esc(key)+'\')" title="Click to open or close this rule">'
+        +'<span class="secta" id="secta_rul:'+esc(key)+'">▸</span>'
+        +'<b style="font-size:15px;font-weight:800;color:var(--t1)">'+esc(r.label||key)+'</b>'
+        +sevChip(r.severity)
+        +'<span class="chipp" style="background:var(--s3);color:var(--t2);font-size:10px">'+esc(t.label)+'</span>'
+        +'<span class="chipp" style="background:var(--s3);color:var(--t2);font-size:10px">'+esc(ruleTargetText(r))+'</span>'
+        +'<span style="font-size:11px">'+state+'</span>'
+        +'<span style="flex:1"></span>'
+        +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="event.stopPropagation();renameRule('+jsArg(key)+')">Rename</button>'
+        +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px;color:var(--red)" onclick="event.stopPropagation();deleteRule('+jsArg(key)+')">Delete</button>'
+      +'</div>'
+      +(_renamingRule===key?('<div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap" onclick="event.stopPropagation()">'
+          +'<input class="inp" id="rulRename_'+esc(key)+'" style="font-size:13px;width:240px" value="'+esc(r.label||key)+'">'
+          +'<button class="btn btn-primary" style="font-size:11px;padding:2px 9px" onclick="event.stopPropagation();renameRuleSave('+jsArg(key)+')">Save</button>'
+          +'<button class="btn btn-ghost" style="font-size:11px;padding:2px 9px" onclick="event.stopPropagation();renameRuleCancel()">Cancel</button>'
+        +'</div>'):'')
+      +'<div id="sect_rul:'+esc(key)+'" style="display:none">'
+        +'<div class="page-sub" style="margin:8px 0 6px">'+esc(t.text(r))+'</div>'
+        +(c.notes.length?('<div style="font-size:11.5px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:6px 8px;margin-bottom:8px">⚠ '
+            +c.notes.map(x=>esc(x)).join('<br>')+'</div>'):'')
+        +'<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:9px">'
+          +t.fields.map(f=>{
+             const head='<label style="font-size:12px;color:var(--t2);display:flex;align-items:center;gap:5px">'+esc(f.label);
+             if(f.kind==='choice'){
+               const cur=ruleVal(r,f.k,f.def);
+               const opts=(typeof f.choices==='function'?f.choices():(f.choices||[]));
+               return head+'<select class="sel" id="rulP_'+esc(key)+'_'+esc(f.k)+'" style="font-size:12.5px" '
+                 +'onchange="setRuleParam('+jsArg(key)+','+jsArg(f.k)+',this.value)">'
+                 +opts.map(o=>'<option value="'+esc(o.k)+'"'+(cur===o.k?' selected':'')+'>'+esc(o.label)+'</option>').join('')
+                 +'</select></label>';
+             }
+             return head+'<input type="number" class="inp" id="rulP_'+esc(key)+'_'+esc(f.k)+'" style="width:74px;padding:4px 6px" '
+               +'min="'+f.min+'" max="'+f.max+'" step="'+f.step+'" value="'+esc(String(ruleNum(r,f.k,f.def)))+'" '
+               +'onchange="setRuleParam('+jsArg(key)+','+jsArg(f.k)+',this.value)"></label>';
+           }).join('')
+          +'<label style="font-size:12px;color:var(--t2);display:flex;align-items:center;gap:5px">how loudly'
+            +'<select class="sel" id="rulSev_'+esc(key)+'" style="font-size:12.5px" onchange="setRuleSeverity('+jsArg(key)+',this.value)">'
+            +SEVERITIES.map(s=>'<option value="'+s.k+'"'+((r.severity||'warn')===s.k?' selected':'')+'>'+s.label+'</option>').join('')
+            +'</select></label>'
+          +'<label style="font-size:12px;color:var(--t2);display:flex;align-items:center;gap:5px;cursor:pointer">'
+            +'<input type="checkbox" id="rulOn_'+esc(key)+'" '+(ruleEnabled(r)?'checked':'')+' onchange="setRuleOff('+jsArg(key)+',!this.checked)"> on</label>'
+        +'</div>'
+        +'<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Severity sorts the report and decides how loud the confirmation is. '
+          +'It never blocks anything — <b>nothing in this app is ever hard-blocked</b>.</div>'
+        +'<div class="page-sub" style="margin:10px 0 4px"><b>Who it covers</b> — tick any combination. '
+          +'A person is covered if any one of these matches them.</div>'
+        +'<label style="font-size:12.5px;display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:6px">'
+          +'<input type="checkbox" id="rulAll_'+esc(key)+'" '+(((r.target||{}).all===true)?'checked':'')+' onchange="setRuleAll('+jsArg(key)+',this.checked)">'
+          +'<b>Everyone</b></label>'
+        +'<div id="rulPick_'+esc(key)+'" style="'+(((r.target||{}).all===true)?'opacity:.45;pointer-events:none':'')+'">'
+          +'<div style="font-size:11.5px;color:var(--t3);margin-bottom:3px">By category</div>'
+          +'<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:7px">'
+            +['MD','CRNA'].map(c=>'<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">'
+              +'<input type="checkbox" '+((((r.target||{}).cats||{})[c])?'checked':'')+' onchange="toggleRuleTarget('+jsArg(key)+',\'cats\','+jsArg(c)+')">'+c+'</label>').join('')
+          +'</div>'
+          +'<div style="font-size:11.5px;color:var(--t3);margin-bottom:3px">By group</div>'
+          +(groups.length
+            ? '<div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-bottom:7px">'+groups.map(([gk,g])=>
+                '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">'
+                +'<input type="checkbox" '+((((r.target||{}).groups||{})[gk])?'checked':'')+' onchange="toggleRuleTarget('+jsArg(key)+',\'groups\','+jsArg(gk)+')">'
+                +esc(g.label||gk)+'</label>').join('')+'</div>'
+            : '<div style="font-size:11.5px;color:var(--t3);margin-bottom:7px">No groups yet.</div>')
+          +'<div style="font-size:11.5px;color:var(--t3);margin-bottom:3px">Named people</div>'
+          +((names||[]).length
+            ? '<div style="display:flex;flex-wrap:wrap;gap:4px 14px">'+names.map(u=>
+                '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">'
+                +'<input type="checkbox" '+((((r.target||{}).people||{})[u])?'checked':'')+' onchange="toggleRuleTarget('+jsArg(key)+',\'people\','+jsArg(u)+')">'
+                +esc(displayName(u))+'</label>').join('')+'</div>'
+            : '<div style="font-size:11.5px;color:var(--t3)">No people on the roster yet.</div>')
+        +'</div>'
+        +'<div style="font-size:11.5px;color:var(--t2);margin-top:8px">Covers <b>'+c.people+'</b> '+(c.people===1?'person':'people')+' right now.</div>'
+      +'</div>'
+    +'</div>';
+  }).join('')+'</div>';
+  for(const [key] of rl) sectApply('rul:'+key);
+  if(rep) rep.innerHTML=ruleReportHTML(res);
+}
+// ── THE CONFLICT REPORT ────────────────────────────────────────────────────────
+// Grouped by severity, then by date; each row is who · when · which rule · what specifically
+// (RULES.md). It never fixes anything by itself — §21's principle: the app suggests, a person
+// accepts. Nothing is placed, moved or removed from here.
+function ruleReportHTML(res){
+  if(!curYM) return '<div style="font-size:12px;color:var(--t3)">No month is open — open the Schedule Grid and pick one.</div>';
+  const label=MS[Number(curYM.slice(5,7))-1]+' '+curYM.slice(0,4);
+  const all=res.all||[];
+  const quiet=Object.values(res.byKey||{}).filter(x=>x.notes&&x.notes.length);
+  const head='<div style="font-size:12px;color:var(--t2);margin-bottom:8px">Every violation standing in <b>'+esc(label)+'</b>. '
+    +'This is a report, not a gate — a month can be published with conflicts standing.</div>'
+    +(quiet.length?('<div style="font-size:11.5px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:6px 8px;margin-bottom:9px">⚠ '
+      +quiet.length+' rule'+(quiet.length===1?'':'s')+' checked nothing this month. Open '+(quiet.length===1?'it':'them')+' above to see why — a quiet zero is not the same as all clear.</div>'):'');
+  if(!all.length) return head+'<div style="font-size:12.5px;color:#166534;font-weight:700">Nothing standing in '+esc(label)+'.</div>';
+  let out=head;
+  for(const s of SEVERITIES){
+    const rows=all.filter(v=>v.sev===s.k);
+    if(!rows.length) continue;
+    out+='<div style="margin:12px 0 5px;display:flex;align-items:center;gap:7px">'+sevChip(s.k)
+      +'<span style="font-size:12px;color:var(--t2)">'+rows.length+' '+(rows.length===1?'conflict':'conflicts')+'</span></div>'
+      +'<div style="display:flex;flex-direction:column;gap:3px">'
+      +rows.map(v=>'<div style="display:flex;gap:8px;font-size:12px;align-items:baseline;border-left:3px solid '+s.color+';padding:3px 0 3px 8px">'
+        +'<b style="min-width:132px">'+esc(displayName(v.u))+'</b>'
+        +'<span class="mono" style="font-size:10.5px;color:var(--t3);min-width:78px">'+esc(v.dk)+'</span>'
+        +'<span style="color:var(--t3);min-width:130px;font-size:11px">'+esc(v.label)+'</span>'
+        +'<span style="flex:1">'+esc(v.what)+'</span>'
+      +'</div>').join('')+'</div>';
+  }
+  return out;
+}
+window.renderRules=renderRules;
+window.ruleReportProbe=ruleReportHTML;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// §S18 · PRINTABLE SHEETS.  [107]
+//
+// OWNER SPEC, recorded verbatim and called "brilliant": a daily sheet per SITE; a weekly
+// option; and a print config that SAVES a by-family selection, with each shift selectable
+// and unselectable in an easy-to-view way, persisted.
+//
+// ⚠ ONE DELIBERATE WIDENING, FLAGGED RATHER THAN ASSUMED. He said "a weekly option for
+// Richmond". The weekly option here is offered for EVERY site, because sites are DATA
+// (`siteList()`, seeded Oakland/Richmond per §18) and baking a site's name into a control
+// would break the day one is renamed. It is a superset of what he asked for; if he wants it
+// restricted to one site that is a one-line change and his call.
+//
+// THE SELECTION IS STORED AS EXCLUSIONS — `{off:{<shiftId>:true}}` — for §35's reason: a
+// shift added to the catalog tomorrow is then on the sheet by default and needs no write
+// here at all. The opposite shape silently drops every new shift off every sheet.
+//
+// A MONTH THAT COULD NOT BE READ IS NEVER DRAWN AS AN EMPTY DAY. A week can straddle two
+// months; the second one is fetched, and if the fetch fails the sheet SAYS the day could not
+// be read. An empty row and an unread row look identical on paper and mean opposite things.
+// ══════════════════════════════════════════════════════════════════════════════
+let _printMode='day', _printSite='', _printDateKey='', _printBusy=false, _printCache=null;
+
+function printOff(id){ return !!(((printCfg&&printCfg.off)||{})[id]); }
+function printOn(id){ return !printOff(id); }
+function printBaseDate(){
+  const k=_printDateKey||dKey(new Date());
+  const p=String(k).split('-');
+  return new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));
+}
+// Families in the OWNER'S order (§94), shifts in their catalog order within one. The same
+// order the catalog and the day board use — a sheet that sorted differently from the screen
+// it was printed from would be its own small betrayal.
+function printFamGroups(){
+  const byFam={};
+  for(const pair of shiftList()){
+    const f=pair[1].family||'';
+    (byFam[f]=byFam[f]||[]).push(pair);
+  }
+  return Object.keys(byFam)
+    .map(f=>({key:f,label:famLabelOf(f),shifts:byFam[f]}))
+    .sort((a,b)=>(bdFamRank(a.label)-bdFamRank(b.label))||String(a.label).localeCompare(String(b.label)));
+}
+function printSitesToDraw(){
+  if(_printSite) return [_printSite];
+  // "A daily sheet per site" — so All prints one sheet per site, not one merged list. Any
+  // shift with no site set lands in its own block rather than vanishing off the paper.
+  const seen=[];
+  for(const pair of shiftList()){
+    const s=pair[1].site||'';
+    if(printOn(pair[0]) && seen.indexOf(s)<0) seen.push(s);
+  }
+  seen.sort((a,b)=>(a===''?1:0)-(b===''?1:0) || String(a).localeCompare(String(b)));
+  return seen.length?seen:[''];
+}
+function printShiftsAt(site){
+  const out=[];
+  for(const g of printFamGroups()){
+    const rows=g.shifts.filter(pair=>printOn(pair[0]) && (pair[1].site||'')===site);
+    if(rows.length) out.push({label:g.label,shifts:rows});
+  }
+  return out;
+}
+function printDates(){
+  const d=printBaseDate();
+  if(_printMode!=='week') return [d];
+  const s=new Date(d); s.setDate(s.getDate()-s.getDay());
+  const out=[];
+  for(let i=0;i<7;i++){ const x=new Date(s); x.setDate(s.getDate()+i); out.push(x); }
+  return out;
+}
+// The month on screen is already in memory; anything else is fetched. A failure is recorded
+// as null for that month and surfaces on the sheet, never as an empty day.
+async function printGather(dates){
+  const months={};
+  for(const d of dates){
+    const ym=ymKey(d);
+    if(months[ym]!==undefined) continue;
+    if(ym===curYM && monthData && monthData.days){ months[ym]=monthData.days; continue; }
+    try{ const m=await readMonth(ym); months[ym]=(m&&m.days)||{}; }
+    catch(e){ months[ym]=null; }
+  }
+  return months;
+}
+function printPeopleOn(months,d,shiftId){
+  const days=months[ymKey(d)];
+  if(!days) return null;
+  const cell=days[pad(d.getDate())]||{};
+  const out=[];
+  for(const u in cell) if(shiftsOf(cell[u]).indexOf(shiftId)>=0) out.push(u);
+  return out.sort((a,b)=>String(displayName(a)).localeCompare(String(displayName(b))));
+}
+function printDayHead(d){
+  return DOW_SHORT[d.getDay()]+' '+d.getDate()+' '+MON3[d.getMonth()]
+    + (isHoliday(dKey(d))?' · holiday':'');
+}
+window.printFamGroupsProbe=printFamGroups;
+window.printShiftsAtProbe=printShiftsAt;
+window.printDatesProbe=printDates;
+window.printPeopleOnProbe=printPeopleOn;
+// ── WRITERS. The selection is a config, not a fairness input, so individual ticks are not
+// audited; the family-wide sweeps are, because those are the ones somebody does by accident.
+window.togglePrintShift=async function(id){
+  await mergeFields(printCfgRef,{['off.'+id]: printOn(id)?true:deleteField()});
+};
+window.setPrintFamily=async function(famKey,on){
+  const g=printFamGroups().find(x=>x.key===famKey); if(!g) return;
+  const patch={};
+  for(const pair of g.shifts) patch['off.'+pair[0]] = on?deleteField():true;
+  await mergeFields(printCfgRef,patch);
+  auditLog('print.config',(on?'Put every shift in ':'Took every shift in ')+g.label+(on?' on':' off')+' the print sheet');
+};
+window.setPrintMode=function(v){ _printMode=(v==='week')?'week':'day'; _printCache=null; renderPrint(); };
+window.setPrintSite=function(v){ _printSite=String(v||''); _printCache=null; renderPrint(); };
+window.setPrintDate=function(v){ _printDateKey=String(v||''); _printCache=null; renderPrint(); };
+window.printSheetNow=function(){ window.print(); };
+
+// The sheet is drawn ASYNCHRONOUSLY (a week can need a month that is not in memory), so the
+// result is cached against the inputs that produced it. Without that, every unrelated render
+// would refetch and the sheet would flicker between drawn and "Working…".
+async function printBuild(){
+  if(_printBusy) return;
+  const dates=printDates();
+  const sig=_printMode+'|'+_printSite+'|'+dKey(dates[0])+'|'+JSON.stringify((printCfg&&printCfg.off)||{})+'|'+(curYM||'');
+  if(_printCache && _printCache.sig===sig) return;
+  _printBusy=true;
+  try{
+    const months=await printGather(dates);
+    _printCache={sig:sig,html:printSheetHTML(dates,months)};
+  } finally { _printBusy=false; }
+  const host=document.getElementById('printSheet');
+  if(host && _printCache) host.innerHTML=_printCache.html;
+}
+function printSheetHTML(dates,months){
+  const sites=printSitesToDraw();
+  const unread=dates.filter(d=>months[ymKey(d)]===null);
+  let out='';
+  if(unread.length) out+='<div class="print-warn">⚠ '+unread.length+' day'+(unread.length===1?'':'s')
+    +' could not be read from the database and '+(unread.length===1?'is':'are')+' shown as “not read”, not as empty.</div>';
+  for(const site of sites){
+    const groups=printShiftsAt(site);
+    const title=(site||'No site set')+' — '+(_printMode==='week'
+      ? ('week of '+printDayHead(dates[0])+' to '+printDayHead(dates[6]))
+      : printDayHead(dates[0]));
+    out+='<section class="psheet">'
+      +'<h2 class="psheet-h">'+esc(title)+'</h2>';
+    if(!groups.length){
+      out+='<div class="psheet-empty">No shifts are selected for this site. Open <b>Which shifts</b> above.</div></section>';
+      continue;
+    }
+    out+='<table class="psheet-t"><thead><tr><th class="psheet-sh">Shift</th>'
+      +(_printMode==='week'
+        ? dates.map(d=>'<th>'+esc(printDayHead(d))+'</th>').join('')
+        : '<th class="psheet-tm">Times</th><th>Who is on</th>')
+      +'</tr></thead><tbody>';
+    for(const g of groups){
+      out+='<tr class="psheet-fam"><td colspan="'+(_printMode==='week'?8:3)+'">'+esc(g.label)+'</td></tr>';
+      for(const pair of g.shifts){
+        const id=pair[0], sh=pair[1];
+        const times=(sh.start&&sh.end)?(esc(sh.start)+'–'+esc(sh.end)):'—';
+        out+='<tr><td class="psheet-sh"><b>'+esc(sh.label||id)+'</b>'
+          +(_printMode==='week'?('<span class="psheet-tm2"> '+times+'</span>'):'')+'</td>';
+        if(_printMode==='week'){
+          for(const d of dates){
+            const who=printPeopleOn(months,d,id);
+            out+='<td>'+(who===null?'<i class="psheet-unread">not read</i>'
+              :(who.length?who.map(u=>esc(displayName(u))).join('<br>'):'<span class="psheet-none">—</span>'))+'</td>';
+          }
+        } else {
+          const who=printPeopleOn(months,dates[0],id);
+          out+='<td class="psheet-tm">'+times+'</td><td>'
+            +(who===null?'<i class="psheet-unread">not read</i>'
+              :(who.length?who.map(u=>esc(displayName(u))).join(' · '):'<span class="psheet-none">—</span>'))+'</td>';
+        }
+        out+='</tr>';
+      }
+    }
+    out+='</tbody></table></section>';
+  }
+  return out;
+}
+function renderPrint(){
+  const host=document.getElementById('printPick');
+  if(!host) return;
+  if(!_printDateKey) _printDateKey=dKey(new Date());
+  const dsel=document.getElementById('printDate'); if(dsel && dsel.value!==_printDateKey) dsel.value=_printDateKey;
+  const msel=document.getElementById('printMode'); if(msel && msel.value!==_printMode) msel.value=_printMode;
+  const ssel=document.getElementById('printSite');
+  if(ssel){
+    const want='<option value="">All sites — one sheet each</option>'
+      +siteList().map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');
+    if(ssel.innerHTML!==want) ssel.innerHTML=want;
+    if(ssel.value!==_printSite) ssel.value=_printSite;
+  }
+  if(!printCfgLoaded){ host.innerHTML='<div style="font-size:12px;color:var(--t3)">Loading…</div>'; return; }
+  const groups=printFamGroups();
+  const all=shiftList().length, on=shiftList().filter(p=>printOn(p[0])).length;
+  const sum=document.getElementById('sectsum_printpick');
+  if(sum) sum.textContent=sectOpen.printpick?'':(on+' of '+all+' shift'+(all===1?'':'s'));
+  host.innerHTML = groups.length
+    ? groups.map(g=>{
+        const gon=g.shifts.filter(p=>printOn(p[0])).length;
+        return '<div style="margin-bottom:9px">'
+          +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">'
+            +'<b style="font-size:12.5px">'+esc(g.label)+'</b>'
+            +'<span class="chipp" style="background:var(--s3);color:var(--t2);font-size:10px">'+gon+' of '+g.shifts.length+'</span>'
+            +'<button class="btn btn-ghost" style="font-size:10px;padding:0 7px" onclick="setPrintFamily('+jsArg(g.key)+',true)">All</button>'
+            +'<button class="btn btn-ghost" style="font-size:10px;padding:0 7px" onclick="setPrintFamily('+jsArg(g.key)+',false)">None</button>'
+          +'</div>'
+          +'<div style="display:flex;flex-wrap:wrap;gap:4px 14px;padding-left:4px">'
+          +g.shifts.map(p=>'<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">'
+            +'<input type="checkbox" '+(printOn(p[0])?'checked':'')+' onchange="togglePrintShift('+jsArg(p[0])+')">'
+            +esc(p[1].label||p[0])+(p[1].site?('<span style="color:var(--t3)"> · '+esc(p[1].site)+'</span>'):'')
+            +'</label>').join('')
+          +'</div></div>';
+      }).join('')
+    : '<div style="font-size:12px;color:var(--t3)">No shifts in the catalog yet.</div>';
+  printBuild();
+}
+window.renderPrint=renderPrint;
+window.printSheetHTMLProbe=printSheetHTML;
+
 const RENDER_FN={
   dash:renderDash, board:renderBoard, grid:renderGrid, baseline:renderBaseline,
   cellmodal:()=>{ if(cellSel) renderCellModal(); },
   legacyBanner:renderLegacyBanner, rehearsal:renderRehearsal, catLock:renderCatLock,
   requests:renderRequests, swaps:renderSwaps, open:renderOpenAdmin, openSel:fillOpenShiftSel,
   users:renderUsersGrid, usersLock:renderUsersLock, adminAccess:renderAdminAccess,
-  groups:renderGroups, quotas:renderQuotas,
+  groups:renderGroups, quotas:renderQuotas, rules:renderRules, print:renderPrint,
   elig:renderElig, catalog:renderCatalog, families:renderFamilies, stats:renderStats,
   coverage:renderCoverage, audit:renderAudit, reports:renderReports, badges:renderBadges,
 };
@@ -6426,7 +7231,7 @@ const PANEL_KEYS={
   dash:['board','dash'], grid:['grid','baseline','cellmodal','legacyBanner'],
   requests:['requests'], swaps:['swaps'], open:['open','openSel'],
   users:['users','usersLock','adminAccess'], groups:['groups'], elig:['elig'],
-  quotas:['quotas'],
+  quotas:['quotas'], rules:['rules'], print:['print'],
   catalog:['catalog','catLock'], families:['families'], stats:['stats'],
   coverage:['coverage'], simulator:['rehearsal'], reports:['reports'], audit:['audit'],
 };
@@ -7479,9 +8284,14 @@ authReady.then(()=>{
   // [102] Quotas are read ONLY by their own page in this build — nothing else consumes them
   // yet, so nothing else is marked dirty. When they gain a consumer, add it here.
   onSnapshot(quotasRef,snap=>{ quotasData=snap.exists()?snap.data():{}; quotasLoaded=true; markDirty('quotas'); });
-  onSnapshot(groupsRef,snap=>{ groupsData=snap.exists()?snap.data():{}; groupsLoaded=true; markDirty('groups','grid','reports'); });
-  onSnapshot(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; membersLoaded=true; markDirty('groups','grid','reports'); });
-  onSnapshot(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; categoriesLoaded=true; markDirty('groups','grid','reports'); });
+  // [105] Rules are read ONLY by their own page in this build — the checker is not wired into
+  // mutateCell or auto-populate, so nothing else is marked dirty. When the warn-and-override
+  // path arrives, the cell modal joins this list.
+  onSnapshot(rulesRef,snap=>{ rulesData=snap.exists()?snap.data():{}; rulesLoaded=true; markDirty('rules'); });
+  onSnapshot(printCfgRef,snap=>{ printCfg=snap.exists()?snap.data():{}; printCfgLoaded=true; markDirty('print'); });
+  onSnapshot(groupsRef,snap=>{ groupsData=snap.exists()?snap.data():{}; groupsLoaded=true; markDirty('groups','grid','reports','rules'); });
+  onSnapshot(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; membersLoaded=true; markDirty('groups','grid','reports','rules'); });
+  onSnapshot(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; categoriesLoaded=true; markDirty('groups','grid','reports','rules'); });
   // [68 · S4] TWO listeners per list — the frozen legacy array and the item docs —
   // recombined into the same {list:[]} shape every renderer already reads. An item doc
   // wins over a legacy entry with its id; _gone tombstones drop out entirely.
@@ -7505,7 +8315,7 @@ authReady.then(()=>{
   // [51] Reports. Both are dailysched documents — this site's own. Absent is a valid state:
   // no tags doc means reports use the owner's starting set, and no compPool doc means
   // everybody counts. Neither is seeded automatically, so nothing is written on page load.
-  onSnapshot(tagsRef,snap=>{ tagsData=snap.exists()?snap.data():null; ocDraft=null; markDirty('reports'); });
+  onSnapshot(tagsRef,snap=>{ tagsData=snap.exists()?snap.data():null; ocDraft=null; markDirty('reports','rules'); });
   // [93 · §43·2] 'groups' joins this. The group card now LISTS the members whose individual
   // setting disagrees with it, and that list is read from this document — without the repaint,
   // the one screen the ruling requires the override to be visible on would go on showing the
