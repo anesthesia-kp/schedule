@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 102;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 103;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -1051,6 +1051,9 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       <span id="dmDays" style="display:none;gap:3px;flex-wrap:wrap"></span>
       <label style="font-size:12px;color:var(--t2);display:flex;align-items:center;gap:4px">needs
         <input type="number" class="inp" id="dmNeed" value="1" min="0" max="30" step="1" style="width:60px;padding:5px 6px">
+      </label>
+      <label style="font-size:12px;color:var(--t2);display:flex;align-items:center;gap:4px" title="Optional. Leave it blank when the number is exact. A ceiling is an INDICATOR, never a refusal — nothing stops you putting one more person on.">up to
+        <input type="number" class="inp" id="dmMax" placeholder="—" min="0" max="60" step="1" style="width:60px;padding:5px 6px">
       </label>
       <button class="btn btn-primary" style="font-size:12.5px" onclick="dmAddRule()">+ Add rule</button>
     </div>
@@ -4027,22 +4030,54 @@ function ruleMatches(r,dt,dk){
     default:         return false;
   }
 }
+// [103a · §102] A STAFFING RULE CARRIES A RANGE NOW — {when, min, max?} — and the OLD shape
+// {when, need} still reads correctly as min = max = need. **Nothing is rewritten on disk.**
+// A migration would have to touch `shifts.<id>.demand` for every shift on a site that has no
+// users yet, to gain nothing a reader cannot do for free; and the one thing worse than two
+// shapes is a half-finished migration between them.
+function ruleMin(r){
+  const v = (r && r.min!==undefined && r.min!==null) ? r.min : (r?r.need:undefined);
+  return Math.max(0,Number(v)||0);
+}
+// The ceiling. Absent max means "no ceiling beyond the minimum" — deliberately NOT the
+// per-shift `capacity` field yet: absorbing that is [103b], and doing it here would change
+// behaviour in a build whose whole promise is that it does not.
+function ruleMax(r){
+  const lo = ruleMin(r);
+  if(!r || r.max===undefined || r.max===null || r.max==='') return lo;
+  return Math.max(lo, Math.min(60, Number(r.max)||lo));
+}
 // How many people this shift needs on this date. null = NOT DEMANDED AT ALL, which is
 // different from 0 and is what a shift with no matching rule returns.
+// ⚠ THIS STILL RETURNS ONE NUMBER, AND THAT IS THE POINT OF [103a]. It returns the MINIMUM,
+// which is exactly what `need` meant, so all seven consumers behave identically. The range is
+// available beside it through staffingOn(); nothing reads that yet.
 function demandOn(sh,dt){
   const rules=demandRules(sh);
   if(!rules.length) return null;
   const dk=dKey(dt);
   let need=null;
-  for(const r of rules) if(ruleMatches(r,dt,dk)) need=Math.max(0,Number(r.need)||0);
+  for(const r of rules) if(ruleMatches(r,dt,dk)) need=ruleMin(r);
   return need;
 }
+// The same question, answered as a range. Last match wins, and null means the same thing it
+// means everywhere else on this page: not asked for on this day.
+function staffingOn(sh,dt){
+  const rules=demandRules(sh);
+  if(!rules.length) return null;
+  const dk=dKey(dt);
+  let out=null;
+  for(const r of rules) if(ruleMatches(r,dt,dk)) out={min:ruleMin(r),max:ruleMax(r)};
+  return out;
+}
+window.staffingOnProbe=staffingOn;   // module scope — HANDOFF trap 1
 function ruleText(r){
   const w=DEMAND_WHENS.find(x=>x.k===r.when);
   const when=r.when==='dow'
     ? ((r.days||[]).slice().sort().map(d=>DOW_SHORT[d]).join(', ')||'no days chosen')
     : (w?w.label:r.when);
-  const n=Math.max(0,Number(r.need)||0);
+  const n=ruleMin(r), x=ruleMax(r);
+  if(x>n) return when+' → '+n+'–'+x+' people';
   return when+' → '+(n===0?'nobody needed':n+(n===1?' person':' people'));
 }
 window.shiftsOfDemandProbe=demandOn;   // module scope — HANDOFF trap 1
@@ -4600,10 +4635,19 @@ async function saveDemand(rules,what){
 window.dmAddRule=async function(){
   if(!dmShift) return;
   const when=document.getElementById('dmWhen').value;
-  const need=Math.max(0,Math.min(30,parseInt(document.getElementById('dmNeed').value,10)||0));
+  const min=Math.max(0,Math.min(30,parseInt(document.getElementById('dmNeed').value,10)||0));
+  const maxRaw=String((document.getElementById('dmMax')||{}).value||'').trim();
   const days=[...document.querySelectorAll('#dmDays input:checked')].map(x=>Number(x.value));
   if(when==='dow'&&!days.length){ schedToast('Tick at least one day of the week','err'); return; }
-  const r={when,need}; if(when==='dow') r.days=days;
+  // [103a] The ceiling is optional. A ceiling BELOW the minimum is refused rather than quietly
+  // clamped — silently rewriting what he typed is how a rule ends up meaning something he
+  // never asked for.
+  let max=null;
+  if(maxRaw!==''){
+    max=Math.max(0,Math.min(60,parseInt(maxRaw,10)||0));
+    if(max<min){ schedToast('The ceiling cannot be lower than the number needed','err'); return; }
+  }
+  const r={when,min}; if(max!==null&&max>min) r.max=max; if(when==='dow') r.days=days;
   const rules=[...demandRules(catalog.shifts?.[dmShift]||{}),r];
   if(await saveDemand(rules,'added "'+ruleText(r)+'"')) renderDemand();
 };
