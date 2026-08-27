@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 110;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 111;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -114,7 +114,19 @@ nav a.on{color:var(--blue);border-left-color:var(--blue);background:var(--s2)}
    bars trades clutter for a guessing game, which is the same failure wearing the opposite coat. */
 .secth{cursor:pointer;user-select:none;display:flex;align-items:center;gap:7px;margin:-4px -6px 10px;padding:5px 6px;border-radius:8px}
 .secth:hover{background:var(--s2)}
-.secta{font-size:10px;color:var(--t3);width:9px;display:inline-block}
+/* [111] THE COLLAPSE CONTROL, STYLED LIKE THE VACATION SITE'S. Owner, 26 Aug: "style the
+   collapse/expand like the vacation site to be more visible." It was a 10px --t3 arrow nine
+   pixels wide — the faintest thing on the page, on the control you press most. The auction
+   admin says "▸ Show" / "▾ Hide" in words (its `.chev`), and words are the difference: an
+   arrow tells you the state, a word tells you what pressing it will DO. */
+.secta{font-size:11.5px;font-weight:600;color:var(--t2);white-space:nowrap;
+  display:inline-flex;align-items:center;gap:4px;width:auto;
+  background:var(--s2);border:1px solid var(--b2);border-radius:999px;padding:2px 9px;
+  text-transform:none;letter-spacing:0}
+.secth:hover .secta{background:var(--s3);border-color:var(--blue);color:var(--t1)}
+/* A per-item card — one quota, one rule, one group — keeps the bare disclosure. It sits beside
+   a NAME, and "Show" repeated once per card is noise rather than help. */
+.secta.bare{background:none;border:0;padding:0;font-size:11px;width:11px;justify-content:center}
 .sectsum{margin-left:auto;font-weight:700;color:var(--t3);text-transform:none;letter-spacing:0;font-size:11px}
 .btn{border:1px solid var(--b2);background:var(--s1);color:var(--t1);border-radius:8px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer}
 .btn:hover{background:var(--s3)}
@@ -4872,7 +4884,13 @@ function sectApply(k){
   const body=document.getElementById('sect_'+k), arrow=document.getElementById('secta_'+k);
   if(!body) return;
   body.style.display=sectOpen[k]?'':'none';
-  if(arrow) arrow.textContent=sectOpen[k]?'▾':'▸';
+  if(!arrow) return;
+  // [111] A section BAR says what pressing it will do; a per-item card keeps the bare arrow.
+  // The keys tell them apart on their own — every per-item key is prefixed (`qta:`, `rul:`,
+  // `grp:`) — so nothing had to be passed in and no markup changed.
+  const bare = k.indexOf(':')>=0;
+  arrow.classList.toggle('bare', bare);
+  arrow.textContent = sectOpen[k] ? (bare?'▾':'▾ Hide') : (bare?'▸':'▸ Show');
 }
 window.toggleSect=function(k){
   sectOpen[k]=!sectOpen[k];
@@ -8638,6 +8656,11 @@ window.renderReports=renderReports;
 
 // §S21 — see SECTION MAP
 // ── Boot (listeners wait for auth, matching the auction admin) ──
+// [111] Give every STATIC section bar its label at boot. The generated cards call sectApply
+// themselves after each render; the ones written in the markup never did, so they sat showing
+// the bare arrow from the HTML until the first click — and the moment the label is most useful
+// is before you have pressed it.
+try{ document.querySelectorAll('[id^="secta_"]').forEach(e=>sectApply(e.id.slice(6))); }catch(_){}
 setMonth(ymKey(new Date()));
 authReady.then(()=>{
   onSnapshot(userListRef,snap=>{ const d=snap.exists()?snap.data():{}; if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort(); namesLoaded=true; renderAll(); });
