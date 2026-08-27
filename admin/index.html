@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 109;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 110;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -407,6 +407,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   <a onclick="nav('simulator',this)">🎲 Simulator</a>
   <div class="nav-section">Admin</div>
   <a onclick="nav('reports',this)">📈 Reports</a>
+  <a onclick="nav('feeds',this)">📆 Calendar Feeds</a>
   <a onclick="nav('audit',this)">🧾 Audit Log</a>
   <div class="nav-section">Other Systems</div>
   <a href="https://anesthesia-kp.github.io/vacation/admin/" target="_blank" rel="noopener">🏖️ Vacation Auction Admin →</a>
@@ -699,6 +700,31 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     </div>
     <div class="card"><div class="card-title">Rules</div><div id="ruleBody"></div></div>
     <div class="card"><div class="card-title">Conflict report</div><div id="ruleReport"></div></div>
+  </div>
+
+  <!-- CALENDAR FEEDS — [110 · §54/§54a]. TWO GATES, and only the first is open. -->
+  <div class="panel" id="panel-feeds">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Calendar Feeds</div>
+    <div class="page-sub" style="margin-bottom:12px">A private link per doctor that their phone's calendar subscribes to once, after which their own shifts and approved vacation appear alongside everything else in their life, and keep up to date on their own. Nobody sees anyone else's schedule.</div>
+
+    <div class="card" style="border:2px solid #fca5a5;background:#fef2f2">
+      <div style="font-size:12.5px;color:#7f1d1d;line-height:1.6">
+        <b>⛔ NOT FOR DOCTORS YET — two things must happen first, and neither is on this page.</b><br>
+        <b>1 · The address below does not answer yet.</b> A calendar subscription needs something live to answer it, and GitHub Pages only serves files. The small hosted endpoint that returns these feeds is not deployed.<br>
+        <b>2 · The link list must be locked down first.</b> Until <code>dailysched/feedTokens</code> is admin-only in the security rules, any signed-in user can read it — and a readable link list means anyone can read anyone's calendar. Those rules live in the auction repo and are closed without your specific say-so.<br>
+        <b>And the release gate itself is still shut</b> — your ruling: build it, but no doctor is told until the schedule is complete.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title secth" onclick="toggleSect('feedlist')" title="Click to open or close this section"><span class="secta" id="secta_feedlist">&#9656;</span>Who has a link <span id="sectsum_feedlist" style="font-weight:400;font-size:11px;color:var(--t3);text-transform:none;letter-spacing:0"></span></div>
+      <div id="sect_feedlist" style="display:none">
+        <div class="page-sub" style="margin-bottom:8px">A link is a long random string that stands in for signing in, because calendar apps cannot sign in. <b>Replacing someone's link breaks whatever they already subscribed to</b> — which is how you revoke one that has leaked, and why it asks first.</div>
+        <div style="margin-bottom:9px"><button class="btn btn-primary" style="font-size:12px" onclick="buildAllFeeds()">Rebuild every feed</button>
+        <span class="page-sub" style="margin-left:8px">Feeds do not refresh themselves yet — that is the next build.</span></div>
+        <div id="feedBody"></div>
+      </div>
+    </div>
   </div>
 
   <!-- PRINT — [107]. The sheet people actually carry. Screen preview and paper are the SAME
@@ -1298,6 +1324,9 @@ const catalogRef  = doc(db,"dailysched","shiftCatalog");
 const quotasRef       = doc(db,"dailysched","quotas");
 const printCfgRef     = doc(db,"dailysched","printConfig"); // [107] which shifts appear on a sheet
 const callArchiveRef  = doc(db,"dailysched","callArchive");  // [108] sealed per-year call totals
+const feedTokensRef   = doc(db,"dailysched","feedTokens");   // [110] {initials:token} — MUST become admin-only in rules
+// [110] The rendered calendar itself: dailysched/feeds/items/{token}. One document per
+// doctor, holding finished .ics text, so the hosted endpoint is a lookup and nothing else.
 const rulesRef        = doc(db,"dailysched","rules");    // [105] Stage 5 rule instances
 const groupsRef       = doc(db,"dailysched","groups");
 const groupMembersRef = doc(db,"dailysched","groupMembers");
@@ -1568,6 +1597,7 @@ let quotasData={}; let quotasLoaded=false; let _renamingQuota='';
 let rulesData={}, rulesLoaded=false;   // [105] Stage 5 — see §S17
 let printCfg={}, printCfgLoaded=false; // [107] printable sheets — see §S18
 let callArchive={}, callArchiveLoaded=false; // [108] across-years — see §S19
+let feedTokens={}, feedTokensLoaded=false;   // [110] calendar feed — see §S20
 let groupsLoaded=false, membersLoaded=false, categoriesLoaded=false;
 // Stage 4 part A is INERT BY DESIGN (§56): groups can be created, staffed and looked at, and
 // NOTHING reads them to decide eligibility. allowed() is untouched. The cutover switch that
@@ -4860,6 +4890,7 @@ window.toggleSect=function(k){
   else if(k.indexOf('qta:')===0){ if(typeof renderQuotas==='function') renderQuotas(); }
   else if(k.indexOf('rul:')===0){ if(typeof renderRules==='function') renderRules(); }
   else if(k==='printpick'){ if(typeof renderPrint==='function') renderPrint(); }
+  else if(k==='feedlist'){ if(typeof renderFeeds==='function') renderFeeds(); }
   else if(k==='reqdecided'){ if(typeof renderRequests==='function') renderRequests(); }
   else if(k==='swapdecided'){ if(typeof renderSwaps==='function') renderSwaps(); }
   else if(SECT_STATIC.indexOf(k)>=0){ /* static markup — nothing to re-render */ }
@@ -7424,13 +7455,248 @@ function renderStatsYears(){
 }
 window.renderStatsYears=renderStatsYears;
 
+// ══════════════════════════════════════════════════════════════════════════════
+// §S20 · THE CALENDAR FEED — the half that lives here.  [110 · §54 · §54a]
+//
+// §54: "calendar feed can be designed and built, but we can't push calendar to docs until the
+// schedule is complete." TWO GATES. Only the first is open. §54a: the feed carries that
+// doctor's own shifts plus their approved vacation weeks as all-day events — not the group's
+// schedule, no who-else-is-on — reached by a per-doctor unguessable link, no sign-in, because
+// calendar apps cannot log in.
+//
+// ⚠ THE ENDPOINT IS DELIBERATELY EMPTY, AND THAT IS THE WHOLE SECURITY ARGUMENT. The finished
+// calendar TEXT is written here, into dailysched/feeds/{token}. The hosted function looks the
+// token up and returns the string: it holds no schedule logic, no query, and therefore no way
+// to reach vacations/* even by mistake. That turns "trust the endpoint's code" into "there is
+// nothing in the endpoint to get wrong" — the only version of this worth putting on the project
+// that runs the live auction (§2). It also makes a poll ONE document read instead of ~120.
+//
+// ⛔ AND THE BLOCKER THAT GATES RELEASE, NOT THIS BUILD: `dailysched/feedTokens` MUST become
+// admin-only in `firestore.rules`. Under the dailysched catch-all any registered user can read
+// it today — and a readable token list means any doctor can read any other doctor's calendar.
+// The rules live in the AUCTION repo and are CLOSED by §92 without a specific decision. Nothing
+// here works around that; it is recorded in TODO as a release blocker.
+// ══════════════════════════════════════════════════════════════════════════════
+const ICS_PRODID='-//KP East Bay Anesthesia//Daily Schedule//EN';
+// [110] Where the hosted endpoint WILL live. It is not deployed, so this address does not
+// answer yet; the page says so in red rather than handing out a link that silently fails.
+// When the endpoint exists this is the one line that changes.
+const FEED_URL_BASE='https://us-central1-vacation-25e8e.cloudfunctions.net/ics/';
+const FEED_BACK_DAYS=30, FEED_FWD_DAYS=120;
+
+// RFC 5545 §3.3.11. A comma or a semicolon left raw silently splits one field into two, and the
+// calendar app shows a truncated title rather than an error.
+function icsEsc(v){
+  return String(v==null?'':v)
+    .replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,')
+    .replace(/\r?\n/g,'\\n');
+}
+// RFC 5545 §3.1: no line over 75 OCTETS, continuations begin with one space. Long shift names
+// and site names push past it, and an unfolded file is the classic "my calendar app says the
+// file is invalid" bug. Measured in BYTES, not characters — a non-ASCII name folds sooner.
+function icsFold(line){
+  const enc=new TextEncoder();
+  if(enc.encode(line).length<=75) return line;
+  const out=[]; let cur='', curLen=0, first=true;
+  for(const ch of String(line)){
+    const n=enc.encode(ch).length;
+    const cap=first?75:74;                 // a continuation spends one octet on its leading space
+    if(curLen+n>cap){ out.push(first?cur:(' '+cur)); first=false; cur=''; curLen=0; }
+    cur+=ch; curLen+=n;
+  }
+  if(cur) out.push(first?cur:(' '+cur));
+  return out.join('\r\n');
+}
+function icsUtc(d){
+  const p=n=>String(n).padStart(2,'0');
+  return d.getUTCFullYear()+p(d.getUTCMonth()+1)+p(d.getUTCDate())+'T'
+        +p(d.getUTCHours())+p(d.getUTCMinutes())+p(d.getUTCSeconds())+'Z';
+}
+function icsDay(d){
+  const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+''+p(d.getMonth()+1)+p(d.getDate());
+}
+// A stable UID per person + date + shift. Calendar apps REPLACE an event whose UID they already
+// hold and ADD one they do not, so an unstable UID does not "refresh" a calendar — it fills it
+// with duplicates that the doctor then has to delete by hand.
+function icsUid(u,dk,id){ return u+'-'+dk+'-'+id+'@anesthesia-kp'; }
+window.icsEscProbe=icsEsc; window.icsFoldProbe=icsFold;
+window.icsUtcProbe=icsUtc; window.icsDayProbe=icsDay; window.icsUidProbe=icsUid;
+
+// ── The feed document, and the token that names it ────────────────────────────
+function feedTokenOf(u){ const t=(feedTokens||{})[u]; return (typeof t==='string'&&t.length>=24)?t:''; }
+function feedDocRef(tok){ return doc(db,'dailysched','feeds','items',tok); }
+function newFeedToken(){
+  const b=new Uint8Array(16);
+  (window.crypto||window.msCrypto).getRandomValues(b);
+  return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+function feedHorizon(now){
+  const from=new Date(now.getFullYear(),now.getMonth(),now.getDate()-FEED_BACK_DAYS);
+  const to  =new Date(now.getFullYear(),now.getMonth(),now.getDate()+FEED_FWD_DAYS);
+  return {from:from,to:to};
+}
+// ONE ALL-DAY EVENT PER VACATION DAY — owner ruling, 26 Aug: "vacation should be independent
+// days, not 1 7-day block because sometimes docs trade single days of vacation."
+//
+// Claude built the merged version first, arguing that seven "Vacation" entries in a week read
+// worse than one. That was wrong on his domain AND wrong on the format, and the second reason is
+// the harder one: a merged block's UID has to be keyed to the RUN's start date, so trading one
+// day out of the middle changes the run boundaries, changes the UIDs, and leaves the old block
+// sitting in the doctor's calendar as an orphan nothing will ever replace. Per-day events are
+// keyed to their own date, so a traded day simply stops being sent and the calendar drops it.
+function vacationDaysIn(u,vac,from,to){
+  const out=[];
+  for(let d=new Date(from); d<=to; d.setDate(d.getDate()+1)){
+    if(vac[u+'|'+dKey(d)]) out.push(new Date(d));
+  }
+  return out;
+}
+// The calendar text for ONE person. Pure apart from the catalog it reads, so the suite can
+// drive it with a hand-built month and check the bytes.
+function buildIcs(u,monthsData,now,vac){
+  const h=feedHorizon(now);
+  const L=[];
+  const push=x=>L.push(icsFold(x));
+  push('BEGIN:VCALENDAR');
+  push('VERSION:2.0');
+  push('PRODID:'+ICS_PRODID);
+  push('CALSCALE:GREGORIAN');
+  push('METHOD:PUBLISH');
+  push('X-WR-CALNAME:'+icsEsc(displayName(u)+' — schedule'));
+  const stamp=icsUtc(now);
+  for(let d=new Date(h.from); d<=h.to; d.setDate(d.getDate()+1)){
+    const days=monthsData[ymKey(d)];
+    if(!days) continue;
+    const cell=(days[pad(d.getDate())]||{})[u];
+    if(!cell) continue;
+    for(const id of shiftsOf(cell)){
+      const sh=(catalog.shifts||{})[id]; if(!sh) continue;
+      const dk=dKey(d);
+      push('BEGIN:VEVENT');
+      push('UID:'+icsUid(u,dk,id));
+      push('DTSTAMP:'+stamp);
+      const mins=(sh.start&&sh.end)?shiftMinutes(sh.start,sh.end):null;
+      if(mins==null){
+        // No times on the shift. It still MATTERS to the doctor, so it goes in as an all-day
+        // entry rather than being dropped — a shift missing from the feed reads as a day off.
+        const nx=new Date(d); nx.setDate(nx.getDate()+1);
+        push('DTSTART;VALUE=DATE:'+icsDay(d));
+        push('DTEND;VALUE=DATE:'+icsDay(nx));
+      } else {
+        const st=new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,hhmmToMin(sh.start));
+        push('DTSTART:'+icsUtc(st));
+        push('DTEND:'+icsUtc(new Date(st.getTime()+mins*60000)));
+      }
+      push('SUMMARY:'+icsEsc(sh.label||id));
+      if(sh.site) push('LOCATION:'+icsEsc(sh.site));
+      push('END:VEVENT');
+    }
+  }
+  for(const day of vacationDaysIn(u,vac||{},h.from,h.to)){
+    const nx=new Date(day); nx.setDate(nx.getDate()+1);
+    push('BEGIN:VEVENT');
+    push('UID:'+icsUid(u,dKey(day),'vacation'));   // keyed to its OWN date — a traded day drops cleanly
+    push('DTSTAMP:'+stamp);
+    push('DTSTART;VALUE=DATE:'+icsDay(day));
+    push('DTEND;VALUE=DATE:'+icsDay(nx));          // DTEND is EXCLUSIVE for an all-day event
+    push('SUMMARY:Vacation');
+    push('TRANSP:TRANSPARENT');
+    push('END:VEVENT');
+  }
+  push('END:VCALENDAR');
+  return L.join('\r\n')+'\r\n';
+}
+window.buildIcsProbe=buildIcs;
+window.vacationDaysInProbe=vacationDaysIn;
+window.feedHorizonProbe=feedHorizon;
+// ── Writers. A token is a SECRET, so making one and replacing one are both audited, and
+// replacing one is confirmed: it silently breaks whatever that doctor already subscribed to.
+window.makeFeedToken=async function(u){
+  if(!names.includes(u)) return;
+  const had=feedTokenOf(u);
+  if(had && !confirm('Replace '+displayName(u)+"'s calendar link?\n\n"
+    +'The old link stops working immediately. If they have already subscribed, their calendar '
+    +'will quietly stop updating until they subscribe again with the new one.')) return;
+  const tok=newFeedToken();
+  await mergeFields(feedTokensRef,{[u]:tok});
+  auditLog('feed.token',(had?'Replaced ':'Created ')+displayName(u)+"'s calendar link");
+  schedToast('Link '+(had?'replaced':'created')+' for '+displayName(u)+'. Build the feed next.','ok');
+};
+window.clearFeedToken=async function(u){
+  if(!feedTokenOf(u)) return;
+  if(!confirm('Remove '+displayName(u)+"'s calendar link?\n\nAnything subscribed to it stops updating.")) return;
+  await mergeFields(feedTokensRef,{[u]:deleteField()});
+  auditLog('feed.token','Removed '+displayName(u)+"'s calendar link");
+};
+// ⚠ REFUSES TO WRITE A FEED IT CANNOT BUILD IN FULL. If a month in the horizon could not be
+// read, the events in it would be MISSING from the file — and a calendar app treats a missing
+// event as a DELETED one. A short feed does not look wrong to the doctor; it looks like a day
+// off. So a partial read aborts rather than publishing.
+window.buildFeedFor=async function(u){
+  const tok=feedTokenOf(u);
+  if(!tok){ schedToast('Make a link for '+displayName(u)+' first.','err'); return null; }
+  const now=new Date(), h=feedHorizon(now);
+  const keys=[]; const cur=new Date(h.from.getFullYear(),h.from.getMonth(),1);
+  while(cur<=h.to){ keys.push(ymKey(cur)); cur.setMonth(cur.getMonth()+1); }
+  const data={}; const missing=[];
+  for(const mk of keys){
+    try{ const m=await readMonth(mk); data[mk]=(m&&m.days)||{}; }
+    catch(e){ missing.push(mk); }
+  }
+  if(missing.length){
+    schedToast('Not published: '+missing.length+' month'+(missing.length===1?'':'s')
+      +' could not be read ('+missing.join(', ')+'). A feed missing days reads as time off.','err');
+    return null;
+  }
+  const ics=buildIcs(u,data,now,vacationDays());
+  await setDoc(feedDocRef(tok),{ics:ics,at:Date.now(),for:u,
+    by:_currentAdminEmail||'unknown',from:dKey(h.from),to:dKey(h.to)});
+  auditLog('feed.build','Rebuilt '+displayName(u)+"'s calendar feed");
+  return ics;
+};
+window.buildAllFeeds=async function(){
+  const who=names.filter(u=>feedTokenOf(u));
+  if(!who.length){ schedToast('Nobody has a calendar link yet.','err'); return; }
+  if(!confirm('Rebuild the calendar feed for '+who.length+' '+(who.length===1?'person':'people')+'?')) return;
+  let ok=0;
+  for(const u of who){ const r=await buildFeedFor(u); if(r) ok++; }
+  schedToast('Rebuilt '+ok+' of '+who.length+'.', ok===who.length?'ok':'err');
+  renderFeeds();
+};
+function renderFeeds(){
+  const host=document.getElementById('feedBody');
+  if(!host) return;
+  if(!feedTokensLoaded){ host.innerHTML='<div style="font-size:12px;color:var(--t3)">Loading…</div>'; return; }
+  if(!names.length){ host.innerHTML='<div style="font-size:12px;color:var(--t3)">No people on the roster yet.</div>'; return; }
+  const withTok=names.filter(u=>feedTokenOf(u)).length;
+  const sum=document.getElementById('sectsum_feedlist');
+  if(sum) sum.textContent=sectOpen.feedlist?'':(withTok+' of '+names.length+' have a link');
+  host.innerHTML='<table class="grid" style="width:100%"><thead><tr>'
+    +'<th style="text-align:left">Person</th><th>Link</th><th style="text-align:left">Subscribe address</th><th></th></tr></thead><tbody>'
+    +names.map(u=>{
+      const tok=feedTokenOf(u);
+      return '<tr><td style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
+        +'<td>'+(tok?'<span style="color:var(--green);font-weight:700">yes</span>':'<span style="color:var(--t3)">—</span>')+'</td>'
+        +'<td style="text-align:left" class="mono" style="font-size:10px">'
+          +(tok?('<span style="font-size:10px;color:var(--t2)">'+esc(FEED_URL_BASE+tok)+'</span>')
+               :'<span style="color:var(--t3);font-size:11px">no link yet</span>')+'</td>'
+        +'<td style="white-space:nowrap">'
+          +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="makeFeedToken('+jsArg(u)+')">'+(tok?'Replace':'Create')+'</button>'
+          +(tok?('<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="buildFeedFor('+jsArg(u)+').then(r=>{ if(r) schedToast(\'Feed rebuilt.\',\'ok\'); })">Build</button>'
+                +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px;color:var(--red)" onclick="clearFeedToken('+jsArg(u)+')">Remove</button>'):'')
+        +'</td></tr>';
+    }).join('')+'</tbody></table>';
+}
+window.renderFeeds=renderFeeds;
+
 const RENDER_FN={
   dash:renderDash, board:renderBoard, grid:renderGrid, baseline:renderBaseline,
   cellmodal:()=>{ if(cellSel) renderCellModal(); },
   legacyBanner:renderLegacyBanner, rehearsal:renderRehearsal, catLock:renderCatLock,
   requests:renderRequests, swaps:renderSwaps, open:renderOpenAdmin, openSel:fillOpenShiftSel,
   users:renderUsersGrid, usersLock:renderUsersLock, adminAccess:renderAdminAccess,
-  groups:renderGroups, quotas:renderQuotas, rules:renderRules, print:renderPrint,
+  groups:renderGroups, quotas:renderQuotas, rules:renderRules, print:renderPrint, feeds:renderFeeds,
   elig:renderElig, catalog:renderCatalog, families:renderFamilies, stats:renderStats,
   coverage:renderCoverage, audit:renderAudit, reports:renderReports, badges:renderBadges,
 };
@@ -7438,7 +7704,7 @@ const PANEL_KEYS={
   dash:['board','dash'], grid:['grid','baseline','cellmodal','legacyBanner'],
   requests:['requests'], swaps:['swaps'], open:['open','openSel'],
   users:['users','usersLock','adminAccess'], groups:['groups'], elig:['elig'],
-  quotas:['quotas'], rules:['rules'], print:['print'],
+  quotas:['quotas'], rules:['rules'], print:['print'], feeds:['feeds'],
   catalog:['catalog','catLock'], families:['families'], stats:['stats'],
   coverage:['coverage'], simulator:['rehearsal'], reports:['reports'], audit:['audit'],
 };
@@ -8497,6 +8763,7 @@ authReady.then(()=>{
   onSnapshot(rulesRef,snap=>{ rulesData=snap.exists()?snap.data():{}; rulesLoaded=true; markDirty('rules'); });
   onSnapshot(printCfgRef,snap=>{ printCfg=snap.exists()?snap.data():{}; printCfgLoaded=true; markDirty('print'); });
   onSnapshot(callArchiveRef,snap=>{ callArchive=snap.exists()?snap.data():{}; callArchiveLoaded=true; markDirty('stats'); });
+  onSnapshot(feedTokensRef,snap=>{ feedTokens=snap.exists()?snap.data():{}; feedTokensLoaded=true; markDirty('feeds'); });
   onSnapshot(groupsRef,snap=>{ groupsData=snap.exists()?snap.data():{}; groupsLoaded=true; markDirty('groups','grid','reports','rules'); });
   onSnapshot(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; membersLoaded=true; markDirty('groups','grid','reports','rules'); });
   onSnapshot(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; categoriesLoaded=true; markDirty('groups','grid','reports','rules'); });
