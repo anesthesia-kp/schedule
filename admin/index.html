@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 111;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 117;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -676,7 +676,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   <!-- QUOTAS — [102 · §108/§109]. A READOUT, not a solver: a quota reports, it never fills. -->
   <div class="panel" id="panel-quotas">
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Quotas</div>
-    <div class="page-sub" style="margin-bottom:12px">A <b>quota</b> is a named set of shifts that share one combined total for a day — D and D10 flexing against each other because their sum is fixed. A shift may sit in more than one quota. The total uses the same rule list as staffing, so it can differ on weekends and holidays. <b>A quota reports; it does not fill.</b> Auto-populate still targets each shift's own staffing rules.</div>
+    <div class="page-sub" style="margin-bottom:12px">A <b>quota</b> is a named set of shifts that share one combined total for a day — D and D10 flexing against each other because their sum is fixed. A shift may sit in more than one quota. The total uses the same rule list as staffing, so it can differ on weekends and holidays. <b>Auto-populate fills to it</b>: each shift's own minimum first, then each quota topped up across its member shifts to its total — and a quota the minimums already exceed is reported as a conflict, never trimmed.</div>
     <div class="card">
       <div class="card-title secth" onclick="toggleSect('addquota')" title="Click to open or close this section"><span class="secta" id="secta_addquota">▸</span>Add a quota</div>
       <div id="sect_addquota" style="display:none">
@@ -2100,6 +2100,26 @@ const PALETTE=['#fde68a','#fca5a5','#fdba74','#fcd34d','#d9f99d','#86efac','#5ee
 // ═══════════════════════════════════════════════════════════════════════════
 // §S04 · MONTH PLUMBING + VACATIONS — month refs, watch/convert, vacation reads
 // ═══════════════════════════════════════════════════════════════════════════
+// [112] ONE ANSWER to "is this person on approved vacation that day" (§19). The map is built
+// once by the caller (it walks every completed phase); the KEY is defined here and nowhere else.
+// assignmentWarnings and the Not-on-vacation rule both read through this, so the cell editor,
+// request approval, swap approval and the monthly conflict report cannot disagree about it.
+function onVacationIn(vac,u,dk){ return !!(vac&&vac[u+'|'+dk]); }
+function onVacation(u,dk){ return onVacationIn(vacationDays(),u,dk); }
+window.onVacationProbe=onVacation;
+// [112] Which SITES a list of shift ids sits at, and how many carry no site at all (§18). One
+// definition, used by the One-site-per-day rule now and by the warn-at-change path later.
+function sitesOf(ids){
+  const seen=[]; let unsited=0;
+  for(const id of (ids||[])){
+    const sh=(catalog.shifts||{})[id]; if(!sh) continue;
+    const st=String(sh.site||'').trim();
+    if(!st){ unsited++; continue; }
+    if(seen.indexOf(st)<0) seen.push(st);
+  }
+  return {sites:seen,unsited:unsited};
+}
+window.sitesOfProbe=sitesOf;
 function vacationDays(){
   const map={};
   const addWeek=(u,wk)=>{ const [y,m,d]=wk.split('-').map(Number); const base=new Date(y,m-1,d);
@@ -2554,13 +2574,62 @@ function assignmentWarnings(ym,dd,u,addId,cells){
       for(const usr in (cells||{})){ if(usr===u) continue; if(holdsShift(cells[usr],addId)) have++; }
       if(have>=cap) msgs.push(lbl+' is already staffed by '+have+' — the most it asks for is '+cap+'. This will go over. Nothing stops you: a ceiling is an indicator, not a refusal.');
     }
-    if(vacationDays()[u+'|'+dk]) msgs.push(displayName(u)+' is on approved vacation this day — this will schedule a shift on top of it.');
+    if(onVacation(u,dk)) msgs.push(displayName(u)+' is on approved vacation this day — this will schedule a shift on top of it.');   // [112] one predicate
     if(off) msgs.push(displayName(u)+' is marked OFF this day. Adding a shift does not clear that by itself — you would be leaving them both off and assigned.');
   }
   if(off && held.length) msgs.push('Marked "Day off" while still holding '+held.length+' shift'+(held.length===1?'':'s')+' — both are saved, which is probably not what you want.');
+  // [115] THE RULES, at the moment of the change. Same function, same three paths, so a rule
+  // fires on Approve exactly as it fires in the cell editor (§51/§19). Serious first.
+  if(addId) for(const m of ruleWarnings(ym,dd,u,addId,cells)) msgs.push(m);
   return msgs;
 }
 window.assignmentWarnings=assignmentWarnings;   // HANDOFF trap 1
+// ── [115] WHAT THIS ONE CHANGE WOULD BREAK, according to the rules ─────────────────────────
+// The rules check a MONTH; a change is one shift on one day. So the month is checked twice —
+// as it stands, and with the change applied — and the difference is what this change breaks.
+// That is the only honest answer: a cooldown violation caused by adding a call on the 2nd is
+// DATED the 3rd, and a check of the 2nd alone would never see it.
+//
+// The month comes from what is on screen when the change is in the open month (the cell
+// editor — every day is loaded). Request and swap approval routinely act on a month that is
+// NOT open, and they hold one day; there the day-only rules still run (vacation, site, pairs)
+// and the ones that span days (rest, cooldown, caps) are checked against that one day and
+// SAY the rest of the month was not in view. Reading a month on every Approve is a later
+// decision, not a silent read (§2's cost arithmetic).
+function ruleWarnings(ym,dd,u,addId,cells){
+  const out=[];
+  if(!ym||!dd||!u||!addId) return out;
+  const rl=ruleList().filter(([,r])=>ruleEnabled(r)&&RULE_TYPES[r.type]&&ruleTargets(r,u));
+  if(!rl.length) return out;
+  const open = (ym===curYM && monthData && monthData.days) ? monthData.days : null;
+  const before = open ? Object.assign({},open) : {};
+  const cur=(cells&&cells[u])||{};
+  before[dd]=Object.assign({},(open&&open[dd])||cells||{},{[u]:cur});
+  const after=Object.assign({},before);
+  const entries=shiftEntries(cur).slice();
+  if(!entries.some(x=>x.s===addId)) entries.push({s:addId});
+  after[dd]=Object.assign({},before[dd],{[u]:Object.assign({},cur,{a:entries})});
+  delete after[dd][u].day; delete after[dd][u].call;   // the legacy pair — `a` is the truth
+  const tally=(res)=>{ const m={}; for(const v of (res.violations||[])) m[v.dd+'|'+String(v.what)]=v; return m; };
+  const spans=[];
+  for(const [key,r] of rl){
+    const t=RULE_TYPES[r.type];
+    const b=tally(t.check(r,{people:[u],ym:ym,days:before}));
+    const a=t.check(r,{people:[u],ym:ym,days:after});
+    const sv=sevOf(r);
+    for(const v of (a.violations||[])){
+      if(b[v.dd+'|'+String(v.what)]) continue;
+      const when=(v.dd===dd)?'':(' (on the '+Number(v.dd)+')');
+      out.push({rank:sv.rank,text:(sv.k==='serious'?'⛔ SERIOUS — ':(sv.k==='note'?'Note — ':''))+'“'+(r.label||key)+'”'+when+': '+v.what});
+    }
+    if(!open && /minRest|maxPerPeriod|cooldown/.test(r.type)) spans.push(r.label||key);
+  }
+  out.sort((x,y)=>x.rank-y.rank);
+  const msgs=out.map(x=>x.text);
+  if(spans.length) msgs.push('“'+spans.join('”, “')+'” '+(spans.length===1?'was':'were')+' checked against this day only — '+ym+' is not the month on screen, so the rest of it was not in view.');
+  return msgs;
+}
+window.ruleWarningsProbe=ruleWarnings;
 
 // [61] What a swap would hand to whom, and what is wrong with it.
 //
@@ -2777,6 +2846,80 @@ function rehearsalRefuse(){
   return true;
 }
 
+// ═══ [117] ONE FILL FOR ONE DAY — month and year both call this. ═══════════════════════════
+// Until this build the month and year fillers were two copies of the same loop (§19's exact
+// hazard); the quota pass had to land in both, so it landed in ONE function instead.
+//
+// PASS 1 is unchanged from 78/103: every shift to its own staffing MINIMUM, one shift per
+// person per day (§45), the pick being whoever has the fewest of that shift across the
+// rolling window. PASS 2 is new — QUOTAS AS CONSTRAINTS (§109): a quota is a named set of
+// shifts that share one combined daily total, and a shift may sit in two; after the minimums
+// are placed, each quota still short of its total is topped up across its member shifts,
+// preferring the shift with the most room under its ceiling. A shift with no rule for the
+// day is still fillable by a quota — the quota IS the ask for that day. The filler respects
+// ceilings as its own targets (MAX indicates, never refuses — for a person; a filler that
+// ignores it would be the thing a person then has to undo).
+//
+// WHAT IT NEVER DOES: remove anything (§8). A quota already OVER its total — because the
+// member shifts' own minimums add up past it — is a CONFLICT, reported and left standing
+// for a person to resolve. And a quota it cannot fill says which and by how many.
+function fillDay(days,dd,dt,dk,o){
+  const out={filled:0,notAsked:0,unfillable:[],quotaFilled:0,quotaConflicts:[]};
+  days[dd]=days[dd]||{};
+  const cnt=(u,s)=>o.counts[u+'|'+s]||0;
+  const free=u=>allowed(u,o.id)&&!o.vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!shiftsOf(days[dd][u]).length;   // [53 · §45] one per person per day, total
+  const have=id=>Object.values(days[dd]).filter(c=>holdsShift(c,id)).length;
+  const place=(id,via)=>{
+    o.id=id;
+    const cands=names.filter(free);
+    if(!cands.length) return false;
+    cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
+    const pick=cands[0];
+    days[dd][pick]={a:[...shiftEntries(days[dd][pick]),{s:id,by:_currentAdminEmail||'unknown',at:Date.now(),via:via}],off:!!days[dd][pick]?.off};
+    o.counts[pick+'|'+id]=cnt(pick,id)+1;
+    o.changed[dd+'.'+pick]=true;
+    out.filled++;
+    return true;
+  };
+  // PASS 1 — each shift to its own minimum.
+  for(const [id,s] of shiftList()){
+    const capacity=autoTargetFor(s,dt,o.anyDemand);   // [78 · defect 5] what this day asks for
+    if(capacity<=0){ out.notAsked++; continue; }        // §9: silence is not a gap
+    let h=have(id);
+    while(h<capacity){
+      if(!place(id,'auto')){ out.unfillable.push(dk+' '+s.label+(capacity>1?' ('+(capacity-h)+' more needed)':'')); break; }
+      h++;
+    }
+  }
+  // PASS 2 — each quota to its combined total.
+  for(const [qk,q] of quotaList()){
+    const want=quotaOn(q,dt);
+    if(want===null) continue;
+    const ids=quotaShiftIds(q).filter(id=>(catalog.shifts||{})[id]);
+    if(!ids.length) continue;
+    const placed=()=>ids.reduce((a,id)=>a+have(id),0);
+    let p=placed();
+    if(p>want){ out.quotaConflicts.push(dk+' '+(q.label||qk)+': '+p+' placed against a total of '+want+' — already past the quota (the member shifts’ own minimums, or another quota sharing a shift); nothing was removed'); continue; }
+    // Would one more person on this shift tip ANOTHER quota past its total? A shift may sit
+    // in two quotas (§109), so topping one up can break the other; a shift that would is
+    // taken last, not first.
+    const tips=id=>quotaList().some(([k2,q2])=>{ if(k2===qk||!inQuota(q2,id)) return false; const w2=quotaOn(q2,dt); if(w2===null) return false;
+      return quotaShiftIds(q2).reduce((a,i2)=>a+have(i2),0)+1>w2; });
+    while(p<want){
+      // The member shift with the most room under its ceiling takes the next person — among
+      // those that do not tip another quota over, and only then among the rest.
+      const room=ids.map(id=>({id:id,room:shiftCeilingOn((catalog.shifts||{})[id],dt)-have(id),tips:tips(id)})).filter(x=>x.room>0)
+        .sort((a,b)=>(a.tips-b.tips)||(b.room-a.room));
+      let done=false;
+      for(const x of room){ if(place(x.id,'auto')){ done=true; break; } }
+      if(!done){ out.unfillable.push(dk+' '+(q.label||qk)+' quota ('+(want-p)+' more needed'+(room.length?'':', every member shift at its ceiling')+')'); break; }
+      out.quotaFilled++; p++;
+    }
+  }
+  return out;
+}
+window.fillDayProbe=fillDay;   // module scope — HANDOFF trap 1
+
 window.autoPopulate=async function(){
   if(rehearsalRefuse()) return;
   if(monthLockRefuse()) return;                    // [59] never fill an unconverted month
@@ -2797,34 +2940,13 @@ window.autoPopulate=async function(){
   const cnt=(u,s)=>counts[u+'|'+s]||0;
   // …plus THIS month's already-placed assignments (the 12th month of the window).
   for(const dd in days) for(const u in days[dd]) for(const id of shiftsOf(days[dd][u])) counts[u+'|'+id]=(counts[u+'|'+id]||0)+1;
-  let filled=0, unfillable=[], notAsked=0;
+  let filled=0, unfillable=[], notAsked=0, quotaFilled=0, quotaConflicts=[];
   const changed={}; // [M-20] only the cells THIS run actually assigns, so we don't clobber concurrent edits
   for(let d=1;d<=nDays;d++){
     const dd=pad(d), dk=curYM+'-'+dd;
-    days[dd]=days[dd]||{};
-    const _dt=new Date(y,m-1,d);
-    for(const [id,s] of shiftList()){
-      const slot=s.kind==='call'?'call':'day';
-      // [78 · defect 5] what this day actually asks for, not the shift's static capacity
-      const capacity=autoTargetFor(s,_dt,_anyDemand);
-      let have=Object.values(days[dd]).filter(c=>holdsShift(c,id)).length;
-      if(capacity<=0){ notAsked++; continue; }   // §9: silence is not a gap
-      while(have<capacity){
-        const cands=names.filter(u=>allowed(u,id)
-          &&!vac[u+'|'+dk]
-          &&!(days[dd][u]?.off)
-          // [53 · §45] ONE shift per person per day, TOTAL — not one of each kind as before.
-          // The simulator can never double anyone up, so what it produces is easy to read.
-          &&!shiftsOf(days[dd][u]).length);
-        if(!cands.length){ unfillable.push(dk+' '+s.label+(capacity>1?' ('+(capacity-have)+' more needed)':'')); break; }
-        cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
-        const pick=cands[0];
-        days[dd][pick]={a:[...shiftEntries(days[dd][pick]),{s:id,by:_currentAdminEmail||'unknown',at:Date.now(),via:'auto'}],off:!!days[dd][pick]?.off};
-        counts[pick+'|'+id]=cnt(pick,id)+1;
-        changed[dd+'.'+pick]=true;
-        filled++; have++;
-      }
-    }
+    const r=fillDay(days,dd,new Date(y,m-1,d),dk,{vac:vac,counts:counts,anyDemand:_anyDemand,changed:changed});   // [117] one fill
+    filled+=r.filled; notAsked+=r.notAsked; quotaFilled+=r.quotaFilled;
+    unfillable.push(...r.unfillable); quotaConflicts.push(...r.quotaConflicts);
   }
   // [M-20] Write ONLY the cells we filled, as a targeted field patch, instead of a
   // full-month setDoc — a whole-month write would revert any change another admin/tab
@@ -2833,13 +2955,15 @@ window.autoPopulate=async function(){
   const byDay={};
   for(const key in changed){ const [dd,u]=key.split('.'); (byDay[dd]=byDay[dd]||{})[u]=days[dd][u]; }
   for(const dd in byDay) await mergeFields(dayRef(curYM,dd),byDay[dd]);
-  auditLog('autopopulate.month','Auto-populated '+MS[m-1]+' '+y+' — '+filled+' assignments'+(unfillable.length?', '+unfillable.length+' unfillable':'')+(notAsked?', '+notAsked+' shift-days not asked for':''));
+  auditLog('autopopulate.month','Auto-populated '+MS[m-1]+' '+y+' — '+filled+' assignments'+(quotaFilled?' ('+quotaFilled+' to meet quota totals)':'')+(unfillable.length?', '+unfillable.length+' unfillable':'')+(notAsked?', '+notAsked+' shift-days not asked for':'')+(quotaConflicts.length?', '+quotaConflicts.length+' quota conflict(s)':''));
   // [78] Say what was SKIPPED as well as what was filled. "Complete — 12 assignments" while
   // 900 shift-days were deliberately passed over is the kind of true-sounding sentence that
   // sends someone hunting for a bug that is not there. Same reasoning as [59]'s named months.
   alert('Auto-populate complete — '+filled+' assignments made.'
+    +(quotaFilled?'\n\n🧮 '+quotaFilled+' of them were placed to meet QUOTA totals, on top of the shifts’ own minimums.':'')
     +(notAsked?'\n\n⏭️ '+notAsked+' shift-day(s) were not asked for by any staffing rule and were left empty (§9).':'')
-    +(unfillable.length?'\n\n⚠️ Could not fill (no eligible user):\n'+unfillable.slice(0,15).join('\n')+(unfillable.length>15?'\n…and '+(unfillable.length-15)+' more':''):''));
+    +(unfillable.length?'\n\n⚠️ Could not fill (no eligible user):\n'+unfillable.slice(0,15).join('\n')+(unfillable.length>15?'\n…and '+(unfillable.length-15)+' more':''):'')
+    +(quotaConflicts.length?'\n\n⚠️ QUOTA CONFLICTS — left standing for you to resolve, nothing was removed:\n'+quotaConflicts.slice(0,15).join('\n')+(quotaConflicts.length>15?'\n…and '+(quotaConflicts.length-15)+' more':''):''));
 };
 // Same fill as autoPopulate() above, run for all 12 months of the viewed
 // year in calendar order, chaining fairness counts in memory month-to-month
@@ -2858,7 +2982,7 @@ window.autoPopulateYear=async function(){
   const vac=vacationDays();
   const _cache={}; // ym -> days; updated as we fill each month so later rolling windows see this run's fresh fills
   const skippedLegacy=[]; // [59] months still in the pre-split format — skipped, and named at the end
-  let grandFilled=0, grandNotAsked=0; const grandUnfillable=[];
+  let grandFilled=0, grandNotAsked=0, grandQuota=0; const grandUnfillable=[], grandConflicts=[];
   for(let m=1;m<=12;m++){
     const ym=year+'-'+pad(m);
     const nDays=new Date(year,m,0).getDate();
@@ -2876,24 +3000,9 @@ window.autoPopulateYear=async function(){
     const changed={}; // [M-20] cells THIS month's fill actually assigns
     for(let d=1;d<=nDays;d++){
       const dd=pad(d), dk=ym+'-'+dd;
-      days[dd]=days[dd]||{};
-      const _dt=new Date(year,m-1,d);
-      for(const [id,s] of shiftList()){
-        const slot=s.kind==='call'?'call':'day';
-        const capacity=autoTargetFor(s,_dt,_anyDemand);   // [78 · defect 5]
-        let have=Object.values(days[dd]).filter(c=>holdsShift(c,id)).length;
-        if(capacity<=0){ grandNotAsked++; continue; }     // §9: silence is not a gap
-        while(have<capacity){
-          const cands=names.filter(u=>allowed(u,id)&&!vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!shiftsOf(days[dd][u]).length); // [53 · §45] one per person per day, total
-          if(!cands.length){ grandUnfillable.push(dk+' '+s.label+(capacity>1?' ('+(capacity-have)+' more needed)':'')); break; }
-          cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
-          const pick=cands[0];
-          days[dd][pick]={a:[...shiftEntries(days[dd][pick]),{s:id,by:_currentAdminEmail||'unknown',at:Date.now(),via:'auto'}],off:!!days[dd][pick]?.off};
-          counts[pick+'|'+id]=cnt(pick,id)+1;
-          changed[dd+'.'+pick]=true;
-          grandFilled++; have++;
-        }
-      }
+      const r=fillDay(days,dd,new Date(year,m-1,d),dk,{vac:vac,counts:counts,anyDemand:_anyDemand,changed:changed});   // [117] the SAME fill as the month
+      grandFilled+=r.filled; grandNotAsked+=r.notAsked; grandQuota+=r.quotaFilled;
+      grandUnfillable.push(...r.unfillable); grandConflicts.push(...r.quotaConflicts);
     }
     // [M-20] targeted patch — only this run's fills, never a whole-month overwrite.
     // [59] Grouped BY DAY, one write per day document that actually changed.
@@ -2902,10 +3011,12 @@ window.autoPopulateYear=async function(){
     for(const dd in byDay) await mergeFields(dayRef(ym,dd),byDay[dd]);
     _cache[ym]=days; // so later months' rolling windows include this month's fresh fills
   }
-  auditLog('autopopulate.year','Auto-populated all of '+year+' — '+grandFilled+' assignments'+(grandUnfillable.length?', '+grandUnfillable.length+' unfillable':'')+(grandNotAsked?', '+grandNotAsked+' shift-days not asked for':''));
+  auditLog('autopopulate.year','Auto-populated all of '+year+' — '+grandFilled+' assignments'+(grandQuota?' ('+grandQuota+' to meet quota totals)':'')+(grandUnfillable.length?', '+grandUnfillable.length+' unfillable':'')+(grandNotAsked?', '+grandNotAsked+' shift-days not asked for':'')+(grandConflicts.length?', '+grandConflicts.length+' quota conflict(s)':''));
   alert('Auto-populate year complete for '+year+' — '+grandFilled+' assignments made across '+(12-skippedLegacy.length)+' of 12 months.'
     // [59] Skipped months are named, not quietly passed over. "Complete" while four months
     // were never touched is the kind of true-sounding sentence that costs a day to unpick.
+    +(grandQuota?'\n\n🧮 '+grandQuota+' of them were placed to meet QUOTA totals, on top of the shifts’ own minimums.':'')
+    +(grandConflicts.length?'\n\n⚠️ QUOTA CONFLICTS — left standing, nothing was removed:\n'+grandConflicts.slice(0,10).join('\n')+(grandConflicts.length>10?'\n…and '+(grandConflicts.length-10)+' more':''):'')
     +(grandNotAsked?'\n\n⏭️ '+grandNotAsked+' shift-day(s) were not asked for by any staffing rule and were left empty (§9).':'')
     +(skippedLegacy.length?'\n\n⏭️ SKIPPED — still in the old storage format, nothing was written to '+(skippedLegacy.length>1?'these months':'this month')+':\n'+skippedLegacy.join(', ')+'\n\nOpen each one in Schedule and press Convert, then run this again.':'')+(grandUnfillable.length?'\n\n⚠️ Could not fill (no eligible user) — '+grandUnfillable.length+' slot(s):\n'+grandUnfillable.slice(0,15).join('\n')+(grandUnfillable.length>15?'\n…and '+(grandUnfillable.length-15)+' more':''):''));
 };
@@ -6679,6 +6790,25 @@ function tagChoices(){
   return out;
 }
 function tagLabel(k){ const c=tagChoices().find(x=>x.k===k); return c?c.label:k; }
+// [114] A rule field that names a SHIFT. Built from the catalog in catalog order, so a shift
+// that exists is always offerable and a renamed shift keeps its id (build 57).
+function shiftChoices(){ return shiftList().map(([id,sh])=>({k:id,label:sh.label||id})); }
+// [114] A pair key is order-free: {A,B} and {B,A} are one pair. The two ids are stored as
+// fields as well as in the key, so the key is never parsed — a shift id may contain anything.
+function pairKey(a,b){ return [String(a),String(b)].sort().join('__'); }
+function rulePairs(r){
+  const ps=((r&&r.params)||{}).pairs||{}; const out=[];
+  for(const k in ps){ const v=ps[k]; if(v&&v.a&&v.b) out.push({k:k,a:v.a,b:v.b}); }
+  return out.sort((x,y)=>(shiftLabel(x.a)+shiftLabel(x.b)).localeCompare(shiftLabel(y.a)+shiftLabel(y.b)));
+}
+// Every unordered pair among the shifts one person holds on one day — the thing §7's
+// approved-pairs list is a list OF.
+function heldPairs(held){
+  const ids=[...new Set(held||[])].sort(); const out=[];
+  for(let i=0;i<ids.length;i++) for(let j=i+1;j<ids.length;j++) out.push([ids[i],ids[j]]);
+  return out;
+}
+window.heldPairsProbe=heldPairs;
 function tagShiftSet(k){
   if(k==='overnightCall') return overnightSet();
   const t=(tagsData||{})[k];
@@ -6802,6 +6932,260 @@ const RULE_TYPES={
       return {violations:viol,considered:considered,skipped:0,notes:notes};
     },
   },
+  // ── [112] NOT ON VACATION. The cell editor has warned about this since 61; what did not
+  // exist was anything that reports it across a MONTH — a shift approved onto somebody's
+  // vacation from the request queue was a toast that was gone the moment it fired. Same
+  // predicate as the warning (onVacationIn), so they cannot disagree.
+  noVacation:{
+    label:'Not on vacation',
+    blurb:'A shift landing on a day the Vacation Auction has given somebody as approved vacation.',
+    text:function(){ return 'Nobody it covers is given a shift on a day of their approved vacation (as decided in the Vacation Auction)'; },
+    fields:[],
+    check:function(r,ctx){
+      const vac=vacationDays();
+      const viol=[]; let considered=0;
+      for(const u of ctx.people){
+        for(const dd of Object.keys(ctx.days||{}).sort()){
+          const cell=ctx.days[dd]&&ctx.days[dd][u];
+          if(!cell) continue;
+          const held=shiftsOf(cell);
+          if(!held.length) continue;
+          considered+=held.length;
+          const dk=ctx.ym+'-'+dd;
+          if(!onVacationIn(vac,u,dk)) continue;
+          for(const id of held){
+            const sh=(catalog.shifts||{})[id];
+            viol.push({u:u,dd:dd,dk:dk,what:(sh&&sh.label||id)+' is scheduled on a day of approved vacation'});
+          }
+        }
+      }
+      return {violations:viol,considered:considered,skipped:0};
+    },
+  },
+  // ── [112] ONE SITE PER DAY — §18: "A person is at ONE site for a whole day, never two."
+  // Two shifts at two sites on one person on one day. A shift with NO site cannot be judged;
+  // it is counted and named rather than silently treated as compatible with everything.
+  oneSite:{
+    label:'One site per day',
+    blurb:'Somebody holding shifts at two different sites on the same day.',
+    text:function(){ return 'Nobody it covers works at more than one site on the same day'; },
+    fields:[],
+    check:function(r,ctx){
+      const viol=[]; let considered=0, unsited=0;
+      for(const u of ctx.people){
+        for(const dd of Object.keys(ctx.days||{}).sort()){
+          const cell=ctx.days[dd]&&ctx.days[dd][u];
+          if(!cell) continue;
+          const held=shiftsOf(cell);
+          if(!held.length) continue;
+          const so=sitesOf(held);
+          considered+=held.length-so.unsited; unsited+=so.unsited;
+          if(so.sites.length<2) continue;
+          const bySite=so.sites.map(st=>st+' ('+held.filter(id=>String(((catalog.shifts||{})[id]||{}).site||'').trim()===st).map(id=>((catalog.shifts||{})[id]||{}).label||id).join(', ')+')');
+          viol.push({u:u,dd:dd,dk:ctx.ym+'-'+dd,what:'At '+so.sites.length+' sites the same day — '+bySite.join(' and ')});
+        }
+      }
+      const notes=[];
+      if(unsited) notes.push(unsited+' shift'+(unsited===1?'':'s')+' held by these people '+(unsited===1?'has':'have')+' no site set and could not be judged. Set it in the Shift Catalog.');
+      return {violations:viol,considered:considered,skipped:0,notes:notes};
+    },
+  },
+  // ── [113] POST-TAG COOLDOWN — the post-call day. "After a shift tagged X, for N days,
+  // nothing tagged Y" — or nothing AT ALL, which is what "post-call day off" means. Both ends
+  // point at TAGS (§25/§27), never at kind. The window is counted in calendar days after the
+  // day the trigger shift STARTS: a 24-hour call that begins Monday 07:30 and ends Tuesday
+  // 07:30 makes Tuesday the first day of the window, which is what "post-call" means on a
+  // real roster. A window that runs off the end of the month is said out loud, like the cap's
+  // first week — the checker is handed one month.
+  cooldown:{
+    label:'After a shift, avoid…',
+    blurb:'For N days after a tagged shift, nothing tagged Y — or nothing at all (a post-call day off).',
+    text:function(r){
+      const n=Math.max(1,Math.round(ruleNum(r,'days',1)));
+      const avoid=ruleVal(r,'avoid','__any__');
+      return 'For '+n+' day'+(n===1?'':'s')+' after '+tagLabel(ruleVal(r,'after','overnightCall'))+', '
+        +(avoid==='__any__'?'no shift at all':'nothing tagged '+tagLabel(avoid));
+    },
+    fields:[
+      {k:'after', kind:'choice', label:'after a shift tagged', def:'overnightCall', choices:function(){ return tagChoices(); }},
+      {k:'days',  kind:'number', label:'for the next (days)',  def:1, min:1, max:14, step:1},
+      {k:'avoid', kind:'choice', label:'avoid',                def:'__any__',
+       choices:function(){ return [{k:'__any__',label:'any shift at all (day off)'}].concat(tagChoices().map(t=>({k:t.k,label:'shifts tagged '+t.label}))); }},
+    ],
+    check:function(r,ctx){
+      const n=Math.max(1,Math.round(ruleNum(r,'days',1)));
+      const after=ruleVal(r,'after','overnightCall');
+      const avoid=ruleVal(r,'avoid','__any__');
+      const trig=tagShiftSet(after);
+      const avoidSet=(avoid==='__any__')?null:tagShiftSet(avoid);
+      const notes=[];
+      if(!trig.size) return {violations:[],considered:0,skipped:0,
+        notes:['Not checking anything: the tag “'+tagLabel(after)+'” has no shifts in it.']};
+      if(avoidSet&&!avoidSet.size) return {violations:[],considered:0,skipped:0,
+        notes:['Not checking anything: the tag “'+tagLabel(avoid)+'” has no shifts in it, so there is nothing to avoid.']};
+      const Y=Number(ctx.ym.slice(0,4)), M=Number(ctx.ym.slice(5,7));
+      const dim=new Date(Y,M,0).getDate();
+      const viol=[]; let considered=0, offEnd=0;
+      const seen={};
+      for(const u of ctx.people){
+        for(const dd of Object.keys(ctx.days||{}).sort()){
+          const cell=ctx.days[dd]&&ctx.days[dd][u];
+          if(!cell) continue;
+          const held=shiftsOf(cell);
+          const trigs=held.filter(id=>trig.has(id));
+          if(!trigs.length) continue;
+          considered+=trigs.length;
+          const d0=Number(dd);
+          for(let k=1;k<=n;k++){
+            const d=d0+k;
+            if(d>dim){ offEnd++; break; }
+            const dk2=pad(d);
+            const c2=ctx.days[dk2]&&ctx.days[dk2][u];
+            if(!c2) continue;
+            const bad=shiftsOf(c2).filter(id=>avoidSet?avoidSet.has(id):true);
+            for(const id of bad){
+              const mark=u+'|'+dk2+'|'+id;
+              if(seen[mark]) continue;   // two triggers pointing at one offending shift is one row
+              seen[mark]=true;
+              const sh=(catalog.shifts||{})[id]; const tsh=(catalog.shifts||{})[trigs[0]];
+              viol.push({u:u,dd:dk2,dk:ctx.ym+'-'+dk2,
+                what:(sh&&sh.label||id)+' on day '+k+' after '+(tsh&&tsh.label||trigs[0])+' on the '+d0+' — the rule asks for '
+                  +(avoidSet?('nothing tagged '+tagLabel(avoid)):'no shift at all')+' for '+n+' day'+(n===1?'':'s')});
+            }
+          }
+        }
+      }
+      if(offEnd) notes.push(offEnd+' window'+(offEnd===1?'':'s')+' run'+(offEnd===1?'s':'')+' past the end of the month and '+(offEnd===1?'was':'were')+' only checked up to the last day. The checker sees one month at a time.');
+      if(!considered) notes.push('Not checking anything this month: nobody it covers holds a shift tagged “'+tagLabel(after)+'”.');
+      return {violations:viol,considered:considered,skipped:0,notes:notes};
+    },
+  },
+  // ── [114] NOT TOGETHER — the blunt form: shift A and shift B are never held by one person
+  // on one day. Overlapping TIMES are already Minimum rest's business (a negative gap) and a
+  // site clash is One site per day's; this is for the pair that is wrong for a reason the
+  // clock cannot see — two supervising roles, two pagers, a teaching slot and a case.
+  notTogether:{
+    label:'Not together',
+    blurb:'Two named shifts that one person must never hold on the same day.',
+    text:function(r){ return shiftLabel(ruleVal(r,'a',''))+' and '+shiftLabel(ruleVal(r,'b',''))+' are never held together on one day'; },
+    fields:[
+      {k:'a', kind:'choice', label:'this shift',     def:'', choices:function(){ return shiftChoices(); }},
+      {k:'b', kind:'choice', label:'never with',     def:'', choices:function(){ return shiftChoices(); }},
+    ],
+    check:function(r,ctx){
+      const a=ruleVal(r,'a',''), b=ruleVal(r,'b','');
+      if(!a||!b||!(catalog.shifts||{})[a]||!(catalog.shifts||{})[b]) return {violations:[],considered:0,skipped:0,
+        notes:['Not checking anything: pick two shifts from the catalog first.']};
+      if(a===b) return {violations:[],considered:0,skipped:0,
+        notes:['Not checking anything: both boxes name the same shift ('+shiftLabel(a)+').']};
+      const viol=[]; let considered=0;
+      for(const u of ctx.people){
+        for(const dd of Object.keys(ctx.days||{}).sort()){
+          const cell=ctx.days[dd]&&ctx.days[dd][u];
+          if(!cell) continue;
+          const held=shiftsOf(cell);
+          if(held.indexOf(a)<0&&held.indexOf(b)<0) continue;
+          considered++;
+          if(held.indexOf(a)>=0&&held.indexOf(b)>=0)
+            viol.push({u:u,dd:dd,dk:ctx.ym+'-'+dd,what:shiftLabel(a)+' and '+shiftLabel(b)+' held together — the rule says never'});
+        }
+      }
+      if(!considered) return {violations:[],considered:0,skipped:0,
+        notes:['Not checking anything this month: nobody it covers holds either shift.']};
+      return {violations:viol,considered:considered,skipped:0};
+    },
+  },
+  // ── [114] ONLY APPROVED PAIRS — §7 as ruled: "times and location filter automatically…
+  // whatever survives, the admin ticks. An unticked surviving pair is UNAPPROVED (warns, per
+  // ruling 4), not impossible." So this rule holds the tick list, and any two shifts one
+  // person holds on one day that are not on it are reported. A rule with an empty list
+  // reports every two-shift day — which is what it means — and SAYS so.
+  approvedPairs:{
+    label:'Only approved pairs',
+    blurb:'Two shifts may be held on one day only if the pair is on this list (§7).',
+    text:function(r){ const n=rulePairs(r).length; return 'Two shifts on one day only when the pair is approved — '+n+' pair'+(n===1?'':'s')+' approved'; },
+    fields:[ {k:'pairs', kind:'pairs', label:'approved pairs', def:{}} ],
+    check:function(r,ctx){
+      const okSet=new Set(rulePairs(r).map(x=>pairKey(x.a,x.b)));
+      const notes=[];
+      if(!okSet.size) notes.push('No pairs are approved yet, so EVERY day somebody holds two shifts is listed below. Add the pairs that are fine together.');
+      const viol=[]; let considered=0;
+      for(const u of ctx.people){
+        for(const dd of Object.keys(ctx.days||{}).sort()){
+          const cell=ctx.days[dd]&&ctx.days[dd][u];
+          if(!cell) continue;
+          const held=shiftsOf(cell);
+          if(held.length<2) continue;
+          considered++;
+          for(const [a,b] of heldPairs(held)){
+            if(okSet.has(pairKey(a,b))) continue;
+            viol.push({u:u,dd:dd,dk:ctx.ym+'-'+dd,what:shiftLabel(a)+' with '+shiftLabel(b)+' is not an approved pair'});
+          }
+        }
+      }
+      if(!considered) notes.push('Not checking anything this month: nobody it covers holds two shifts on one day.');
+      return {violations:viol,considered:considered,skipped:0,notes:notes};
+    },
+  },
+  // ── [116] FAIRNESS BALANCE — uneven call, measured the way §29 ruled and build 51 built:
+  // "weighted burden by FTE", never raw counts. THE MATHS IS buildModel's, called, not copied
+  // (§19): the pool is the covered people who count toward comparisons and have an FTE; a
+  // rate per 1.0 FTE is taken across it; each person's expectation is that rate times their
+  // own FTE. A person more than the tolerance OVER is one row, dated to their last such shift
+  // so a click lands on a day; more than the tolerance UNDER is a row too — a real roster's
+  // unfairness runs both ways. People the rule covers but the pool does not measure (per
+  // diem, locums, no FTE — §26/§36/§43) are counted and named, never silently dropped.
+  fairness:{
+    label:'Fairness balance',
+    blurb:'Nobody carries more (or less) of a tagged shift than their FTE share, beyond a tolerance.',
+    text:function(r){
+      const t=Math.max(0,ruleNum(r,'tol',1));
+      return tagLabel(ruleVal(r,'tag','overnightCall'))+' shared by FTE across the people it covers — nobody more than '+t+' shift'+(t===1?'':'s')+' over or under their share this month';
+    },
+    fields:[
+      {k:'tag', kind:'choice', label:'shifts tagged', def:'overnightCall', choices:function(){ return tagChoices(); }},
+      {k:'tol', kind:'number', label:'tolerance (shifts)', def:1, min:0, max:20, step:0.5},
+    ],
+    check:function(r,ctx){
+      const tag=ruleVal(r,'tag','overnightCall');
+      const tol=Math.max(0,ruleNum(r,'tol',1));
+      const ids=tagShiftSet(tag);
+      const notes=[];
+      if(!ids.size) return {violations:[],considered:0,skipped:0,
+        notes:['Not checking anything: the tag “'+tagLabel(tag)+'” has no shifts in it.']};
+      // Counts by person by shift, and each person's last tagged day — from the same day
+      // documents every other rule reads.
+      const counts={}, last={};
+      let considered=0;
+      for(const u of ctx.people){
+        counts[u]={};
+        for(const dd of Object.keys(ctx.days||{}).sort()){
+          const cell=ctx.days[dd]&&ctx.days[dd][u];
+          if(!cell) continue;
+          for(const id of shiftsOf(cell)){ if(!ids.has(id)) continue; counts[u][id]=(counts[u][id]||0)+1; last[u]=dd; considered++; }
+        }
+      }
+      if(!considered) return {violations:[],considered:0,skipped:0,
+        notes:['Not checking anything this month: nobody it covers holds a shift tagged “'+tagLabel(tag)+'”.']};
+      const M=buildModel(counts,ctx.people.slice());
+      const outside=ctx.people.filter(u=>M.pool.indexOf(u)<0);
+      if(outside.length) notes.push(outside.length+' of the '+ctx.people.length+' people it covers '+(outside.length===1?'is':'are')+' outside the comparison pool and not measured — '+outside.map(u=>displayName(u)+' ('+whyNotInPool(u)+')').join('; ')+'.');
+      if(M.pool.length<2) return {violations:[],considered:considered,skipped:0,
+        notes:notes.concat(['Not checking anything: fewer than two people in the comparison pool, so there is nothing to balance against.'])};
+      const tagged=u=>Object.entries(counts[u]||{}).reduce((a,[,v])=>a+v,0);
+      const rate=[...ids].reduce((a,sid)=>a+(M.rateShift(sid)||0),0);   // per 1.0 FTE, summed over the tag
+      const viol=[];
+      for(const u of M.pool){
+        const did=tagged(u), exp=rate*fteOf(u), diff=did-exp;
+        if(Math.abs(diff)<=tol+1e-9) continue;
+        const over=diff>0;
+        viol.push({u:u,dd:last[u]||'01',dk:ctx.ym+'-'+(last[u]||'01'),
+          what:did+' × '+tagLabel(tag)+' this month against an FTE-adjusted share of '+exp.toFixed(1)+' ('+rate.toFixed(2)+' per 1.0 FTE across '+M.pool.length+' people, '+M.poolFTE.toFixed(1)+' FTE) — '+Math.abs(diff).toFixed(1)+' '+(over?'over':'under')+', tolerance '+tol});
+      }
+      notes.push('Measured per 1.0 FTE across the '+M.pool.length+' people in the pool ('+M.poolFTE.toFixed(1)+' FTE between them), as §29 rules — never a flat mean.');
+      return {violations:viol,considered:considered,skipped:0,notes:notes};
+    },
+  },
 };
 // ── RUNNING ONE RULE, AND SAYING WHAT IT COULD NOT SEE ─────────────────────────
 // `notes` is the honest half. A rule with nobody in it, or pointed at people whose shifts
@@ -6838,6 +7222,7 @@ function checkMonth(ym,days){
   return {byKey:byKey,all:all};
 }
 window.checkMonthProbe=checkMonth;      // module scope — HANDOFF trap 1
+window.RULE_TYPES_PROBE=RULE_TYPES;     // [112] so a suite can assert the dropdown offers the WHOLE vocabulary
 window.checkRuleProbe=checkRule;
 window.ruleTargetsProbe=ruleTargets;
 window.ruleIntervalsProbe=ruleIntervals;
@@ -6896,6 +7281,7 @@ window.setRuleOff=async function(key,off){
 window.setRuleParam=async function(key,f,val){
   const r=(rulesData||{})[key]; if(!r) return;
   const spec=(RULE_TYPES[r.type]||{fields:[]}).fields.find(x=>x.k===f); if(!spec) return;
+  if(spec.kind==='pairs') return;   // [114] a list has its own writers (addRulePair/removeRulePair)
   let store, shown;
   if(spec.kind==='choice'){
     const opts=(typeof spec.choices==='function'?spec.choices():(spec.choices||[]));
@@ -6911,6 +7297,26 @@ window.setRuleParam=async function(key,f,val){
   }
   await mergeFields(rulesRef,{[key+'.params.'+f]:store});
   auditLog('rule.param','"'+(r.label||key)+'": '+spec.label+' set to '+shown);
+};
+// [114] The approved-pairs list. Order-free, refused when both boxes name one shift or a shift
+// that is not in the catalog, and stored as {a,b} fields so the key is never parsed.
+window.addRulePair=async function(key){
+  const r=(rulesData||{})[key]; if(!r) return;
+  const a=(document.getElementById('rulPA_'+key)||{}).value||'', b=(document.getElementById('rulPB_'+key)||{}).value||'';
+  if(!a||!b){ schedToast('Pick two shifts first.','err'); return; }
+  if(a===b){ schedToast('A shift is always fine with itself — pick two different shifts.','err'); return; }
+  if(!(catalog.shifts||{})[a]||!(catalog.shifts||{})[b]){ schedToast('That shift is not in the catalog.','err'); return; }
+  const k=pairKey(a,b);
+  if((((r.params||{}).pairs)||{})[k]){ schedToast(shiftLabel(a)+' + '+shiftLabel(b)+' is already approved.','err'); return; }
+  const [pa,pb]=[a,b].sort();
+  await mergeFields(rulesRef,{[key+'.params.pairs.'+k]:{a:pa,b:pb}});
+  auditLog('rule.pair','"'+(r.label||key)+'": approved '+shiftLabel(pa)+' + '+shiftLabel(pb));
+};
+window.removeRulePair=async function(key,k){
+  const r=(rulesData||{})[key]; if(!r) return;
+  const v=(((r.params||{}).pairs)||{})[k]; if(!v) return;
+  await mergeFields(rulesRef,{[key+'.params.pairs.'+k]:deleteField()});
+  auditLog('rule.pair','"'+(r.label||key)+'": removed '+shiftLabel(v.a)+' + '+shiftLabel(v.b));
 };
 // The target editor writes ONE selector at a time. Switching to "everyone" does not erase
 // the tick boxes underneath — they are kept, so narrowing and widening again is not a
@@ -6959,10 +7365,12 @@ function renderRules(){
     const c=res.byKey[key]||{violations:[],notes:[],people:0};
     const n=c.violations.length;
     const sv=sevOf(r);
+    // [116] quiet means it did not run or saw nothing — NOT merely that it has something to say.
+    const quiet = !c.ran || !c.considered;
     const state = !ruleEnabled(r) ? '<span style="color:var(--t3)">off</span>'
-      : (c.notes.length ? '<span style="color:#92400e">not checking anything</span>'
+      : (quiet ? '<span style="color:#92400e">not checking anything</span>'
         : (n ? '<span style="color:'+sv.color+';font-weight:700">'+n+' standing</span>'
-             : '<span style="color:#166534">nothing standing</span>'));
+             : '<span style="color:#166534">nothing standing</span>')+(c.notes.length?' <span title="This rule has a note — open it" style="color:#92400e">⚠</span>':''));
     return '<div class="card" style="padding:9px 11px'+(ruleEnabled(r)?'':';opacity:.62')+'">'
       +'<div class="card-title secth" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap" '
         +'onclick="toggleSect(\'rul:'+esc(key)+'\')" title="Click to open or close this rule">'
@@ -6988,6 +7396,22 @@ function renderRules(){
         +'<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:9px">'
           +t.fields.map(f=>{
              const head='<label style="font-size:12px;color:var(--t2);display:flex;align-items:center;gap:5px">'+esc(f.label);
+             if(f.kind==='pairs'){   // [114] a LIST, not a box: chips you remove, two pickers you add with
+               const ps=rulePairs(r); const sc=shiftChoices();
+               const pick=(id)=>'<select class="sel" id="'+id+'" style="font-size:12px">'+sc.map(o=>'<option value="'+esc(o.k)+'">'+esc(o.label)+'</option>').join('')+'</select>';
+               return '<div style="display:flex;flex-direction:column;gap:6px;width:100%" onclick="event.stopPropagation()">'
+                 +'<div style="font-size:12px;color:var(--t2)">'+esc(f.label)+' — <b>'+ps.length+'</b></div>'
+                 +'<div id="rulPairs_'+esc(key)+'" style="display:flex;flex-wrap:wrap;gap:5px">'
+                   +(ps.length?ps.map(x=>'<span class="chipp" style="background:var(--s3);color:var(--t1);font-size:11px;display:inline-flex;align-items:center;gap:5px">'
+                       +esc(shiftLabel(x.a))+' + '+esc(shiftLabel(x.b))
+                       +'<button class="btn btn-ghost" style="font-size:10px;padding:0 4px;color:var(--red)" title="Remove this pair" onclick="removeRulePair('+jsArg(key)+','+jsArg(x.k)+')">×</button></span>').join('')
+                     :'<span style="font-size:11.5px;color:var(--t3)">none yet</span>')
+                 +'</div>'
+                 +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
+                   +pick('rulPA_'+esc(key))+'<span style="font-size:12px;color:var(--t3)">with</span>'+pick('rulPB_'+esc(key))
+                   +'<button class="btn btn-primary" style="font-size:11px;padding:2px 9px" onclick="addRulePair('+jsArg(key)+')">Approve this pair</button>'
+                 +'</div></div>';
+             }
              if(f.kind==='choice'){
                const cur=ruleVal(r,f.k,f.def);
                const opts=(typeof f.choices==='function'?f.choices():(f.choices||[]));
@@ -7050,7 +7474,7 @@ function ruleReportHTML(res){
   if(!curYM) return '<div style="font-size:12px;color:var(--t3)">No month is open — open the Schedule Grid and pick one.</div>';
   const label=MS[Number(curYM.slice(5,7))-1]+' '+curYM.slice(0,4);
   const all=res.all||[];
-  const quiet=Object.values(res.byKey||{}).filter(x=>x.notes&&x.notes.length);
+  const quiet=Object.values(res.byKey||{}).filter(x=>ruleEnabled(x.rule)&&(!x.ran||!x.considered));   // [116]
   const head='<div style="font-size:12px;color:var(--t2);margin-bottom:8px">Every violation standing in <b>'+esc(label)+'</b>. '
     +'This is a report, not a gate — a month can be published with conflicts standing.</div>'
     +(quiet.length?('<div style="font-size:11.5px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:6px 8px;margin-bottom:9px">⚠ '
