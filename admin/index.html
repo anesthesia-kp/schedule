@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 130;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 133;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -48,6 +48,13 @@
       window.addEventListener('focus',chkThrottled);
     }catch(e){}
     setInterval(chk, 5*60*1000); chk();
+  })();
+  // [131 · RA-6 V-16] The build number, where anyone reporting a problem can read it.
+  // It comes from `var BUILD` above — never a second copy typed by hand, which would
+  // drift the first time one of the two was bumped and the other was not.
+  (function(){
+    function stamp(){ var b=document.getElementById('buildStamp'); if(b) b.textContent='build '+BUILD; }
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',stamp); else stamp();
   })();
 </script>
 <script>
@@ -156,7 +163,12 @@ table.grid td.cell.viol-warn::after{background:#d97706}
 table.grid td.cell.viol-note::after{background:#64748b}
 table.grid td.cell:hover{outline:2px solid var(--blue)}
 table.grid .wkend{background:var(--s3)}
-table.grid .stick1{position:sticky;left:0;z-index:2;background:var(--s1);border-right:2px solid var(--b2)}
+/* [132 · RA-6 V-1] The name column stays put while the days scroll under it, so it needs a
+   SOLID ground (never a tint that lets a scrolled cell show through) and an edge you can see:
+   border-collapse hands a collapsed border to whichever cell wins, so the visible edge is drawn
+   as a shadow, which no neighbour can take away. */
+table.grid .stick1{position:sticky;left:0;z-index:2;background:var(--s1);border-right:2px solid var(--b2);
+  box-shadow:2px 0 0 var(--b2),5px 0 7px -5px rgba(15,23,42,.22)}
 table.grid th.stick1{background:var(--s2);z-index:3}
 
 /* ── Per-page lock [build 50] ─────────────────────────────────────────────────
@@ -312,6 +324,35 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
 
 /* [67 · S3] Sticky + markers — the quick-wins batch (UX-PLAN §2/§7 item 3). */
 .gridwrap{overflow:visible;border:1px solid var(--b1);border-radius:10px;background:var(--s1)}
+/* [132 · RA-6 V-1 / V-14] THE SCHEDULE GRID SCROLLS INSIDE ITS OWN BOX.
+   `.gridwrap` was overflow:visible, so a 31-day month pushed the DOCUMENT sideways — the
+   sidebar, the page title and the month toolbar scrolled away with it and the header read
+   "…ing". Measured on 131: People/Detail 3136px and Shifts/Detail 10 937px against a 1440px
+   viewport. `.gridscroll` is the containing box, added ONLY to the Schedule Grid — the catalog
+   and stats wraps keep `.gridwrap` alone, because the shift list must stay one page scroll
+   (build 96). A max-height is what makes the sticky day header (build 67) and the sticky name
+   column real: sticky is measured against the nearest scrollport, so a box that never scrolls
+   vertically has nothing to stick to. overflow-x is `scroll`, not `auto`, so the thin bar is
+   ALWAYS drawn — V-14's "no affordance that anything scrolls" is answered by the control
+   itself, not by a widget that has to be explained. */
+.gridscroll{overflow-x:scroll;overflow-y:auto;max-height:calc(100vh - 176px);overscroll-behavior-x:contain;
+  scrollbar-width:thin;scrollbar-color:var(--b2) var(--s2)}
+.gridscroll::-webkit-scrollbar{height:11px;width:11px}
+.gridscroll::-webkit-scrollbar-track{background:var(--s2)}
+.gridscroll::-webkit-scrollbar-thumb{background:var(--b2);border-radius:7px;border:2px solid var(--s2)}
+.gridscroll::-webkit-scrollbar-thumb:hover{background:var(--t3)}
+/* The fade lives on a WRAPPER that does not scroll — an ::after on the scrolling box itself
+   would be laid out against the scrolled content and slide off with it. Cheap: one class
+   toggled from a passive scroll listener, no measurement per frame. */
+.gridfade{position:relative}
+.gridfade::after{content:'';position:absolute;top:1px;right:1px;bottom:1px;width:38px;pointer-events:none;
+  border-radius:0 10px 10px 0;opacity:0;transition:opacity .14s ease;z-index:6;
+  background:linear-gradient(to left,rgba(15,23,42,.16),rgba(15,23,42,0))}
+.gridfade.more::after{opacity:1}
+/* [132] Shifts/Detail spells every name out on one nowrap line, which is what made it 10 937px
+   — 7.6 screens. The names WRAP instead of running on, with a sensible column cap: nothing is
+   hidden, nothing is truncated, and every cell already carries the full list in its title. */
+table.grid.gv-shifts td.cell{white-space:normal;max-width:132px;vertical-align:top}
 table.grid thead th{position:sticky;top:0;z-index:3;background:var(--s2)}
 table.grid thead th.stick1{z-index:4}
 table.grid th.today,table.grid td.today{background:#e0f2fe!important;box-shadow:inset 0 0 0 1px #7dd3fc}
@@ -340,6 +381,14 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
 .who{display:inline-block;border-radius:4px;padding:0 4px;margin:1px;font-size:10px;font-weight:700;background:var(--s3);color:var(--t1)}
 .needct{font-size:9px;font-weight:800;color:var(--t3)}
 .cat-head{position:sticky;top:0;z-index:3;background:var(--s2);display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:2px solid var(--b2);font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.04em;border-radius:10px 10px 0 0}
+/* [131 · RA-6 V-3] The read-mode header row. This class was USED on the markup and defined
+   nowhere, and its layout lived only in the element's own style="…display:flex…". renderCatalog
+   shows it with `style.display=''`, which DELETES that inline display — so from the first render
+   on it fell back to a plain block, the column labels lost their widths and their 10px gaps and
+   ran together as SHIFTKIND TIMESSITE…, over rows that still spanned the full card. The widths
+   below the labels are the row's own (96 · 30 · 150 · 78 · 74 · 34 · 52 · rest), so defining the
+   class here — same flex, same gap as .rowline — puts each label back over its column. */
+.catheadrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .tp-fam{display:block;width:100%;font-size:10.5px;font-weight:800;color:var(--t2);margin:8px 0 4px;display:flex;align-items:center;gap:6px}
 .tp-fam .sw{width:11px;height:11px;border-radius:3px;border:1px solid rgba(0,0,0,.15)}
 /* NOTE (§S00): the admin sign-in gate has its own scoped <style> next to its markup — grep #authGate. */
@@ -434,6 +483,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     <div class="page-title" style="margin:0">Daily Scheduling</div>
     <div class="page-sub" style="margin:0">call · shifts · days off · vacation</div>
     <span id="adminWhoami" style="margin-left:auto;font-size:11px;color:var(--t3)"></span>
+    <span id="buildStamp" title="Which version of this page you are looking at — quote it if you report a problem" style="font-size:11px;color:var(--t3);font-family:var(--mono)"></span>
     <button class="btn btn-ghost" style="padding:5px 10px;font-size:12px" onclick="adminSignOut()">Sign out</button>
   </div>
 
@@ -594,7 +644,9 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     </div>
     <div class="card" style="padding:10px 12px">
       <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Click any cell to assign a day shift, call, or day off. <b>VAC</b> comes from the auction automatically and cannot be edited here. Users see every change immediately.</div>
-      <div class="gridwrap"><table class="grid" id="schedGrid"></table></div>
+      <!-- [132 · RA-6 V-1] The box that scrolls is the grid's own, and the fade that says
+           there is more to the right sits on the wrapper OUTSIDE it. -->
+      <div class="gridfade" id="gridFade"><div class="gridwrap gridscroll" id="gridWrap"><table class="grid" id="schedGrid"></table></div></div>
     </div>
   </div>
 
@@ -1935,7 +1987,9 @@ function gridShiftRows(y,m,nDays,todayDD,vis){
       if(need!==null&&need!==undefined&&who.length<need) mark=(who.length>=need/2)?' swarn':' sshort';
       let inner;
       if(gridDensity==='compact'){
-        inner=who.length?('<b>'+who.length+'</b>'):'';
+        // [131 · RA-6 V-4] A cell nobody is on used to read "/3" — a fraction with no top half,
+        // and those are exactly the cells drawn with the red shortfall ring. Write the zero.
+        inner=(who.length||(need!==null&&need!==undefined))?('<b>'+who.length+'</b>'):'';
         if(need!==null&&need!==undefined) inner+='<span class="needct">/'+need+((ceil!==null&&ceil>need)?('–'+ceil):'')+'</span>';
       } else {
         inner=who.map(u=>'<span class="who">'+esc(displayName(u))+'</span>').join('');
@@ -2628,7 +2682,31 @@ function renderGrid(){
   const bD=document.getElementById('densDetail'), bC=document.getElementById('densCompact');
   if(bD) bD.className='btn'+(gridDensity==='detail'?'':' btn-ghost');
   if(bC) bC.className='btn'+(gridDensity==='compact'?'':' btn-ghost');
+  // [132 · RA-6 V-1] The Shifts view is the one that spells names out; it gets the wrapping
+  // column cap. Nothing about WHAT is drawn changes — only how wide it is allowed to run.
+  g.className='grid'+(gridView==='shifts'?' gv-shifts':'');
+  // The guard is not defensive noise: build69/build70 lift THIS FUNCTION out of the file and
+  // evaluate it on its own against stubs, where none of the page's other helpers exist.
+  if(typeof gridFadeSync==='function') gridFadeSync();
 }
+// [132 · RA-6 V-14] "No affordance that anything scrolls." The always-drawn thin scrollbar is
+// half of the answer; the other half is a fade at the right edge, on while columns are still
+// off-screen and off the moment you reach the last day. One class toggle, from a passive
+// listener — nothing is measured on a timer.
+function gridFadeSync(){
+  const w=document.getElementById('gridWrap'), f=document.getElementById('gridFade');
+  if(!w||!f) return;
+  // The box is made to END at the bottom of the screen, so the day header has a scrollport to
+  // stick to and the PAGE has almost nothing left to scroll. The CSS max-height is the fallback
+  // for the moment before this runs; the floor stops a short window collapsing the grid.
+  const top=w.getBoundingClientRect().top;
+  if(top>0) w.style.maxHeight=Math.max(280,Math.round(window.innerHeight-top-16))+'px';
+  f.classList.toggle('more',(w.scrollWidth-w.clientWidth-w.scrollLeft)>2);
+}
+window.gridFadeSync=gridFadeSync;
+{ const _gw=document.getElementById('gridWrap');
+  if(_gw) _gw.addEventListener('scroll',gridFadeSync,{passive:true});
+  window.addEventListener('resize',gridFadeSync); }
 // How many people OTHER than `excludeUser` already hold shift `id` on day `dd` — used both
 // for the "(2/3 filled)" hint and the capacity warning.
 // [52] No longer asks which SLOT it sat in: a person holds a list, and holding a shift is
@@ -3755,6 +3833,38 @@ window.clearMonth=async function(){
 // ═══════════════════════════════════════════════════════════════════════════
 // §S08 · REQUESTS — owns: requests; writes: requests/items docs [68] (decideReq via §S06 checker)
 // ═══════════════════════════════════════════════════════════════════════════
+// ═══ [133 · R-4] THE ROW'S CHOICE OUTLIVES THE ROW. ═══════════════════════════════════════
+// The pending list is rebuilt wholesale from `requests.list` on every snapshot, and
+// markDirty('requests') fires from three separate listeners — so an unrelated colleague's
+// day-off request re-rendered the queue underneath the admin and reset the shift picker to
+// the FIRST option in the list. Approve then assigned that shift, and audited it as a
+// correct approval. Nothing on screen said anything had changed. That is the one defect in
+// this queue that writes the WRONG shift into the schedule and calls it right.
+// The choice now lives in module state keyed by request id, is written back into the
+// re-rendered select as a real `selected` attribute, and is what Approve reads. The
+// half-typed deny reason is kept the same way, for the same reason.
+// NOT "refuse to re-render while a decision is in progress": [N-20] shows a refused render
+// DISCARDS its update rather than deferring it, so refusing here would silently drop the
+// colleague's new request instead of the admin's selection.
+const _reqPick=Object.create(null);   // request id -> the shift id the admin chose
+const _reqWhy=Object.create(null);    // request id -> the deny reason typed so far
+window.reqPickSet=function(id,v){ const k=String(id); if(v) _reqPick[k]=String(v); else delete _reqPick[k]; };
+window.reqWhySet=function(id,v){ const k=String(id); const s=String(v==null?'':v); if(s) _reqWhy[k]=s; else delete _reqWhy[k]; };
+// The live control is the truth while its row is still standing; module state is the truth
+// once a re-render has thrown that row away. Reading the DOM first also means a choice made
+// before this handler was attached is still honoured.
+function reqPickOf(id){
+  const el=document.getElementById('rtShift_'+id);
+  const live=el?String(el.value||''):'';
+  return live||_reqPick[String(id)]||'';
+}
+function reqWhyOf(id){
+  const el=document.getElementById('denyWhy_'+id);
+  const live=el?String(el.value||''):'';
+  return live||_reqWhy[String(id)]||'';
+}
+function reqForget(id){ const k=String(id); delete _reqPick[k]; delete _reqWhy[k]; }
+window.reqPickProbe=id=>reqPickOf(id);   // module scope — HANDOFF trap 1
 function renderRequests(){
   const pend=(requests.list||[]).filter(r=>r.status==='pending').sort((a,b)=>a.ts-b.ts);
   const done=(requests.list||[]).filter(r=>r.status!=='pending').sort((a,b)=>b.ts-a.ts).slice(0,40);
@@ -3769,7 +3879,15 @@ function renderRequests(){
     return esc(r.label||'request')+strength+tag+span; };
   const rtPicker=r=>{ if(r.type!=='rt'||r.kind!=='work'||!r.tag) return '';
     const ids=[...tagShiftSet(r.tag)]; if(ids.length<=1) return '';
-    return '<select class="sel" id="rtShift_'+esc(r.id)+'" style="font-size:11px;margin-right:6px" title="Which shift from the list to give them">'+ids.map(id=>'<option value="'+esc(id)+'">'+esc(shiftLabel(id))+'</option>').join('')+'</select>'; };
+    // [133 · R-4] The first option is a PROMPT, not a shift. An untouched picker used to mean
+    // "the first one in the list" silently; now it means "you have not chosen yet", and
+    // Approve says so rather than guessing. The admin's choice is re-selected after every
+    // re-render and recorded on change so it survives the next one.
+    const cur=_reqPick[String(r.id)]||'';
+    return '<select class="sel" id="rtShift_'+esc(r.id)+'" style="font-size:11px;margin-right:6px" title="Which shift from the list to give them"'
+      +' onchange="reqPickSet('+jsArg(r.id)+',this.value)">'
+      +'<option value=""'+(cur?'':' selected')+'>Pick a shift…</option>'
+      +ids.map(id=>'<option value="'+esc(id)+'"'+(id===cur?' selected':'')+'>'+esc(shiftLabel(id))+'</option>').join('')+'</select>'; };
   const row=(r,buttons)=>`
     <div class="rowline">
       <span style="font-weight:800">${esc(displayName(r.user))}</span>
@@ -3786,9 +3904,9 @@ function renderRequests(){
   // Playwright suites that drive this page, and forcing a reason would slow an admin working
   // a queue. Empty is allowed and behaves exactly as before.
   document.getElementById('reqPending').innerHTML=pend.length?pend.map(r=>row(r,
-    rtPicker(r)+`<input id="denyWhy_${esc(r.id)}" class="inp" style="font-size:11px;width:150px;padding:3px 6px;margin-right:6px" placeholder="reason (optional)" maxlength="140">
-     <button class="btn btn-success" style="font-size:12px" onclick="decideReq('${esc(r.id)}','approved')">✓ Approve</button>
-     <button class="btn btn-danger" style="font-size:12px" onclick="decideReq('${esc(r.id)}','denied')">✗ Deny</button>`)).join('')
+    rtPicker(r)+`<input id="denyWhy_${esc(r.id)}" class="inp" style="font-size:11px;width:150px;padding:3px 6px;margin-right:6px" placeholder="reason (optional)" maxlength="140" value="${esc(_reqWhy[String(r.id)]||'')}" oninput="reqWhySet(${jsArg(r.id)},this.value)">
+     <button class="btn btn-success" style="font-size:12px" onclick="decideReq(${jsArg(r.id)},'approved')">✓ Approve</button>
+     <button class="btn btn-danger" style="font-size:12px" onclick="decideReq(${jsArg(r.id)},'denied')">✗ Deny</button>`)).join('')
     :'<div style="font-size:12px;color:var(--t3)">Nothing pending.</div>';
   const decidedLbl=r=>r.status==='approved'?'✅ approved'
     :r.status==='withdrawn'?'↩︎ withdrawn by '+esc(displayName(r.user))
@@ -3822,8 +3940,11 @@ window.decideReq=async function(id,status){
     if(pre && pre.type==='rt' && pre.kind==='work'){
       const ids=[...tagShiftSet(pre.tag||'')];
       if(!ids.length){ schedToast('This request type points at no shift list, or an empty one — set it on the Request Types page first. Nothing was approved.','err'); return; }
-      rtShift=ids.length===1?ids[0]:String((document.getElementById('rtShift_'+id)||{}).value||'');
-      if(!rtShift||ids.indexOf(rtShift)<0){ schedToast('Pick which shift to give them first.','err'); return; }
+      // [133 · R-4] The row may have been rebuilt by an unrelated snapshot between the choice
+      // and this click, so ask reqPickOf, which reads the live control first and falls back to
+      // the choice held in module state. An empty answer is a REFUSAL, never the first shift.
+      rtShift=ids.length===1?ids[0]:reqPickOf(id);
+      if(!rtShift||ids.indexOf(rtShift)<0){ schedToast('Pick which shift to give them first — nothing was approved.','err'); return; }
     }
     if(pre && pre.date && (pre.type==='shift'||pre.type==='claim'||(pre.type==='rt'&&pre.kind==='work'))){
       const mk=pre.date.slice(0,7), dd=pre.date.slice(8);
@@ -3835,7 +3956,9 @@ window.decideReq=async function(id,status){
       }
       const warn=assignmentWarnings(mk,dd,pre.user,pre.type==='rt'?rtShift:pre.shiftId,cells);
       if(warn.length){
-        if(!confirm('Approve this request for '+displayName(pre.user)+' on '+pre.date+'?\n\n'
+        // [133 · R-4] The dialog NAMES the shift about to be written, so what the admin reads
+        // is what the write does — the whole point of keeping the selection.
+        if(!confirm('Approve this request for '+displayName(pre.user)+' on '+pre.date+(rtShift?' — '+shiftLabel(rtShift):'')+'?\n\n'
           +'⚠️ '+warn.join('\n⚠️ ')
           +'\n\nNothing is blocked — you can approve it anyway, and the override will be recorded in the audit log with the reason.')) return;
         overrode=warn.join(' · ');
@@ -3845,8 +3968,10 @@ window.decideReq=async function(id,status){
   // [80 · defect 16] read the reason BEFORE the transaction — the row is re-rendered the
   // moment the status changes, so reading it afterwards would find an input that no longer
   // exists and would silently record nothing.
+  // [133 · R-4] …and through reqWhyOf, so a reason half-typed before an unrelated snapshot
+  // rebuilt the row is still the reason that gets recorded.
   const why=status==='denied'
-    ? String(document.getElementById('denyWhy_'+id)?.value||'').trim().slice(0,140)
+    ? String(reqWhyOf(id)).trim().slice(0,140)
     : '';
   let r=null;
   const wrote=await txUpdateItem(reqItemsCol, requestsRef, id, item=>{
@@ -3857,6 +3982,7 @@ window.decideReq=async function(id,status){
     return next;
   });
   if(!wrote || !r) return; // gate on the transaction's REAL outcome, not a flag set inside the retried closure
+  reqForget(id);           // [133 · R-4] decided — the row is gone, and so is its half-made choice
   if(status==='approved'&&r.date){
     const mk=r.date.slice(0,7), dd=r.date.slice(8);
     // [AUDIT 2026-07-25 #7] For an open-shift CLAIM, win the shift BEFORE writing any
@@ -3982,6 +4108,30 @@ window.decideReq=async function(id,status){
 // ═══════════════════════════════════════════════════════════════════════════
 // §S09 · SWAPS — owns: swaps; writes: swaps/items docs [68] (decideSwap via §S06 checker)
 // ═══════════════════════════════════════════════════════════════════════════
+// ═══ [133 · R-5 / N-11 / S-10] ONE MALFORMED SWAP MUST NOT BLANK THE PANEL. ═══════════════
+// A 3-way item is participants:[a,b,c] with legs:[l,l,l], and both renderers destructured it
+// without ever asking. One item missing `participants` — which any registered user can write
+// today (R-3) — threw inside the map BEFORE the innerHTML assignment, so the Swaps panel
+// froze on stale content while the badge went on counting, and on Today the same throw
+// escaped through recombineAudit's direct call and aborted the audit listener mid-flight.
+// ONE shape question, asked in one place, used by both admin panels and ported verbatim to
+// the staff page. A bad item is NOT hidden here: the admin gets a flagged row naming its id,
+// because a swap the page cannot read is exactly the thing the admin needs to know exists.
+function isSwapItemShape(x){
+  if(!x||typeof x!=='object') return false;
+  if(x.type==='3way') return Array.isArray(x.participants)&&x.participants.length===3
+    &&Array.isArray(x.legs)&&x.legs.length===3&&x.legs.every(l=>!!l&&typeof l==='object');
+  return typeof x.from==='string'&&typeof x.to==='string';
+}
+window.isSwapItemShapeProbe=isSwapItemShape;   // module scope — HANDOFF trap 1
+function swapUnreadableRow(s){
+  const who=esc(String((s&&s.id)||'(no id)'));
+  return '<div class="rowline" style="border-left:3px solid #b42318">'
+    +'<span style="font-weight:700;color:#b42318">⚠️ unreadable swap — id '+who+'</span>'
+    +'<span style="color:var(--t2)">This item is not in a shape this page can read, so nothing can be done with it here. Everything else in the list is below.</span></div>';
+}
+const swapsReadable=l=>l.filter(isSwapItemShape);
+const swapsUnreadable=l=>l.filter(s=>!isSwapItemShape(s));
 function renderSwaps(){
   const waiting=(swaps.list||[]).filter(s=>s.status==='pending_target').sort((a,b)=>a.ts-b.ts);
   const pend=(swaps.list||[]).filter(s=>s.status==='pending_admin').sort((a,b)=>a.ts-b.ts);
@@ -4010,25 +4160,26 @@ function renderSwaps(){
     </div>`;
   };
   const row=s=>s.type==='3way'?row3:row2;
-  document.getElementById('swapPending').innerHTML=pend.length?pend.map(s=>row(s)(s,
-    `<button class="btn btn-success" style="font-size:12px" onclick="decideSwap('${esc(s.id)}','approved')">✓ Approve &amp; swap</button>
-     <button class="btn btn-danger" style="font-size:12px" onclick="decideSwap('${esc(s.id)}','denied')">✗ Deny</button>`)).join('')
+  document.getElementById('swapPending').innerHTML=pend.length?(swapsReadable(pend).map(s=>row(s)(s,
+    `<button class="btn btn-success" style="font-size:12px" onclick="decideSwap(${jsArg(s.id)},'approved')">✓ Approve &amp; swap</button>
+     <button class="btn btn-danger" style="font-size:12px" onclick="decideSwap(${jsArg(s.id)},'denied')">✗ Deny</button>`)).join('')
+    +swapsUnreadable(pend).map(swapUnreadableRow).join(''))
     :'<div style="font-size:12px;color:var(--t3)">Nothing waiting on you right now.</div>';
-  document.getElementById('swapWaiting').innerHTML=waiting.length?waiting.map(s=>{
+  document.getElementById('swapWaiting').innerHTML=waiting.length?(swapsReadable(waiting).map(s=>{
     if(s.type==='3way'){
       const [,b,c]=s.participants;
       const still=[b,c].filter(u=>!s.acceptances?.[u]);
       return row3(s,`<span class="status-pending">⏳ waiting on ${still.map(u=>esc(displayName(u))).join(' &amp; ')}</span>`);
     }
     return row2(s,`<span class="status-pending">⏳ waiting on ${esc(displayName(s.to))}</span>`);
-  }).join('')
+  }).join('')+swapsUnreadable(waiting).map(swapUnreadableRow).join(''))
     :'<div style="font-size:12px;color:var(--t3)">Nothing waiting on another user.</div>';
-  document.getElementById('swapDecided').innerHTML=done.length?done.map(s=>{
+  document.getElementById('swapDecided').innerHTML=done.length?(swapsReadable(done).map(s=>{
     const decidedLabel=s.status==='declined_by_target'
       ?`<span class="status-denied">❌ ${esc(displayName(s.type==='3way'?s.declinedBy:s.to))} declined</span>`
       :`<span class="status-${s.status}">${s.status==='approved'?'✅ approved':'❌ denied'}</span>`;
     return row(s)(s,decidedLabel);
-  }).join('')
+  }).join('')+swapsUnreadable(done).map(swapUnreadableRow).join(''))
     :'<div style="font-size:12px;color:var(--t3)">No decisions yet.</div>';
   // [99] Same as requests: summary written last, after all three panels this function owns.
   const ssum=document.getElementById('sectsum_swapdecided');
@@ -4216,7 +4367,7 @@ function renderOpenAdmin(){
       ${chipHtml(o.shiftId)}
       ${o.note?'<span style="color:var(--t2)">'+esc(o.note)+'</span>':''}
       <span style="margin-left:auto">${o.status==='open'
-        ?'<span class="status-pending">open</span> <button class="btn btn-ghost" style="font-size:11px" onclick="removeOpen(\''+esc(o.id)+'\')">Remove</button>'
+        ?'<span class="status-pending">open</span> <button class="btn btn-ghost" style="font-size:11px" onclick="removeOpen('+jsArg(o.id)+')">Remove</button>'
         :'<span class="status-approved">claimed by '+esc(displayName(o.claimedBy||'?'))+'</span>'}</span>
     </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">Nothing posted.</div>';
 }
@@ -4510,6 +4661,11 @@ function schedToast(msg,type){
   t.style.opacity='1';
   clearTimeout(t._h); t._h=setTimeout(()=>{ t.style.opacity='0'; },2200);
 }
+// [131 · RA-6 N-1] The Calendar Feeds "Build" button is an inline handler that calls schedToast
+// in its .then, and an inline handler can only see window. The feed was written and the admin
+// got a console error instead of "Feed rebuilt." Exposed, like every other handler this page
+// hands to an on* attribute. (A rendered-DOM sweep found this one; a source sweep did not.)
+window.schedToast=schedToast;
 
 // Per-field save — mirrors the Vacation Auction admin's per-field Save buttons.
 // kind: 'fn' full name | 'lem' login e-mail | 'em' secondary e-mail | 'fte' FTE.
@@ -5614,6 +5770,10 @@ function renderHolidays(){
   // [96] The bar's count must never disagree with the list behind it.
   try{ sectSummaries(); }catch(_e){}
 }
+// [131 · RA-6 E-8] The Holidays year dropdown carries onchange="renderHolidays()", and an inline
+// handler can only see window — so picking another year threw "renderHolidays is not defined"
+// and the list never repainted. Exposed the same way every other handler on this page is.
+window.renderHolidays=renderHolidays;
 window.toggleHoliday=async function(date,src,removeIt){
   if(catLockedRefuse()) return;
   const cfg=catalog.holidays||{};
@@ -6631,7 +6791,13 @@ function renderDash(){
   const pendingSwap=(swaps.list||[]).filter(s=>s.status==='pending_admin').sort((a,b)=>b.ts-a.ts);
   document.getElementById('dashSwapCount').textContent=pendingSwap.length;
   document.getElementById('dashSwapSub').textContent=pendingSwap.length?'Review on the Swaps page.':'Nothing waiting.';
-  document.getElementById('dashSwapList').innerHTML=pendingSwap.slice(0,4).map(s=>s.type==='3way'
+  // [133 · N-11] Same shape question as the Swaps panel. This one mattered more: Today is the
+  // panel an admin lands on, and recombineAudit calls renderDash DIRECTLY, outside
+  // _flushRender's try/catch — so one unreadable item aborted the audit listener mid-flight
+  // and left the coverage figure below stuck on "—" for the rest of the session.
+  document.getElementById('dashSwapList').innerHTML=pendingSwap.slice(0,4).map(s=>!isSwapItemShape(s)
+    ?swapUnreadableRow(s)
+    :s.type==='3way'
     ?'<div class="rowline">🔁 '+s.participants.map(u=>esc(displayName(u))).join(' → ')+'</div>'
     :'<div class="rowline">'+esc(displayName(s.from))+' ⇄ '+esc(displayName(s.to))+' — '+esc(s.date)+'</div>').join('');
 
@@ -8232,8 +8398,12 @@ function renderRules(){
     const quiet = !c.ran || !c.considered;
     const state = !ruleEnabled(r) ? '<span style="color:var(--t3)">off</span>'
       : (quiet ? '<span style="color:#92400e">not checking anything</span>'
+        // [131 · RA-6 V-9] The note triangle belongs to a rule that HAS something to say. It was
+        // being pinned onto "nothing standing" too, so the phrase meaning "no problems here"
+        // carried a warning sign — contradicting the rule next to it and the report below.
         : (n ? '<span style="color:'+sv.color+';font-weight:700">'+n+' standing</span>'
-             : '<span style="color:#166534">nothing standing</span>')+(c.notes.length?' <span title="This rule has a note — open it" style="color:#92400e">⚠</span>':''));
+                +(c.notes.length?' <span title="This rule has a note — open it" style="color:#92400e">⚠</span>':'')
+             : '<span style="color:#166534">nothing standing</span>'));
     return '<div class="card" style="padding:9px 11px'+(ruleEnabled(r)?'':';opacity:.62')+'">'
       +'<div class="card-title secth" style="margin:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap" '
         +'onclick="toggleSect(\'rul:'+esc(key)+'\')" title="Click to open or close this rule">'

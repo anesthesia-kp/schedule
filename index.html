@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 40;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 43;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -53,6 +53,13 @@
       window.addEventListener('focus',chkThrottled);
     }catch(e){}
     setInterval(chk, 5*60*1000); chk();
+  })();
+  // [41 · RA-6 V-16] The build number, where anyone reporting a problem can read it.
+  // It comes from `var BUILD` above — never a second copy typed by hand, which would
+  // drift the first time one of the two was bumped and the other was not.
+  (function(){
+    function stamp(){ var b=document.getElementById('buildStamp'); if(b) b.textContent='build '+BUILD; }
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',stamp); else stamp();
   })();
 </script>
 <script>
@@ -111,6 +118,10 @@ body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSyst
 .btn:hover{background:var(--s3)}
 .btn-primary{background:var(--blue);border-color:var(--blue);color:#fff}
 .btn-primary:hover{background:#1d4ed8}
+/* [41 · RA-6 S-12] Accept and Decline used these two classes and this page never defined
+   them, so both rendered as the same plain grey button. Copied from admin/index.html. */
+.btn-success{background:var(--green);border-color:var(--green);color:#fff}
+.btn-danger{background:#fee2e2;border-color:#fca5a5;color:var(--red)}
 .btn-ghost{background:transparent}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .sel,.inp{border:1px solid var(--b2);border-radius:8px;padding:7px 10px;font-size:13px;background:var(--s1);color:var(--t1)}
@@ -120,6 +131,25 @@ table.grid th,table.grid td{border:1px solid var(--b1);padding:3px 4px;text-alig
 table.grid th{background:var(--s2);font-size:10px;color:var(--t2)}
 table.grid td.me{background:#eff6ff}
 table.grid .wkend{background:var(--s3)}
+/* [132 · RA-6 V-2] THE FULL SCHEDULE SCROLLS INSIDE ITS OWN BOX, and the name column stays.
+   The wrapper already carried overflow-x:auto and it was never the problem: `.app` is a column
+   flex box at phone width with align-items:flex-start, so `.content` was sized to the TABLE's
+   max-content and the whole page went with it — 1500px against a 390px screen. `.content` is
+   stretched to the screen below (in the ≤700px block), which is what makes the containment
+   here take effect. overflow-x is `scroll` so the thin bar is always drawn. */
+.gridscroll{overflow-x:scroll;overflow-y:auto;overscroll-behavior-x:contain;
+  scrollbar-width:thin;scrollbar-color:var(--b2) var(--s2)}
+.gridscroll::-webkit-scrollbar{height:11px;width:11px}
+.gridscroll::-webkit-scrollbar-track{background:var(--s2)}
+.gridscroll::-webkit-scrollbar-thumb{background:var(--b2);border-radius:7px;border:2px solid var(--s2)}
+.gridfade{position:relative}
+.gridfade::after{content:'';position:absolute;top:0;right:0;bottom:0;width:34px;pointer-events:none;
+  opacity:0;transition:opacity .14s ease;z-index:6;
+  background:linear-gradient(to left,rgba(15,23,42,.16),rgba(15,23,42,0))}
+.gridfade.more::after{opacity:1}
+table.grid .stick1{position:sticky;left:0;z-index:2;background:var(--s1);border-right:2px solid var(--b2);
+  box-shadow:2px 0 0 var(--b2),5px 0 7px -5px rgba(15,23,42,.22)}
+table.grid th.stick1{background:var(--s2);z-index:3}
 .cell-day{color:var(--blue);font-weight:700}
 .cell-call{color:var(--purple);font-weight:700}
 .cell-off{color:var(--t3);font-weight:700}
@@ -168,7 +198,24 @@ table.grid .wkend{background:var(--s3)}
 @keyframes dayFlash{0%,35%{background:#fef08a!important}100%{background:inherit}}
 @media (max-width:700px){
   .wrap{padding:12px 8px 60px} table.grid{font-size:9px}
-  .app{flex-direction:column}
+  /* [132 · RA-6 V-2] `align-items:flex-start` is right for the desktop row (the nav must not
+     stretch to the page's height); in the phone COLUMN it made the cross axis horizontal, so
+     `.content` was sized to its widest child — the 31-day table — and the page, the header and
+     the tab strip all scrolled sideways with it. Stretched to the screen, the table's own box
+     is the only thing that scrolls. */
+  .app{flex-direction:column;align-items:stretch}
+  .content{width:100%;min-width:0}
+  /* [132 · RA-6 V-2] Seven columns do not fit a 390px screen — Quick View pushed the page
+     71px wide. They wrap now: as many whole days as fit, never a squeezed or clipped one. */
+  #quickView{grid-template-columns:repeat(auto-fill,minmax(88px,1fr))!important}
+  /* [132 · RA-6 V-2] A month calendar is seven columns or it is not a week, so this one does
+     not wrap — its tracks are allowed to shrink below their content instead (`1fr` alone means
+     "at least min-content", which is what pushed the card 38px past the screen). */
+  .cal{grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+  .cal .d{padding:4px 3px;min-height:62px;overflow:hidden}
+  /* [132 · RA-6 V-2] A picker is as wide as its longest option unless it is told otherwise —
+     the My Requests shift picker was 9px wider than a 390px screen on its own. */
+  .sel,.inp{max-width:100%}
   .usernav{width:100%;display:flex;overflow-x:auto;border-right:none;border-bottom:1px solid var(--b1);padding:6px 8px;gap:2px}
   .usernav a{flex-shrink:0;border-left:none;border-bottom:3px solid transparent;padding:8px 10px;white-space:nowrap}
   .usernav a.on{border-left:none;border-bottom-color:var(--blue)}
@@ -195,6 +242,7 @@ table.grid .wkend{background:var(--s3)}
   <span style="margin-left:auto"></span>
   <span id="whoamiEmail" style="font-size:12px;color:var(--t3);word-break:break-all"></span>
   <span id="whoami" style="font-size:12px;color:var(--t2);font-weight:700;background:rgba(15,39,68,.06);padding:2px 8px;border-radius:7px"></span>
+  <span id="buildStamp" title="Which version of this page you are looking at — quote it if you report a problem" style="font-size:11px;color:var(--t3);font-family:var(--mono)"></span>
   <button class="btn btn-ghost" style="font-size:12px" onclick="switchUser()">Sign out</button>
   <a class="btn" style="text-decoration:none;font-size:12px" href="https://anesthesia-kp.github.io/vacation/" target="_blank" rel="noopener">🏖️ Vacation Auction →</a>
 </div>
@@ -258,8 +306,12 @@ table.grid .wkend{background:var(--s3)}
     </div>
     <div class="card">
       <div class="card-title">Everyone</div>
-      <div style="overflow-x:auto">
-        <table class="grid" id="allGrid"></table>
+      <!-- [132 · RA-6 V-2] The table's own scroll box, with the "more to the right" fade on
+           the wrapper outside it — same two classes as the admin grid. -->
+      <div class="gridfade" id="allGridFade">
+        <div class="gridscroll" id="allGridWrap">
+          <table class="grid" id="allGrid"></table>
+        </div>
       </div>
     </div>
   </div>
@@ -541,6 +593,15 @@ window.nav=function(id,el){
 };
 
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// [131 · RA-6 S-2] EVERY INLINE HANDLER ARGUMENT GOES THROUGH THIS. Copied byte-for-byte from
+// admin/index.html, where it has guarded the generated handlers since build 90.
+// esc() alone is NOT enough here: it turns ' into &#39;, and the HTML parser turns that back
+// into a real ' BEFORE the JavaScript in onclick="…" is compiled. So an id containing a quote
+// broke out of the string and the rest of it ran as code, in the reader's own session — and
+// the id is a free-form FIELD any signed-in user can write, not a Firestore document key.
+// JSON.stringify quotes and backslash-escapes the value first; esc() then makes it attribute-
+// safe. Wrap every id or field pasted into an on* attribute.
+const jsArg = v => esc(JSON.stringify(v));
 const pad=n=>String(n).padStart(2,'0');
 const ymKey=d=>d.getFullYear()+'-'+pad(d.getMonth()+1);
 const dKey=d=>ymKey(d)+'-'+pad(d.getDate());
@@ -803,12 +864,14 @@ function renderAll(){
 
   // Everyone grid
   const g=document.getElementById('allGrid');
-  let head='<tr><th style="text-align:left">User</th>';
+  // [132 · RA-6 V-2] The name column is sticky-left, so on a phone you still know whose row
+  // you are reading once the days have scrolled under it.
+  let head='<tr><th class="stick1" style="text-align:left">User</th>';
   for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); head+='<th data-day="'+pad(d)+'" class="'+((wd===0||wd===6)?'wkend':'')+'">'+d+'<br>'+DS[wd]+'</th>'; }
   head+='</tr>';
   let rows='';
   for(const u of names){
-    rows+='<tr><td style="text-align:left;font-weight:700'+(u===me?';color:var(--blue)':'')+'">'+esc(displayName(u))+'</td>';
+    rows+='<tr><td class="stick1" style="text-align:left;font-weight:700'+(u===me?';color:var(--blue)':'')+'">'+esc(displayName(u))+'</td>';
     for(let d=1;d<=nDays;d++){
       const dk=curYM+'-'+pad(d); const wd=new Date(y,m-1,d).getDay();
       rows+='<td class="'+(u===me?'me ':'')+((wd===0||wd===6)?'wkend':'')+'">'+cellHtml(u,dk,vac)+'</td>';
@@ -816,9 +879,22 @@ function renderAll(){
     rows+='</tr>';
   }
   g.innerHTML=head+rows;
+  allGridFadeSync();
 
   renderMyRequests(); renderMySwaps(); fillSwapWith(); fillReqShift(); renderQuickView(vac); renderOpenShifts();
 }
+
+// [132 · RA-6 V-14] A fade at the right edge while there are still days off-screen, off the
+// moment the last one is reached. One class toggle from a passive listener.
+function allGridFadeSync(){
+  const w=document.getElementById('allGridWrap'), f=document.getElementById('allGridFade');
+  if(!w||!f) return;
+  f.classList.toggle('more',(w.scrollWidth-w.clientWidth-w.scrollLeft)>2);
+}
+window.allGridFadeSync=allGridFadeSync;
+{ const _aw=document.getElementById('allGridWrap');
+  if(_aw) _aw.addEventListener('scroll',allGridFadeSync,{passive:true});
+  window.addEventListener('resize',allGridFadeSync); }
 
 function renderQuickView(vac){
   const el=document.getElementById('quickView'); if(!el||!me) return;
@@ -846,8 +922,8 @@ function renderOpenShifts(){
       ${chip(o.shiftId)}
       ${o.note?'<span style="color:var(--t2)">'+esc(o.note)+'</span>':''}
       <span style="margin-left:auto">${appliedById.has(o.id)
-        ?'<span class="status-pending">⏳ applied</span> <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawRequest(\''+esc(appliedById.get(o.id))+'\')">✗ Withdraw</button>'
-        :'<button class="btn btn-primary" style="font-size:12px;padding:4px 12px" onclick="applyOpen(\''+esc(o.id)+'\')">Apply</button>'}</span>
+        ?'<span class="status-pending">⏳ applied</span> <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawRequest('+jsArg(appliedById.get(o.id))+')">✗ Withdraw</button>'
+        :'<button class="btn btn-primary" style="font-size:12px;padding:4px 12px" onclick="applyOpen('+jsArg(o.id)+')">Apply</button>'}</span>
     </div>`).join('');
 }
 window.applyOpen=async function(openId){
@@ -921,7 +997,7 @@ function renderMyRequests(){
       ${(r.status==='denied'&&(r.reason||r.autoDenied))?'<span style="color:#b42318;font-size:12px">— '+esc(r.reason||r.autoDenied)+'</span>':''}
       <span style="margin-left:auto" class="status-${r.status}">${
         r.status==='pending'
-          ? '⏳ pending <button class="btn btn-danger" style="font-size:11px;padding:3px 9px;margin-left:6px" onclick="withdrawRequest(\''+esc(r.id)+'\')">✗ Withdraw</button>'
+          ? '⏳ pending <button class="btn btn-danger" style="font-size:11px;padding:3px 9px;margin-left:6px" onclick="withdrawRequest('+jsArg(r.id)+')">✗ Withdraw</button>'
           : r.status==='approved' ? '✅ approved'
           : r.status==='withdrawn' ? '↩︎ withdrawn'
           : '❌ denied'}</span>
@@ -931,24 +1007,52 @@ function renderMyRequests(){
 // non-initiating participants (index 1 or 2 — the initiator at index 0
 // implicitly agreed by creating it) and haven't accepted yet.
 function my3wayTurn(s){ return s.type==='3way'&&s.status==='pending_target'&&(me===s.participants[1]||me===s.participants[2])&&!s.acceptances?.[me]; }
+// ═══ [43 · S-10] THE ADMIN'S isSwapItemShape, COPIED BYTE-FOR-BYTE. ═══════════════════════
+// A 3-way item is participants:[a,b,c] with legs:[l,l,l]. Nothing here asked: my3wayTurn
+// reached straight into s.participants[1] from inside the badge count and the list filter,
+// so ONE malformed item — which any registered user can write today — threw before a single
+// row was built, and because renderMySwaps is fourth in renderAll's chain it took the
+// swap-partner dropdowns, the request shift picker, Quick View and Open Shifts down with it,
+// permanently and with nothing on screen explaining why.
+// The staff page has no admin to warn and nothing it could offer to do about a broken item,
+// so here a bad item is SKIPPED with a console warning rather than flagged in the list — the
+// admin's copy of this check is the one that surfaces it. Same question, same answer, one
+// place per page. (Admin: `isSwapItemShape` in admin/index.html.)
+function isSwapItemShape(x){
+  if(!x||typeof x!=='object') return false;
+  if(x.type==='3way') return Array.isArray(x.participants)&&x.participants.length===3
+    &&Array.isArray(x.legs)&&x.legs.length===3&&x.legs.every(l=>!!l&&typeof l==='object');
+  return typeof x.from==='string'&&typeof x.to==='string';
+}
+window.isSwapItemShapeProbe=isSwapItemShape;   // module scope is invisible to page.evaluate
+function readableSwaps(){
+  const all=(swaps.list||[]);
+  const good=all.filter(isSwapItemShape);
+  if(good.length!==all.length) console.warn('skipped '+(all.length-good.length)+' swap item(s) this page cannot read: '
+    +all.filter(s=>!isSwapItemShape(s)).map(s=>String((s&&s.id)||'(no id)')).join(', '));
+  return good;
+}
 function renderMySwaps(){
   const badge=document.getElementById('swapNavBadge');
   // Badge only counts swaps genuinely needing MY action right now — someone
   // else proposed it and it's sitting on me to accept/decline. A swap I
   // proposed myself, or one already forwarded to admin, isn't "my to-do".
+  // [43 · S-10] Asked ONCE per render, before the badge and before the list — both used to
+  // reach into the raw array and both threw on the same bad item.
+  const readable=readableSwaps();
   if(badge&&me){
-    const n=(swaps.list||[]).filter(s=>s.type==='3way'?my3wayTurn(s):(s.to===me&&s.status==='pending_target')).length;
+    const n=readable.filter(s=>s.type==='3way'?my3wayTurn(s):(s.to===me&&s.status==='pending_target')).length;
     badge.textContent=n||''; badge.style.display=n?'inline-block':'none';
   }
   const el=document.getElementById('mySwapList'); if(!el||!me) return;
-  const mine=(swaps.list||[]).filter(s=>s.type==='3way'?s.participants.includes(me):(s.from===me||s.to===me)).sort((a,b)=>b.ts-a.ts);
+  const mine=readable.filter(s=>s.type==='3way'?s.participants.includes(me):(s.from===me||s.to===me)).sort((a,b)=>b.ts-a.ts);
   const statusHtml2=s=>{
     if(s.status==='pending_target'){
-      if(s.to===me) return `<button class="btn btn-success" style="font-size:12px" onclick="acceptSwap('${esc(s.id)}')">✓ Accept</button>
-        <button class="btn btn-danger" style="font-size:12px" onclick="declineSwap('${esc(s.id)}')">✗ Decline</button>`;
+      if(s.to===me) return `<button class="btn btn-success" style="font-size:12px" onclick="acceptSwap(${jsArg(s.id)})">✓ Accept</button>
+        <button class="btn btn-danger" style="font-size:12px" onclick="declineSwap(${jsArg(s.id)})">✗ Decline</button>`;
       // [37 · defect 15] the proposer can take it back while it is still only on the target
       if(s.from===me) return `<span class="status-pending">⏳ waiting on ${esc(displayName(s.to))}</span>
-        <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawSwap('${esc(s.id)}')">✗ Withdraw</button>`;
+        <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawSwap(${jsArg(s.id)})">✗ Withdraw</button>`;
       return `<span class="status-pending">⏳ waiting on ${esc(displayName(s.to))}</span>`;
     }
     if(s.status==='pending_admin') return '<span class="status-pending">⏳ waiting on admin</span>';
@@ -961,12 +1065,12 @@ function renderMySwaps(){
   const statusHtml3=s=>{
     const [a,b,c]=s.participants;
     if(s.status==='pending_target'){
-      if(my3wayTurn(s)) return `<button class="btn btn-success" style="font-size:12px" onclick="acceptSwap3('${esc(s.id)}')">✓ Accept</button>
-        <button class="btn btn-danger" style="font-size:12px" onclick="declineSwap3('${esc(s.id)}')">✗ Decline</button>`;
+      if(my3wayTurn(s)) return `<button class="btn btn-success" style="font-size:12px" onclick="acceptSwap3(${jsArg(s.id)})">✓ Accept</button>
+        <button class="btn btn-danger" style="font-size:12px" onclick="declineSwap3(${jsArg(s.id)})">✗ Decline</button>`;
       const waiting=[b,c].filter(u=>!s.acceptances?.[u]);
       const wait=`<span class="status-pending">⏳ waiting on ${waiting.map(u=>esc(displayName(u))).join(' &amp; ')}</span>`;
       // [37 · defect 15] participants[0] proposed it; anyone else's turn is handled above
-      if(me===a) return wait+` <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawSwap('${esc(s.id)}')">✗ Withdraw</button>`;
+      if(me===a) return wait+` <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawSwap(${jsArg(s.id)})">✗ Withdraw</button>`;
       return wait;
     }
     if(s.status==='pending_admin') return '<span class="status-pending">⏳ waiting on admin</span>';
