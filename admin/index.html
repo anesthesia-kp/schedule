@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 126;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 130;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -1085,7 +1085,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <span id="engMonth" style="font-size:13px;font-weight:800;color:var(--t1);text-transform:none;letter-spacing:0;min-width:130px;text-align:center"></span>
         <button class="btn btn-ghost" style="font-size:12px;padding:3px 9px" onclick="moveMonth(1)" title="Next month">▶</button>
       </div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">Each shift is filled to its staffing minimum, then each quota to its total, giving every shift to whoever has done it least over the rolling twelve months — <b>after the people who asked for it</b> (approved requests, strongest first) and the people who said they are available. An approved <i>avoid</i> is kept. <b>One shift per person per day.</b> Existing assignments are kept; nothing is ever removed.</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">Each shift is filled to its staffing minimum, then each quota to its total, giving every shift to whoever has done it least over the rolling twelve months — <b>after the people who asked for it</b> (approved requests, strongest first) and the people who said they are available. An approved <i>avoid</i> is kept. <b>One shift per person per day.</b> Apply <b>adds</b> what it planned to whatever each cell holds at the moment it writes — an assignment made since you pressed Preview is kept, and the engine removes nothing. <b>A person marked off since you previewed is skipped for that day</b>: the day off wins, the shift is not placed, and the skip is counted and named in the result rather than passed over. <b>Preview waits until this month has finished loading</b> — until it is here the button is off and says so, because a month that has not arrived yet looks empty, and the engine would treat everybody as free every day. And if a day would end up with <b>more people on a shift than that shift asks for</b>, the plan and the Apply question both say so, day by day. <b>A preview goes out of date the moment anything it was worked out from changes</b> — a rule, a quota, a shift, who may work what, a group, a request, vacation, the month itself, or somebody editing a day in this month. When that happens the plan is marked here with what changed, <b>Apply is switched off</b>, and one press of <b>Preview again</b> works it out afresh.</div>
       <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <button class="btn btn-primary" id="engPreviewBtn" onclick="enginePreview()">🔍 Preview this month</button>
         <button class="btn" onclick="autoPopulateYear()" title="Runs the same engine for all twelve months of the year on screen, writing as it goes">⚡ Run the whole year</button>
@@ -2212,8 +2212,14 @@ window.nav=function(id,el){
 
 // ── Month ──
 function setMonth(ym){
+  // [129 · E-7] Moving the month is a change to the plan's inputs like any other, and it is said
+  // in the same place and the same words. Before the plan's month changes under it, not after.
+  if(ym!==curYM&&typeof _enginePlanStale==='function') _enginePlanStale('You moved to another month since this preview');
   curYM=ym;
   monthLoaded=false;   // [81] see recombine() below
+  monthLoadedYM=''; monthDocSeenYM='';   // [128 · E-2] nothing has arrived for THIS month yet — and
+  // these must be cleared, not merely compared: coming back to a month you have already visited
+  // would otherwise read as "already loaded" while monthData has just been emptied two lines below.
   if(typeof bdEnsureSubs==='function') bdEnsureSubs();
   if(unsubMonth) unsubMonth();
   monthData={days:{}};
@@ -2223,28 +2229,55 @@ function setMonth(ym){
   // month as empty, and "empty" and "stored somewhere else" must never look alike.
   monthLegacy=false;
   let legacyDays=null, subDays={};
+  // [129 · E-7] The FIRST delivery of each of these two listeners is the month ARRIVING, which is
+  // what completes the load — it is not somebody changing the schedule, and it must not make a
+  // plan stale. Every delivery after it that actually changes the data is.
+  let daysSeen=false, docSeen=false;
   const recombine=()=>{
     monthLegacy=!!legacyDays;
     monthData={days:legacyDays||subDays};
     monthLoaded=true;   // [81] the day board must not read an unarrived month as an empty one
+    monthLoadedYM=ym;   // [128 · E-2] WHICH month has arrived — see monthReady() below
     renderAll();
   };
   const unsubA=onSnapshot(monthRef(ym),snap=>{
+    monthDocSeenYM=ym;  // [128 · E-2] the month DOCUMENT has been heard from, not only the days
     const md=snap.exists()?snap.data():null;
+    const prevLegacy=legacyDays;
     legacyDays=(md&&md.days&&Object.keys(md.days).length&&md.v2!==true)?md.days:null;
+    // [129 · E-7] the month document carries the legacy day map — a change to it is a change to
+    // the schedule the plan was built from.
+    if(docSeen&&JSON.stringify(prevLegacy)!==JSON.stringify(legacyDays)&&typeof _enginePlanStale==='function') _enginePlanStale('The schedule changed since this preview');
+    docSeen=true;
     monthPublished=!(md&&md.published===false);                       // [121 · §5] absent means published
     monthPubMeta={at:(md&&md.publishedAt)||null,by:(md&&md.publishedBy)||''};
     if(typeof markDirty==='function') markDirty('grid');               // the badge lives on the grid header
     recombine();
     if(typeof renderEngine==='function') renderEngine();
   });
-  const unsubB=onSnapshot(daysCol(ym),qs=>{ subDays=daysFromSnap(qs); recombine(); });
+  const unsubB=onSnapshot(daysCol(ym),qs=>{
+    const next=daysFromSnap(qs);
+    // [129 · E-7] Somebody edited a cell in this month — another admin, an approval, a swap, or
+    // this same admin over in the grid. That is exactly the case the audit named as the one that
+    // makes a single admin lose data: Preview, fix a cell, come back, Apply.
+    if(daysSeen&&JSON.stringify(next)!==JSON.stringify(subDays)&&typeof _enginePlanStale==='function') _enginePlanStale('The schedule changed since this preview');
+    daysSeen=true;
+    subDays=next; recombine();
+  });
   unsubMonth=()=>{ try{unsubA();}catch(_){}; try{unsubB();}catch(_){} };
   renderAll();
 }
 // True while the month on screen is still in the pre-59 single-document format.
 // Every writer checks this. It is not a warning — it is a lock (see monthLockRefuse).
 let monthLegacy=false, monthLoaded=false;
+// [128 · E-2] WHICH month each half of the load belongs to. `monthLoaded` alone is not enough:
+// it is a bare boolean that setMonth clears and either listener sets, so a snapshot still in
+// flight for the month you just left can raise it for the month you are now looking at. These
+// two carry the ym, and they are cleared by setMonth, so "loaded" always means "loaded for the
+// month on screen". `monthDocSeenYM` is the second half of the answer — the day subcollection
+// arriving empty and the month document not having arrived at all look identical otherwise, and
+// an unconverted month keeps its days IN the month document (see monthLegacy above).
+let monthLoadedYM='', monthDocSeenYM='';
 // [121 · §5] DRAFT vs PUBLISHED. The month document carries `published:false` while a month is
 // being built; ABSENT MEANS PUBLISHED, so nothing already on the site disappears from staff the
 // day this ships. Staff see nothing of a draft month; an admin sees everything, with the state
@@ -2258,6 +2291,26 @@ function monthLockRefuse(){
   return true;
 }
 window.monthIsLegacy=()=>monthLegacy;   // HANDOFF trap 1: module scope is invisible to inline onclick= and to tests
+// [128 · E-2] IS THE MONTH ON SCREEN ACTUALLY HERE? `setMonth` empties `monthData` and drops
+// `monthLoaded` SYNCHRONOUSLY, then two listeners refill it asynchronously. Press ◀ or ▶ — which
+// sit on the Engine card, right beside Preview — and for the length of one snapshot round trip
+// the month reads as completely empty. The engine planned against that: everybody looked free
+// every day, and Apply then wrote a month's worth of assignments over a month that was already
+// built. Both halves must have arrived, and both must belong to the month on screen.
+function monthReady(){ return monthLoaded && monthLoadedYM===curYM && monthDocSeenYM===curYM; }
+window.monthIsReady=()=>monthReady();   // HANDOFF trap 1
+// The one sentence the toast, the disabled Preview button's tooltip and the plan panel all use (§19).
+function monthLoadingMsg(){
+  const [y,m]=String(curYM||'').split('-').map(Number);
+  const nm=(m>=1&&m<=12&&MS[m-1])?(MS[m-1]+' '+y):'this month';
+  return 'Still loading '+nm+' — try again in a moment';
+}
+// The same shape monthLockRefuse uses: true means "I have told the admin why, stop here".
+function monthLoadRefuse(){
+  if(monthReady()) return false;
+  schedToast(monthLoadingMsg(),'err');
+  return true;
+}
 
 function renderLegacyBanner(){
   const b=document.getElementById('legacyBanner'); if(!b) return;
@@ -2746,6 +2799,95 @@ function ruleWarnings(ym,dd,u,addId,cells){
 }
 window.ruleWarningsProbe=ruleWarnings;
 
+// ══ [130 · RA-6 R-1 and R-2] ONE reading of a swap, used by everything that asks about it ══
+// A swap is a set of one-directional handoffs. A 2-way is two of them on one date, pointing
+// opposite ways. A 3-way rotation is three of them, A→B→C→A. Working the legs out in one
+// place means the warning check, the confirmation the admin reads and the cells the
+// transaction writes can never disagree about who is handing what to whom.
+function swapLegs(sw){
+  const legs=[];
+  if(!sw) return legs;
+  if(sw.type==='3way'){
+    const p=Array.isArray(sw.participants)?sw.participants:[];
+    const [a,b,c]=p; const L=Array.isArray(sw.legs)?sw.legs:[];
+    [[a,b,L[0]],[b,c,L[1]],[c,a,L[2]]].forEach(([giver,receiver,leg])=>{
+      if(giver&&receiver&&leg&&leg.date) legs.push({mk:String(leg.date).slice(0,7),dd:String(leg.date).slice(8),giver:giver,receiver:receiver,part:leg.part,k:leg.part==='call'?'call':'day'});
+    });
+  } else if(sw.date&&sw.from&&sw.to){
+    const mk=String(sw.date).slice(0,7), dd=String(sw.date).slice(8), k=sw.part==='call'?'call':'day';
+    legs.push({mk:mk,dd:dd,giver:sw.from,receiver:sw.to,part:sw.part,k:k});
+    legs.push({mk:mk,dd:dd,giver:sw.to,receiver:sw.from,part:sw.part,k:k});
+  }
+  return legs;
+}
+// [130 · R-1] What the day would look like AFTERWARDS — worked out ONCE, from ONE
+// before-picture of each date. Every leg is read from that same picture, so a leg never
+// picks up what an earlier leg deposited. Each person loses what they hand over and gains
+// what comes to them, both in the same step. That is what makes a rotation whose three legs
+// all fall on the SAME date come out as a clean rotation, one shift each, instead of piling
+// everything onto the first person.
+// `dayCache` is keyed 'YYYY-MM|DD' and must be the state BEFORE any of this swap is applied.
+// Returns: after  — the finished cells, same key, then by person
+//          moved  — one entry per leg that has something to hand over
+//          missing— every leg whose giver no longer holds anything of that kind
+function swapOutcome(legs,dayCache){
+  const gives={}, gets={}, missing=[], moved=[];
+  const snap=(key,u)=>(dayCache[key]&&dayCache[key][u])||{};
+  for(const l of legs){
+    const key=l.mk+'|'+l.dd;
+    const moving=shiftsOf(snap(key,l.giver)).filter(x=>kindOfShift(x)===l.k);
+    if(!moving.length){ missing.push({mk:l.mk,dd:l.dd,u:l.giver,k:l.k}); continue; }
+    const g=gives[key]=gives[key]||{}; g[l.giver]=(g[l.giver]||[]).concat(moving);
+    const r=gets[key]=gets[key]||{};  r[l.receiver]=(r[l.receiver]||[]).concat(moving);
+    moved.push({mk:l.mk,dd:l.dd,giver:l.giver,receiver:l.receiver,shifts:moving});
+  }
+  const after={};
+  for(const key of [...new Set([...Object.keys(gives),...Object.keys(gets)])]){
+    const who=[...new Set([...Object.keys(gives[key]||{}),...Object.keys(gets[key]||{})])];
+    const a=after[key]={};
+    for(const u of who){
+      const cell=snap(key,u);
+      const out=(gives[key]||{})[u]||[], inn=(gets[key]||{})[u]||[];
+      const kept=shiftEntries(cell).filter(x=>out.indexOf(x.s)<0);
+      const add=inn.filter((id,i)=>inn.indexOf(id)===i&&!kept.some(y=>y.s===id)).map(id=>({s:id,via:'swap'}));
+      a[u]={shifts:kept.concat(add),off:!!cell.off};
+    }
+  }
+  return {after:after,missing:missing,moved:moved};
+}
+// The same after-picture, in the owner's words, for the box that asks "approve this swap?".
+// It is built from the value above and from nothing else, so the sentence the admin reads
+// is the write that is about to happen — the two cannot describe different outcomes.
+function swapOutcomeText(out){
+  const lines=[], nothing='nothing';
+  if(out.moved.length){
+    lines.push('What moves:');
+    for(const m of out.moved) lines.push('  • '+m.mk+'-'+m.dd+': '+displayName(m.giver)+' hands '+m.shifts.map(shiftLabel).join(' + ')+' to '+displayName(m.receiver));
+  }
+  const keys=Object.keys(out.after).sort();
+  if(keys.length){
+    if(lines.length) lines.push('');
+    lines.push('Afterwards each person holds:');
+    for(const key of keys){
+      const mk=key.split('|')[0], dd=key.split('|')[1];
+      for(const u of Object.keys(out.after[key]).sort()){
+        const held=out.after[key][u].shifts.map(x=>shiftLabel(x.s));
+        lines.push('  • '+mk+'-'+dd+' '+displayName(u)+': '+(held.length?held.join(' + '):nothing));
+      }
+    }
+  }
+  for(const m of out.missing){
+    if(lines.length) lines.push('');
+    lines.push('  ⚠️ '+displayName(m.u)+' no longer has '+(m.k==='call'?'a call':'a day shift')+' on '+m.mk+'-'+m.dd+' to hand over.');
+  }
+  return lines.length?lines.join('\n'):'This swap would move nothing.';
+}
+// [130 · R-2] Who agreed to hand something over and no longer has it, in one sentence.
+function swapMissingText(missing){
+  return missing.map(m=>displayName(m.u)+' no longer has '+(m.k==='call'?'a call':'a day shift')+' on '+m.mk+'-'+m.dd+' to hand over').join('; ');
+}
+window.swapLegs=swapLegs; window.swapOutcome=swapOutcome; window.swapOutcomeText=swapOutcomeText;
+
 // [61] What a swap would hand to whom, and what is wrong with it.
 //
 // The subtlety worth stating: a straight swap does NOT change how many people are on a
@@ -2756,18 +2898,10 @@ window.ruleWarningsProbe=ruleWarnings;
 // performs the add. Capacity is then true, and "already holds" still means they held it
 // independently of this swap.
 async function swapWarnings(sw){
-  const legs=[];
-  if(sw.type==='3way'){
-    const [a,b,c]=sw.participants||[];
-    const L=sw.legs||[];
-    [[a,b,L[0]],[b,c,L[1]],[c,a,L[2]]].forEach(([giver,receiver,leg])=>{
-      if(leg&&leg.date) legs.push({mk:String(leg.date).slice(0,7),dd:String(leg.date).slice(8),giver,receiver,part:leg.part});
-    });
-  }else if(sw.date){
-    const mk=String(sw.date).slice(0,7), dd=String(sw.date).slice(8);
-    legs.push({mk,dd,giver:sw.from,receiver:sw.to,part:sw.part});
-    legs.push({mk,dd,giver:sw.to,receiver:sw.from,part:sw.part});
-  }
+  // [130] The legs come from swapLegs — the same reading the confirmation and the
+  // transaction use, so the check can never be run against a different swap than the one
+  // that commits.
+  const legs=swapLegs(sw);
   const dayCache={};
   for(const l of legs){
     const key=l.mk+'|'+l.dd;
@@ -2777,7 +2911,7 @@ async function swapWarnings(sw){
   const incoming=[];
   for(const l of legs){
     const key=l.mk+'|'+l.dd, cells=dayCache[key];
-    const k=l.part==='call'?'call':'day';
+    const k=l.k;
     const moving=shiftsOf(cells[l.giver]).filter(x=>kindOfShift(x)===k);
     for(const sid of moving) incoming.push({...l,s:sid,key});
     if(moving.length && cells[l.giver]){
@@ -3010,7 +3144,11 @@ function fillDay(days,dd,dt,dk,o){
     }
     days[dd][pick]={a:[...shiftEntries(days[dd][pick]),{s:id,by:_currentAdminEmail||'unknown',at:Date.now(),via:via}],off:!!days[dd][pick]?.off};
     o.counts[pick+'|'+id]=cnt(pick,id)+1;
-    o.changed[dd+'.'+pick]=true;
+    // [127 · E-1] WHICH shifts this fill added, not merely that the cell changed. The write
+    // appends exactly these to whatever the cell holds at write time, so the additions can no
+    // longer be recovered from the planned cell — that cell is a snapshot of a read that may
+    // be minutes old by the time Apply runs. Still truthy per key, so `byDay` is unchanged.
+    (o.changed[dd+'.'+pick]=o.changed[dd+'.'+pick]||[]).push(id);
     out.filled++;
     return true;
   };
@@ -3053,6 +3191,40 @@ function fillDay(days,dd,dt,dk,o){
 }
 window.fillDayProbe=fillDay;   // module scope — HANDOFF trap 1
 
+// ═══ [128 · N-2] OVER THE CEILING — the words this site did not have. ═══
+// The plan panel, the Apply confirmation, the coverage summary and the conflict report could all
+// say "could not be filled" and "stopped by a rule". Not one of them could say "too many people
+// on this shift". So a plan could hand a day two people on a shift whose ceiling is 1 and report
+// it to the admin as "496 assignments" and nothing else — which is exactly what the audit
+// measured after a Preview that ran before the month had arrived.
+// For every day the plan touched, and every shift anybody holds on that day, this asks whether
+// the day would end up with MORE people on that shift than the shift asks for. The count is what
+// the cell holds at planning time PLUS what the plan adds, because since build 127 the write
+// APPENDS rather than replaces. The ceiling is the same question fillDay itself asks —
+// shiftCeilingOn() over staffingOn() — asked with the date of the day being planned.
+// ⚠ The audit's E-4 / E-14 report a separate defect: other callers get the ceiling for the WRONG
+// date, because ddDate() ignores the day it is handed. That is NOT fixed here and is not touched
+// here; this call site simply passes the correct date for the day it is planning.
+function overCeilingOn(days,dd,dt,dk,changed){
+  const out=[];
+  const cells=(days&&days[dd])||{};
+  const counted={};
+  for(const u in cells) for(const id of shiftsOf(cells[u])) counted[id]=(counted[id]||0)+1;
+  for(const id of Object.keys(counted).sort()){
+    const sh=(catalog.shifts||{})[id]; if(!sh) continue;
+    const ceil=shiftCeilingOn(sh,dt);
+    if(!Number.isFinite(ceil)) continue;                  // no answer to compare against
+    const n=counted[id];
+    if(n<=ceil) continue;
+    let added=0;
+    for(const u in cells) added+=(((changed&&changed[dd+'.'+u])||[]).filter(x=>x===id)).length;
+    out.push(dk+' '+(sh.label||id)+': '+n+' people would be on this shift and the most it asks for is '+ceil
+      +(added?' — the plan adds '+added:' — the plan adds none here; the day was already over before this run'));
+  }
+  return out;
+}
+window.overCeilingProbe=overCeilingOn;   // module scope — HANDOFF trap 1
+
 // ═══ [120 · §123] THE ENGINE, IN TWO HALVES: PLAN (in memory, nothing written) and WRITE. ═══
 // The Engine page previews a plan and applies it on a second press; autoPopulate() below is
 // the old one-step form kept for the year runner's wording and for the suites that drive it.
@@ -3066,35 +3238,101 @@ async function enginePlan(ym){
   const counts= await windowShiftCounts(ym, 11);
   // …plus THIS month's already-placed assignments (the 12th month of the window).
   for(const dd in days) for(const u in days[dd]) for(const id of shiftsOf(days[dd][u])) counts[u+'|'+id]=(counts[u+'|'+id]||0)+1;
-  const plan={ym:ym,at:Date.now(),anyDemand:anyDemand,filled:0,notAsked:0,quotaFilled:0,onRequest:0,unfillable:[],declined:[],quotaConflicts:[],changed:{},days:days,byDay:{}};
+  const plan={ym:ym,at:Date.now(),anyDemand:anyDemand,filled:0,notAsked:0,quotaFilled:0,onRequest:0,unfillable:[],declined:[],quotaConflicts:[],overCeiling:[],changed:{},days:days,byDay:{},addsByDay:{}};
   const req=requestIndex();   // [126] approved requests, once per plan
   for(let d=1;d<=nDays;d++){
     const dd=pad(d), dk=ym+'-'+dd;
-    const r=fillDay(days,dd,new Date(y,m-1,d),dk,{vac:vac,counts:counts,anyDemand:anyDemand,changed:plan.changed,req:req});   // [117] one fill · [126] with the requests
+    const dt=new Date(y,m-1,d);
+    const r=fillDay(days,dd,dt,dk,{vac:vac,counts:counts,anyDemand:anyDemand,changed:plan.changed,req:req});   // [117] one fill · [126] with the requests
     plan.filled+=r.filled; plan.notAsked+=r.notAsked; plan.quotaFilled+=r.quotaFilled; plan.onRequest+=r.onRequest;
     plan.unfillable.push(...r.unfillable); plan.declined.push(...r.declined); plan.quotaConflicts.push(...r.quotaConflicts);
+    plan.overCeiling.push(...overCeilingOn(days,dd,dt,dk,plan.changed));   // [128 · N-2]
   }
-  // What would be written, by day and person — the preview reads this.
-  for(const key in plan.changed){ const [dd,u]=key.split('.'); (plan.byDay[dd]=plan.byDay[dd]||{})[u]=days[dd][u]; }
+  // What would be written, by day and person — the preview reads this. [127 · E-1] `addsByDay`
+  // is what the WRITE reads: the shift ids this plan adds, never the whole planned cell.
+  for(const key in plan.changed){ const [dd,u]=key.split('.'); (plan.byDay[dd]=plan.byDay[dd]||{})[u]=days[dd][u]; (plan.addsByDay[dd]=plan.addsByDay[dd]||{})[u]=plan.changed[key]; }
   return plan;
 }
 async function engineWrite(plan){
-  // [M-20] Write ONLY the cells the plan assigns, as a targeted field patch, instead of a
-  // full-month setDoc — a whole-month write would revert any change another admin/tab
-  // made during the multi-second fairness read above. [59] Grouped BY DAY.
-  for(const dd in plan.byDay) await mergeFields(dayRef(plan.ym,dd),plan.byDay[dd]);
+  // [127 · E-1] THE WRITE ADDS; IT NEVER REPLACES — and it says so when it stops. [E-11 · N-5]
+  // Days are written one at a time, so a rejection part-way through leaves days already in the
+  // schedule: the loop stops, records WHICH day failed, and the audit entry and the change feed
+  // below cover exactly what landed. The caller gets the same numbers for its toast and panel.
+  const dds=Object.keys(plan.addsByDay||{}).sort();
   const [y,m]=plan.ym.split('-').map(Number);
-  if(plan.ym===curYM&&monthIsPublished()){   // [122 · §6] the engine's fills reach people too
-    const list=[];
-    for(const dd in plan.byDay) for(const u in plan.byDay[dd]){
-      const added=shiftEntries(plan.byDay[dd][u]).filter(x=>x.via==='auto'&&x.at>=plan.at-1000).map(x=>x.s);
-      if(added.length) list.push({u:u,dk:plan.ym+'-'+dd,added:added,removed:[],off:null});
-    }
-    emitChanges(list);
+  const done=[], feed=[], skipped=[]; let wrote=0, failedOn=null, error='';
+  for(const dd of dds){
+    try{
+      const r=await writePlannedDay(plan.ym,dd,plan.addsByDay[dd]);
+      for(const c of r.feed) wrote+=c.added.length;
+      feed.push(...r.feed); skipped.push(...r.skipped); done.push(dd);
+    }catch(e){ failedOn=dd; error=(e&&(e.message||e.code))||'unknown error'; break; }
   }
-  auditLog('engine.month','Engine filled '+MS[m-1]+' '+y+' — '+plan.filled+' assignments'+(plan.quotaFilled?' ('+plan.quotaFilled+' to meet quota totals)':'')+(plan.unfillable.length?', '+plan.unfillable.length+' unfillable':'')+(plan.declined.length?', '+plan.declined.length+' declined by a rule':'')+(plan.notAsked?', '+plan.notAsked+' shift-days not asked for':'')+(plan.quotaConflicts.length?', '+plan.quotaConflicts.length+' quota conflict(s)':''));
+  // [122 · §6] the engine's fills reach people too — and after 127 the entries name what was
+  // ACTUALLY written, cell by cell, rather than being re-derived from the plan's own timestamps.
+  if(plan.ym===curYM&&monthIsPublished()) emitChanges(feed);
+  // [127] The skip count rides on EVERY report of the run — a plan whose assignments quietly
+  // shrank between Preview and Apply is exactly as misleading as one that quietly removed them.
+  const skipTail=skipped.length?', '+skipped.length+' skipped — marked off since preview':'';
+  const tail=(plan.quotaFilled?' ('+plan.quotaFilled+' to meet quota totals)':'')+(plan.unfillable.length?', '+plan.unfillable.length+' unfillable':'')+(plan.declined.length?', '+plan.declined.length+' declined by a rule':'')+(plan.notAsked?', '+plan.notAsked+' shift-days not asked for':'')+(plan.quotaConflicts.length?', '+plan.quotaConflicts.length+' quota conflict(s)':'');
+  if(failedOn) auditLog('engine.month.partial','Engine PARTIAL run on '+MS[m-1]+' '+y+' — STOPPED: '+done.length+' of '+dds.length+' days written ('+wrote+' assignments)'+skipTail+', failed on '+plan.ym+'-'+failedOn+': '+error+'. The days already written are still in the schedule.');
+  else auditLog('engine.month','Engine filled '+MS[m-1]+' '+y+' — '+wrote+' assignments'+tail+skipTail);
+  return {ok:!failedOn,days:done.length,total:dds.length,failedOn:failedOn,error:error,assignments:wrote,skipped:skipped};
 }
+// [127 · E-1] ONE DAY, ONE TRANSACTION, ADDITIONS ONLY — AND A DAY OFF WINS.
+// What stood here until 127 was `mergeFields(dayRef(ym,dd), plan.byDay[dd])` — an updateDoc
+// whose keys are INITIALS, never dotted, so it replaced each person's whole cell with the copy
+// the plan had built from a read taken before the multi-second fairness pass. Anything added to
+// that cell in between — another admin, an approved request, the same admin fixing the grid —
+// was overwritten, and the cell always carried `off:false`, so an approved day off was cleared.
+// The [M-20] comment on that line claimed the targeted patch existed so a write could not revert
+// another admin's change during the fairness read; it could not do that for any cell the plan
+// touched (audit N-3). This is the read-then-patch shape `mutateCell` already uses, and its
+// header names the old shape as "exactly that hole".
+// BATCHING: one transaction per DAY document, not per cell. A day is the unit the plan is
+// already grouped in and the unit `mutateCell` scopes its own transaction to (§47's contention
+// half); per cell would be the identical shape at up to thirty times the transactions per month.
+// The month's storage format is NOT re-checked here: both callers already refuse an unconverted
+// month before planning (`monthLockRefuse()`; the year runner's `ymLegacy` skip), exactly as
+// before this build, and asking again would add a month read per day.
+async function writePlannedDay(ym,dd,adds){
+  const feed=[], skipped=[];
+  await runTransaction(db, async (tx)=>{
+    feed.length=0; skipped.length=0;                // reset per attempt — this closure re-runs on conflict
+    const ref=dayRef(ym,dd);
+    const snap=await tx.get(ref);                   // every read before every write, as Firestore requires
+    const exists=snap.exists();
+    const data=exists?snap.data():{};
+    const patch={};
+    for(const u in adds){
+      const cur=data[u]||{};
+      // [127 · E-1] A DAY OFF MARKED SINCE PREVIEW BEATS THE PLAN. The plan could not have seen
+      // it — `fillDay`'s `free` excludes anyone already off in the snapshot — so `off:true` here
+      // is a decision a person made after the plan was built, and a machine does not write a
+      // shift beside it. The person is SKIPPED for the day and the skip is reported, never
+      // swallowed: a silently dropped assignment is the same class of defect as a silently
+      // deleted one.
+      if(cur.off){ skipped.push({dk:ym+'-'+dd,dd:dd,u:u,shifts:(adds[u]||[]).slice(),reason:'marked off since preview'}); continue; }
+      const held=shiftEntries(cur), ids=held.map(x=>x.s);
+      const add=(adds[u]||[]).filter(id=>ids.indexOf(id)<0);   // already held is a no-op, never a duplicate
+      if(!add.length) continue;
+      patch[u]={
+        a:held.map(x=>({s:x.s,by:x.by||_currentAdminEmail||'unknown',at:x.at||Date.now(),via:x.via||'manual'}))
+             .concat(add.map(id=>({s:id,by:_currentAdminEmail||'unknown',at:Date.now(),via:'auto'}))),
+        off:!!cur.off,                              // false here by construction — off:true was skipped above
+      };
+      feed.push({u:u,dk:ym+'-'+dd,added:add,removed:[],off:null});
+    }
+    if(!Object.keys(patch).length) return;          // every planned cell was skipped, or already holds its shift
+    if(exists) tx.update(ref,patch);
+    else       tx.set(ref,patch,{merge:true});
+  });
+  return {feed:feed,skipped:skipped};
+}
+// One line per skip, in the same words the panel, the alerts and the audit entry all use (§19).
+function skipLine(s){ return s.dk+' '+displayName(s.u)+' — '+(s.shifts||[]).map(x=>shiftLabel(x)).join(' + ')+' not placed ('+s.reason+')'; }
 window.enginePlanProbe=enginePlan;
+window.writePlannedDayProbe=writePlannedDay;   // module scope — HANDOFF trap 1
 function planSummary(plan){
   return plan.filled+' assignments'
     +(plan.quotaFilled?' ('+plan.quotaFilled+' to meet quota totals)':'')
@@ -3102,30 +3340,106 @@ function planSummary(plan){
     +(plan.notAsked?' · '+plan.notAsked+' shift-day(s) not asked for (§9)':'')
     +(plan.unfillable.length?' · '+plan.unfillable.length+' could not be filled':'')
     +(plan.declined.length?' · '+plan.declined.length+' stopped by a rule':'')
+    +((plan.overCeiling&&plan.overCeiling.length)?' · '+plan.overCeiling.length+' over the ceiling':'')   // [128 · N-2]
     +(plan.quotaConflicts.length?' · '+plan.quotaConflicts.length+' quota conflict(s)':'');
 }
 let _enginePlan=null;
+let _engineFail=null;   // [127 · E-11/N-5] the last Apply that stopped part-way, until the next Preview
+let _engineSkip=null;   // [127 · E-1] {ym, list:[skip]} — what the last Apply did NOT place, and why
+// ═══ [129 · E-7] A PREVIEW PLAN GOES STALE THE MOMENT ANY INPUT IT WAS BUILT FROM CHANGES. ═══
+// Until 129 nothing invalidated a plan except moving to another month or applying it. Preview
+// August, add a Serious rule barring overnight call, walk away and come back: the panel was
+// byte-for-byte the same, Apply was still enabled, and pressing it wrote 62 day-documents every
+// one of which carried the shift the new rule forbids. The audit executed exactly that. It is
+// also what makes E-1 reachable by one admin working alone — Preview, fix a cell in the grid,
+// come back, Apply.
+// ONE PATH, called from every listener that owns an input the plan was built from. The first
+// reason wins: it names what actually invalidated the plan, and a second change does not
+// overwrite the sentence the admin is being shown.
+let _engineStale=null;      // {ym, reason} while the plan on the panel no longer matches its inputs
+let _engineApplying=false;  // the engine's OWN writes are not "somebody changed something"
+function _enginePlanStale(reason){
+  if(_engineApplying) return;                       // Apply's own day-document writes echo back through the month listener
+  if(!_enginePlan) return;                          // nothing on the panel to invalidate
+  if(_engineStale&&_engineStale.ym===_enginePlan.ym) return;   // already stale — keep the first reason
+  _engineStale={ym:_enginePlan.ym,reason:String(reason||'Something changed since this preview')};
+  if(typeof markDirty==='function') markDirty('engine');       // [66 · S2] the panel may be hidden; this is what repaints it when it is next shown
+}
+window.enginePlanStale=_enginePlanStale;   // module scope — HANDOFF trap 1
+window.engineStaleProbe=()=>(_engineStale?{ym:_engineStale.ym,reason:_engineStale.reason}:null);
+let _enginePreviewBusy=false;   // [128 · E-2] Preview owns the button while it runs; the gate keeps off it
+// [128 · E-2] The Preview button is DISABLED while the month on screen is still arriving, and its
+// tooltip is the reason in the same words the refusal toast uses. Re-enabled by the month
+// listeners: both call renderAll(), and the month-document listener calls renderEngine() itself,
+// so the moment the data lands the button comes back without the admin doing anything.
+function engineGate(){
+  const btn=document.getElementById('engPreviewBtn'); if(!btn) return;
+  if(_enginePreviewBusy) return;
+  const loading=!monthReady();
+  btn.disabled=loading;
+  btn.title=loading?monthLoadingMsg():'';
+}
 window.enginePreview=async function(){
   if(monthLockRefuse()) return;                    // [59] never fill an unconverted month
+  if(monthLoadRefuse()) return;                    // [128 · E-2] never plan against a month that has not arrived
+  _engineFail=null; _engineSkip=null; _engineStale=null;   // [129 · E-7] a fresh plan is never stale
+  _enginePreviewBusy=true;
   const btn=document.getElementById('engPreviewBtn'); if(btn){ btn.disabled=true; btn.textContent='Working…'; }
   try{ _enginePlan=await enginePlan(curYM); }
   catch(e){ schedToast('Could not build the plan: '+((e&&e.message)||'unknown error'),'err'); }
-  if(btn){ btn.disabled=false; btn.textContent='🔍 Preview this month'; }
-  renderEngine();
+  _enginePreviewBusy=false;
+  if(btn){ btn.textContent='🔍 Preview this month'; }
+  renderEngine();      // [128] renderEngine calls engineGate(), which re-enables the button
 };
 window.engineApply=async function(){
   const plan=_enginePlan; if(!plan) return;
-  if(plan.ym!==curYM){ schedToast('That preview was for '+plan.ym+' — preview again for the month on screen.','err'); _enginePlan=null; renderEngine(); return; }
+  // [128 · E-2, verified and KEPT] A plan is only ever applied to the month it was built for.
+  // This is the guard the audit asked for: since 128 a plan can only exist for a month that had
+  // finished loading (enginePreview refuses otherwise), so "the plan's ym" and "the loaded ym"
+  // are the same question, and moving the month makes them differ. Build 129 adds the other half
+  // — a plan whose INPUTS changed under it.
+  if(plan.ym!==curYM){ schedToast('That preview was for '+plan.ym+' — preview again for the month on screen.','err'); _enginePlan=null; _engineStale=null; renderEngine(); return; }
+  // [129 · E-7] A STALE PLAN IS NEVER WRITTEN. The Apply button is already disabled while the
+  // plan is stale, but the button is not the guard — engineApply() is reachable from the console,
+  // from a queued click and from anything that calls it directly, and the audit's reproduction
+  // ends with a plan that applies a policy the admin has already revoked.
+  if(_engineStale&&_engineStale.ym===plan.ym){
+    schedToast(_engineStale.reason+' — preview again before applying.','err');
+    renderEngine(); return;
+  }
   if(monthLockRefuse()) return;
   const [y,m]=plan.ym.split('-').map(Number);
-  if(!confirm('Apply the engine\'s plan for '+MS[m-1]+' '+y+'?\n\n'+planSummary(plan)+'\n\nExisting assignments are kept. '
+  // [127 · E-1] Say what the write actually does. Until 127 this read "Existing assignments are
+  // kept", which the write did not do — it replaced each planned cell outright.
+  // [128 · N-2] …and say when a day would end up with MORE people on a shift than it asks for.
+  const oc=(plan.overCeiling||[]);
+  if(!confirm('Apply the engine\'s plan for '+MS[m-1]+' '+y+'?\n\n'+planSummary(plan)
+    +(oc.length?'\n\n⚠️ '+oc.length+' over the ceiling — more people on a shift than that shift asks for:\n'+oc.slice(0,8).join('\n')+(oc.length>8?'\n…and '+(oc.length-8)+' more':''):'')
+    +'\n\nEach shift is ADDED to whatever the cell already holds — an assignment made since you previewed is kept, and nothing is removed. Anyone MARKED OFF since you previewed is skipped for that day and named in the result. '
     +(monthIsPublished()?'This month is PUBLISHED — staff see the result immediately.':'This month is a DRAFT — staff will not see it until you publish.'))) return;
-  await engineWrite(plan);
-  _enginePlan=null;
-  schedToast('Applied — '+plan.filled+' assignments made.','ok');
+  _engineFail=null; _engineSkip=null;
+  // [129 · E-7] THE PLAN IS DISCARDED BEFORE THE WRITE, not after. It was always discarded — the
+  // line below used to sit after `await engineWrite(plan)` — but the day-document writes echo
+  // back through the month listener WHILE that await is running, and the plan must already be
+  // gone by then so the engine's own writes cannot mark their own plan stale. `_engineApplying`
+  // says the same thing a second way, for the listeners that fire from inside the transaction.
+  _enginePlan=null; _engineStale=null; _engineApplying=true;
+  // [127 · E-11 · N-5] A failed Apply was completely silent: no toast, no state change, an
+  // unhandled rejection in the console, and a month left half-filled with nothing recording it.
+  let res;
+  try{ res=await engineWrite(plan); }
+  catch(e){ res={ok:false,days:0,total:Object.keys(plan.addsByDay||{}).length,failedOn:'the first day',error:(e&&(e.message||e.code))||'unknown error',assignments:0,skipped:[]}; }
+  _engineApplying=false;
+  const skips=(res.skipped||[]);
+  if(skips.length) _engineSkip={ym:plan.ym,list:skips};
+  if(res.ok) schedToast('Applied — '+res.assignments+' assignments made.'+(skips.length?' '+skips.length+' skipped — marked off since preview.':''),'ok');
+  else{
+    _engineFail={ym:plan.ym,days:res.days,total:res.total,failedOn:res.failedOn,error:res.error,assignments:res.assignments};
+    schedToast('Apply STOPPED on '+plan.ym+'-'+res.failedOn+' — '+res.error+' '+res.days+' of '+res.total+' days were written and are in the schedule'+(skips.length?', '+skips.length+' skipped — marked off since preview':'')+'; preview again before applying.','err');
+  }
   renderEngine();
 };
-window.engineDiscard=function(){ _enginePlan=null; renderEngine(); };
+window.engineDiscard=function(){ _enginePlan=null; _engineFail=null; _engineSkip=null; _engineStale=null; renderEngine(); };
 const listHtml=(title,items,n)=> items.length ? ('<div style="margin-top:8px"><div style="font-size:11.5px;font-weight:700;color:var(--t2);margin-bottom:3px">'+title+' ('+items.length+')</div>'
   +'<div style="font-size:11.5px;color:var(--t1);line-height:1.5;max-height:220px;overflow:auto;background:var(--s2);border-radius:8px;padding:6px 9px">'+items.slice(0,n).map(x=>esc(x)).join('<br>')+(items.length>n?'<br>…and '+(items.length-n)+' more':'')+'</div></div>') : '';
 // [121 · §5] The month's state, and the two buttons that change it. Publishing names how many
@@ -3172,26 +3486,59 @@ function renderEngine(){
   const [y,m]=(curYM||ymKey(new Date())).split('-').map(Number);
   mEl.textContent=MS[m-1]+' '+y;
   renderPublishCard();
+  engineGate();          // [128 · E-2] Preview is off while the month on screen is still arriving
   const host=document.getElementById('engPlan');
   const plan=_enginePlan;
+  // [128 · E-2] …and the panel says so in words, not only through a greyed button.
+  const loadHtml=monthReady()?''
+    : '<div id="engLoading" style="font-size:12.5px;color:#92400e;background:#fef3c7;border-radius:8px;padding:8px 10px;margin-bottom:8px">⏳ <b>'
+      +esc(monthLoadingMsg())+'.</b> Preview waits until the month is here — planning against a month that has not arrived would treat everybody as free every day.</div>';
+  // [127 · E-11/N-5] An Apply that stopped part-way stays on the panel until the next Preview:
+  // how many days landed, which day failed and why. Nothing about a partial run is silent.
+  const failHtml=(_engineFail&&_engineFail.ym===curYM)
+    ? '<div id="engFail" style="font-size:12.5px;color:#92400e;background:#fef3c7;border-radius:8px;padding:8px 10px;margin-bottom:8px">⚠ <b>Apply stopped part-way.</b> '
+      +esc(String(_engineFail.days))+' of '+esc(String(_engineFail.total))+' days were written ('+esc(String(_engineFail.assignments))+' assignment'+(_engineFail.assignments===1?'':'s')+') before '
+      +esc(_engineFail.ym+'-'+_engineFail.failedOn)+' failed: '+esc(_engineFail.error)
+      +' Those days are in the schedule. Preview again before applying — the old plan no longer matches the month.</div>'
+    : '';
+  // [127 · E-1] What the last Apply did NOT place, and why. A person marked off between Preview
+  // and Apply keeps their day off and does not get the shift — said here by name, never dropped.
+  const skipHtml=(_engineSkip&&_engineSkip.ym===curYM&&_engineSkip.list.length)
+    ? '<div id="engSkip" style="font-size:12.5px;color:#92400e;background:#fef3c7;border-radius:8px;padding:8px 10px;margin-bottom:8px">⏭️ <b>'
+      +esc(String(_engineSkip.list.length))+' skipped — marked off since preview.</b> Their day off stands and the engine placed nothing on it:<br>'
+      +_engineSkip.list.slice(0,20).map(s=>esc(skipLine(s))).join('<br>')
+      +(_engineSkip.list.length>20?'<br>…and '+(_engineSkip.list.length-20)+' more':'')+'</div>'
+    : '';
+  // [129 · E-7] THE PLAN NO LONGER MATCHES WHAT IT WAS BUILT FROM, and says which thing changed.
+  // The banner is the visible half; the Apply button below is disabled and engineApply() refuses
+  // even if it is called some other way.
+  const stale=!!(plan&&_engineStale&&_engineStale.ym===plan.ym&&plan.ym===curYM);
+  const staleHtml=stale
+    ? '<div id="engStale" style="font-size:12.5px;color:#7c2d12;background:#ffedd5;border:1px solid #fdba74;border-radius:8px;padding:9px 11px;margin-bottom:8px">⚠ <b>'
+      +esc(_engineStale.reason)+'.</b> This plan was worked out before that, so it may no longer be right — the engine will not write it. Preview again to see what it would do now.'
+      +'<div style="margin-top:7px"><button class="btn btn-primary" id="engStaleBtn" onclick="enginePreview()">🔍 Preview again</button></div></div>'
+    : '';
   if(!plan||plan.ym!==curYM){
-    host.innerHTML=plan?'<div style="font-size:12px;color:#92400e">The preview you had was for another month. Preview again for '+esc(MS[m-1]+' '+y)+'.</div>':'';
+    host.innerHTML=loadHtml+failHtml+skipHtml+(plan?'<div style="font-size:12px;color:#92400e">The preview you had was for another month. Preview again for '+esc(MS[m-1]+' '+y)+'.</div>':'');
   } else {
     const dayRows=Object.keys(plan.byDay).sort().map(dd=>{ const c=plan.byDay[dd]; const who=Object.keys(c).sort().map(u=>displayName(u)+' → '+shiftEntries(c[u]).filter(x=>x.via==='auto'&&x.at>=plan.at-1000).map(x=>shiftLabel(x.s)).join(' + ')); return plan.ym+'-'+dd+': '+who.join(' · '); });
-    host.innerHTML='<div style="font-size:12.5px;color:var(--t1);font-weight:700;margin-bottom:6px">'+esc(planSummary(plan))+'</div>'
+    host.innerHTML=loadHtml+failHtml+skipHtml+staleHtml+'<div style="font-size:12.5px;color:var(--t1);font-weight:700;margin-bottom:6px">'+esc(planSummary(plan))+'</div>'
       +'<div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">'
-        +'<button class="btn btn-primary" id="engApplyBtn" onclick="engineApply()"'+(plan.filled?'':' disabled')+'>✅ Apply — write '+plan.filled+' assignment'+(plan.filled===1?'':'s')+'</button>'
+        +'<button class="btn btn-primary" id="engApplyBtn" onclick="engineApply()"'+((plan.filled&&!stale)?'':' disabled')+(stale?' title="'+esc(_engineStale.reason)+' — preview again before applying"':'')+'>✅ Apply — write '+plan.filled+' assignment'+(plan.filled===1?'':'s')+'</button>'
         +'<button class="btn btn-ghost" onclick="engineDiscard()">Discard</button>'
       +'</div>'
       +listHtml('Would assign',dayRows,31)
       +listHtml('Stopped by a rule — nobody eligible could take these without breaking one',plan.declined,20)
       +listHtml('Could not fill — nobody eligible and free',plan.unfillable,20)
+      // [128 · N-2] the over-fill, in the same place as the other two things the plan cannot do well
+      +((plan.overCeiling&&plan.overCeiling.length)?'<div id="engOver">'+listHtml('Over the ceiling — more people on a shift than that shift asks for',plan.overCeiling,20)+'</div>':'')
       +listHtml('Quota conflicts — left standing, nothing removed',plan.quotaConflicts,20);
   }
   renderManualForm();
 }
 window.autoPopulate=async function(){
   if(monthLockRefuse()) return;                    // [59] never fill an unconverted month
+  if(monthLoadRefuse()) return;                    // [128 · E-2] never fill a month that has not arrived
   const [y,m]=curYM.split('-').map(Number);
   const _anyDemand=anyDemandConfigured();
   // [78 · defect 5] The dialog says what the button will actually do.
@@ -3199,16 +3546,32 @@ window.autoPopulate=async function(){
     +(_anyDemand
       ? 'Fills what the STAFFING RULES ask for on each day, using eligibility + even call distribution. A shift with no rule for a day is not asked for and is left empty (§9).'
       : 'No shift has staffing rules yet, so this falls back to filling every shift every day, to shift capacity. Set staffing rules in the Shift Catalog to control which days are actually asked for.')
-    +'\n\nExisting assignments are kept. Users see changes immediately.')) return;
-  const plan=await enginePlan(curYM);
-  await engineWrite(plan);
-  const {filled,quotaFilled,notAsked,unfillable,declined,quotaConflicts}=plan;
+    +'\n\nEach shift is ADDED to whatever the cell already holds at the moment it is written — an existing assignment is kept and nothing is removed. Anyone marked OFF by the time it writes is skipped for that day and named in the report. Users see changes immediately.')) return;
+  // [127 · E-11 · N-5] The same failure handling as Apply: nothing about a failed or partial run
+  // is silent, and the days that landed are audited and fed to the people they touched.
+  let plan=null,res=null;
+  try{ plan=await enginePlan(curYM); res=await engineWrite(plan); }
+  catch(e){
+    const msg=(e&&(e.message||e.code))||'unknown error';
+    auditLog('autopopulate.failed','Auto-populate of '+MS[m-1]+' '+y+' FAILED before any day was written: '+msg);
+    schedToast('Auto-populate FAILED — '+msg,'err');
+    alert('Auto-populate FAILED — '+msg+'\n\nNothing was written. Check the Schedule Grid before running it again.');
+    return;
+  }
+  const {quotaFilled,notAsked,unfillable,declined,quotaConflicts}=plan;
+  const overCeiling=plan.overCeiling||[];          // [128 · N-2]
+  const skips=(res.skipped||[]);
+  if(!res.ok) schedToast('Auto-populate STOPPED on '+curYM+'-'+res.failedOn+' — '+res.error+' '+res.days+' of '+res.total+' days were written and are in the schedule.','err');
+  else if(skips.length) schedToast('Auto-populate complete — '+res.assignments+' assignments made. '+skips.length+' skipped — marked off since preview.','ok');
   // [78] Say what was SKIPPED as well as what was filled.
-  alert('Auto-populate complete — '+filled+' assignments made.'
+  alert((res.ok?'Auto-populate complete — '+res.assignments+' assignments made.'
+                :'Auto-populate STOPPED — '+res.assignments+' assignments made across '+res.days+' of '+res.total+' days, then '+curYM+'-'+res.failedOn+' failed: '+res.error+'\nThe days already written are in the schedule; run it again once the failure is fixed.')
+    +(skips.length?'\n\n⏭️ '+skips.length+' skipped — marked off since preview. Their day off stands:\n'+skips.slice(0,15).map(skipLine).join('\n')+(skips.length>15?'\n…and '+(skips.length-15)+' more':''):'')
     +(quotaFilled?'\n\n🧮 '+quotaFilled+' of them were placed to meet QUOTA totals, on top of the shifts’ own minimums.':'')
     +(notAsked?'\n\n⏭️ '+notAsked+' shift-day(s) were not asked for by any staffing rule and were left empty (§9).':'')
     +(declined.length?'\n\n⛔ Stopped by a rule (nobody eligible could take these without breaking one):\n'+declined.slice(0,15).join('\n')+(declined.length>15?'\n…and '+(declined.length-15)+' more':''):'')
     +(unfillable.length?'\n\n⚠️ Could not fill (no eligible user):\n'+unfillable.slice(0,15).join('\n')+(unfillable.length>15?'\n…and '+(unfillable.length-15)+' more':''):'')
+    +(overCeiling.length?'\n\n⚠️ OVER THE CEILING — more people on a shift than that shift asks for:\n'+overCeiling.slice(0,15).join('\n')+(overCeiling.length>15?'\n…and '+(overCeiling.length-15)+' more':''):'')
     +(quotaConflicts.length?'\n\n⚠️ QUOTA CONFLICTS — left standing for you to resolve, nothing was removed:\n'+quotaConflicts.slice(0,15).join('\n')+(quotaConflicts.length>15?'\n…and '+(quotaConflicts.length-15)+' more':''):''));
 };
 
@@ -3314,6 +3677,8 @@ window.autoPopulateYear=async function(){
   const _cache={}; // ym -> days; updated as we fill each month so later rolling windows see this run's fresh fills
   const _req=requestIndex();   // [126] approved requests, once per run
   const skippedLegacy=[]; // [59] months still in the pre-split format — skipped, and named at the end
+  let yearFail=null;      // [127 · E-11] the day a write was refused on, if one was
+  const grandSkipped=[];  // [127 · E-1] people marked off by the time the year run reached their day
   let grandFilled=0, grandNotAsked=0, grandQuota=0; const grandUnfillable=[], grandConflicts=[];
   for(let m=1;m<=12;m++){
     const ym=year+'-'+pad(m);
@@ -3336,15 +3701,30 @@ window.autoPopulateYear=async function(){
       grandFilled+=r.filled; grandNotAsked+=r.notAsked; grandQuota+=r.quotaFilled;
       grandUnfillable.push(...r.unfillable, ...r.declined); grandConflicts.push(...r.quotaConflicts);   // [120] declined-by-rule rides with unfillable in the year summary
     }
-    // [M-20] targeted patch — only this run's fills, never a whole-month overwrite.
-    // [59] Grouped BY DAY, one write per day document that actually changed.
-    const byDay={};
-    for(const key in changed){ const [dd,u]=key.split('.'); (byDay[dd]=byDay[dd]||{})[u]=days[dd][u]; }
-    for(const dd in byDay) await mergeFields(dayRef(ym,dd),byDay[dd]);
+    // [127 · E-1] The same additive per-day transaction the month runner uses — this loop was
+    // the second copy of the whole-cell patch, and it cleared `off` and dropped assignments in
+    // exactly the same way over its (shorter) window. [59] One write per day that changed.
+    const addsByDay={};
+    for(const key in changed){ const [dd,u]=key.split('.'); (addsByDay[dd]=addsByDay[dd]||{})[u]=changed[key]; }
+    // [127 · E-11] The year run stops on a failure and NAMES the day, rather than dying as an
+    // unhandled rejection with the months before it already written and nothing recording them.
+    for(const dd of Object.keys(addsByDay).sort()){
+      try{ const r=await writePlannedDay(ym,dd,addsByDay[dd]); grandSkipped.push(...r.skipped); }
+      catch(e){ yearFail={ym:ym,dd:dd,error:(e&&(e.message||e.code))||'unknown error'}; break; }
+    }
+    if(yearFail) break;
     _cache[ym]=days; // so later months' rolling windows include this month's fresh fills
   }
-  auditLog('autopopulate.year','Auto-populated all of '+year+' — '+grandFilled+' assignments'+(grandQuota?' ('+grandQuota+' to meet quota totals)':'')+(grandUnfillable.length?', '+grandUnfillable.length+' unfillable':'')+(grandNotAsked?', '+grandNotAsked+' shift-days not asked for':'')+(grandConflicts.length?', '+grandConflicts.length+' quota conflict(s)':''));
-  alert('Auto-populate year complete for '+year+' — '+grandFilled+' assignments made across '+(12-skippedLegacy.length)+' of 12 months.'
+  // [127 · E-11] A refused write is audited and toasted as a PARTIAL year, never reported as
+  // "complete" over the months that were never reached.
+  const ySkipTail=grandSkipped.length?', '+grandSkipped.length+' skipped — marked off since preview':'';
+  if(yearFail) auditLog('autopopulate.year.partial','Auto-populate of '+year+' STOPPED on '+yearFail.ym+'-'+yearFail.dd+': '+yearFail.error+ySkipTail+'. The months before it are written and stand.');
+  else auditLog('autopopulate.year','Auto-populated all of '+year+' — '+grandFilled+' assignments'+(grandQuota?' ('+grandQuota+' to meet quota totals)':'')+(grandUnfillable.length?', '+grandUnfillable.length+' unfillable':'')+(grandNotAsked?', '+grandNotAsked+' shift-days not asked for':'')+(grandConflicts.length?', '+grandConflicts.length+' quota conflict(s)':'')+ySkipTail);
+  if(yearFail) schedToast('Auto-populate STOPPED on '+yearFail.ym+'-'+yearFail.dd+' — '+yearFail.error+' The months already written are in the schedule.','err');
+  else if(grandSkipped.length) schedToast('Auto-populate year complete — '+grandFilled+' assignments made. '+grandSkipped.length+' skipped — marked off since preview.','ok');
+  alert((yearFail?'Auto-populate year STOPPED for '+year+' on '+yearFail.ym+'-'+yearFail.dd+': '+yearFail.error+'\nThe months already written stand; nothing after that day was attempted.'
+                 :'Auto-populate year complete for '+year+' — '+grandFilled+' assignments made across '+(12-skippedLegacy.length)+' of 12 months.')
+    +(grandSkipped.length?'\n\n⏭️ '+grandSkipped.length+' skipped — marked off since preview. Their day off stands:\n'+grandSkipped.slice(0,10).map(skipLine).join('\n')+(grandSkipped.length>10?'\n…and '+(grandSkipped.length-10)+' more':''):'')
     // [59] Skipped months are named, not quietly passed over. "Complete" while four months
     // were never touched is the kind of true-sounding sentence that costs a day to unpick.
     +(grandQuota?'\n\n🧮 '+grandQuota+' of them were placed to meet QUOTA totals, on top of the shifts’ own minimums.':'')
@@ -3659,9 +4039,9 @@ function renderSwaps(){
 // turn came before admin's (status==='pending_admin') — admin is always
 // the last step, never the first.
 async function decideSwapTx(id,status){
-  let s=null, blocked=null, changes=[];
+  let s=null, blocked=null, refused=null, changes=[];
   await runTransaction(db, async (tx)=>{
-    s=null; blocked=null; changes=[];               // reset per attempt — this closure re-runs on conflict
+    s=null; blocked=null; refused=null; changes=[]; // reset per attempt — this closure re-runs on conflict
     const iRef=doc(swapItemsCol,String(id));
     const iSnap=await tx.get(iRef);
     let item=iSnap.exists()?iSnap.data():null;
@@ -3671,16 +4051,10 @@ async function decideSwapTx(id,status){
       item=l.find(x=>x&&x.id===id)||null;
     }
     if(!item||item._gone||item.status!=='pending_admin') return;   // decided already, or gone
-    // What moves. 2-way: an exchange of each side's shifts OF THAT KIND on one day. 3-way:
-    // A→B→C→A, each leg a one-directional handoff of the giver's shifts of that kind.
-    const legs=[];
-    if(item.type==='3way'){
-      const [a,b,c]=item.participants||[]; const L=item.legs||[];
-      [[a,b,L[0]],[b,c,L[1]],[c,a,L[2]]].forEach(([giver,receiver,leg])=>{ if(leg&&leg.date) legs.push({mk:String(leg.date).slice(0,7),dd:String(leg.date).slice(8),giver,receiver,k:leg.part==='call'?'call':'day'}); });
-    } else if(item.date){
-      const mk=String(item.date).slice(0,7), dd=String(item.date).slice(8), k=item.part==='call'?'call':'day';
-      legs.push({mk,dd,giver:item.from,receiver:item.to,k,exchange:true});
-    }
+    // What moves. 2-way: an exchange of each side's shifts OF THAT KIND on one day, read as
+    // two handoffs pointing opposite ways. 3-way: A→B→C→A. [130] Read in ONE place, so the
+    // warning check, the confirmation and this write are all talking about the same swap.
+    const legs=swapLegs(item);
     // READS FIRST (Firestore requires it): every month document and every day document, once each.
     const months={}, dayDocs={}, dayData={};
     if(status==='approved'){
@@ -3691,42 +4065,33 @@ async function decideSwapTx(id,status){
       }
       for(const mk in months){ const md=months[mk]; if(md&&md.days&&Object.keys(md.days).length&&md.v2!==true){ blocked=mk+' is still in the old storage format. Convert it first.'; return; } }
     }
-    // COMPUTE, in memory, in order.
-    const touched={};   // key -> {u:true}
-    const before={};    // key|u -> ids
-    const cellOf=(key,u)=>dayData[key][u]||{};
-    const setCell=(key,u,shifts,off)=>{ dayData[key][u]={a:shifts.map(x=>({s:x.s,by:x.by||_currentAdminEmail||'unknown',at:x.at||Date.now(),via:x.via||'swap'})),off:!!off}; (touched[key]=touched[key]||{})[u]=true; };
-    const note=(key,u)=>{ if(!(key+'|'+u in before)) before[key+'|'+u]=shiftsOf(cellOf(key,u)); };
+    // COMPUTE — [130 · R-1] ONE before-picture per date, every leg read from it.
+    // The day documents just read are the snapshot, and nothing writes back into them, so
+    // leg 2 cannot pick up what leg 1 handed over. A rotation whose legs all fall on the
+    // same date therefore comes out as a rotation: each person loses what they give and
+    // gains what they receive, in the same step.
+    let out={after:{},missing:[],moved:[]};
     if(status==='approved'){
-      for(const l of legs){
-        const key=l.mk+'|'+l.dd;
-        if(l.exchange){
-          note(key,l.giver); note(key,l.receiver);
-          const A=cellOf(key,l.giver), B=cellOf(key,l.receiver);
-          const aMove=shiftsOf(A).filter(x=>kindOfShift(x)===l.k), bMove=shiftsOf(B).filter(x=>kindOfShift(x)===l.k);
-          const into=(cell,keepOut,bringIn)=>[...shiftEntries(cell).filter(x=>keepOut.indexOf(x.s)<0), ...bringIn.filter(id=>!shiftEntries(cell).some(y=>y.s===id)).map(id=>({s:id,via:'swap'}))];
-          const newA=into(A,aMove,bMove), newB=into(B,bMove,aMove);
-          setCell(key,l.giver,newA,A.off); setCell(key,l.receiver,newB,B.off);
-        } else {
-          note(key,l.giver); note(key,l.receiver);
-          const G=cellOf(key,l.giver), R=cellOf(key,l.receiver);
-          const moving=shiftsOf(G).filter(x=>kindOfShift(x)===l.k);
-          if(!moving.length) continue;
-          const newR=[...shiftEntries(R), ...moving.filter(id=>!shiftEntries(R).some(y=>y.s===id)).map(id=>({s:id,via:'swap'}))];
-          const newG=shiftEntries(G).filter(x=>moving.indexOf(x.s)<0);
-          setCell(key,l.receiver,newR,R.off); setCell(key,l.giver,newG,G.off);
-        }
-      }
+      out=swapOutcome(legs,dayData);
+      // [130 · R-2] Everyone named as handing something over must still hold it. If some do
+      // and some do not, approving would move part of the swap and not the rest — a
+      // one-sided transfer of work recorded as a mutual agreement. Refuse the whole thing
+      // here, inside the transaction, on the freshest data there is: nothing is written and
+      // the swap stays exactly where it was, waiting for the admin.
+      // (When NOBODY still holds anything the swap moves nothing at all; that is a no-op and
+      // is recorded as decided, which is what it has always done.)
+      if(out.missing.length&&out.moved.length){ refused=swapMissingText(out.missing); s=item; return; }
     }
     // WRITES: the swap, then every changed cell — one commit.
     tx.set(iRef,{...item,status,decidedTs:Date.now()});
-    for(const key in touched){
+    for(const key in out.after){
       const [mk,dd]=key.split('|');
-      for(const u in touched[key]){
-        const cell=dayData[key][u];
+      for(const u in out.after[key]){
+        const st=out.after[key][u];
+        const cell={a:st.shifts.map(x=>({s:x.s,by:x.by||_currentAdminEmail||'unknown',at:x.at||Date.now(),via:x.via||'swap'})),off:!!st.off};
         if(dayDocs[key].exists) tx.update(dayRef(mk,dd),{[u]:cell}); else tx.set(dayRef(mk,dd),{[u]:cell},{merge:true});
         dayDocs[key].exists=true;
-        const was=before[key+'|'+u]||[], now=shiftsOf(cell);
+        const was=shiftsOf(dayData[key]&&dayData[key][u]), now=shiftsOf(cell);
         const added=now.filter(x=>was.indexOf(x)<0), removed=was.filter(x=>now.indexOf(x)<0);
         const md=months[mk]; const published=!(md&&md.published===false);
         if(published&&(added.length||removed.length)) changes.push({u:u,dk:mk+'-'+dd,added:added,removed:removed,off:null});
@@ -3734,7 +4099,7 @@ async function decideSwapTx(id,status){
     }
     s=item;
   });
-  return {s:s,blocked:blocked,changes:changes};
+  return {s:s,blocked:blocked,refused:refused,changes:changes};
 }
 window.decideSwap=async function(id,status){
   // [H-10/M-16] Flip status inside a transaction on the FRESH swaps list, guarded on
@@ -3765,11 +4130,22 @@ window.decideSwap=async function(id,status){
         schedToast('Could not check this swap: '+((e&&e.message)||'a day could not be read')+' Nothing was approved.','err');
         return;
       }
-      if(warn.length){
-        if(!confirm('Approve this swap?\n\n⚠️ '+warn.join('\n⚠️ ')
-          +'\n\nNothing is blocked — you can approve it anyway, and the override will be recorded in the audit log with the reason.')) return;
-        swapOverrode=warn.join(' · ');
-      }
+      // ══ [130 · RA-6 R-1] THE CONFIRMATION IS THE WRITE, IN WORDS ══
+      // It used to appear only when something was wrong with the swap, and it was worked out
+      // by a different piece of code from the one that did the writing — so a same-date
+      // rotation showed a correct-looking handoff and then wrote something else entirely.
+      // Now every approval shows what moves and what each person holds afterwards, built by
+      // swapOutcome from the same before-picture the transaction will use.
+      let after='';
+      try{
+        const legs=swapLegs(pre), cache={};
+        for(const l of legs){ const key=l.mk+'|'+l.dd; if(!cache[key]) cache[key]=JSON.parse(JSON.stringify(await readDay(l.mk,l.dd))); }
+        after=swapOutcomeText(swapOutcome(legs,cache));
+      }catch(e){ after='(the days involved could not be read just now — approving will check them again before anything is written)'; }
+      if(!confirm('Approve this swap?\n\n'+after
+        +(warn.length?'\n\n⚠️ '+warn.join('\n⚠️ ')
+          +'\n\nNothing is blocked — you can approve it anyway, and the override will be recorded in the audit log with the reason.':''))) return;
+      if(warn.length) swapOverrode=warn.join(' · ');
     }
   }
   // ══ [123 · defect 3 CLOSED] ONE TRANSACTION: the status flip AND every schedule leg. ══
@@ -3784,6 +4160,15 @@ window.decideSwap=async function(id,status){
   catch(e){ schedToast('Nothing was '+(status==='approved'?'approved':'decided')+' — the swap is still pending: '+((e&&e.message)||'the write failed'),'err'); console.warn('swap decide failed',e); return; }
   if(!r.s) return;                 // already decided / vanished — nothing written, nothing audited
   const s=r.s;
+  // [130 · R-2] Someone no longer holds what they agreed to hand over. Nothing was written
+  // and the swap is still waiting: say who, and record the refusal, because "the site said
+  // no" has to be as visible in the log as "the site said yes".
+  if(r.refused){
+    schedToast('Nothing was approved — this swap can no longer happen the way it was agreed: '+r.refused+'. It is still waiting for you.','err');
+    auditLog('swap.decide','REFUSED — nothing moved, the swap is still waiting: '+r.refused+' · '
+      +(s.type==='3way'?'3-way swap '+(s.participants||[]).map(displayName).join(' → '):'swap between '+displayName(s.from)+' and '+displayName(s.to)+' on '+s.date));
+    return;
+  }
   let applyErr=r.blocked?new Error(r.blocked):null;
   if(applyErr){ schedToast('Nothing was approved: '+r.blocked,'err'); return; }
   if(status==='approved'&&r.changes.length) emitChanges(r.changes);   // [122 · §6] on published months only
@@ -9692,13 +10077,16 @@ authReady.then(()=>{
   onSnapshot(emailsRef,snap=>{ emailsData=snap.exists()?snap.data():{}; emailsLoaded=true; renderAll(); });
   onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; loginEmailsLoaded=true; markDirty('users'); });
   onSnapshot(adminAccessRef,snap=>{ adminAccessEmails=snap.exists()?(snap.data().emails||[]).map(x=>String(x).toLowerCase()):[]; markDirty('adminAccess'); });
-  onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
-  onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); });
+  onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); _enginePlanStale('Vacation changed since this preview'); });   // [129 · E-7]
+  onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); _enginePlanStale('Vacation changed since this preview'); });   // [129 · E-7]
   onSnapshot(catalogRef,async snap=>{
     if(!snap.exists()||!snap.data().shifts||!Object.keys(snap.data().shifts).length){
       await setDoc(catalogRef,{shifts:DEFAULT_SHIFTS},{merge:true}); return; // seed once; listener refires
     }
     catalog=snap.data();
+    // [129 · E-7] The shift catalog is where the shifts, their staffing rules, their ceilings AND
+    // (since 89 · §98) their per-shift ELIGIBILITY all live, so one listener covers all of them.
+    _enginePlanStale('The shift list changed since this preview');
     // One-time migration: merge in the QGenda-imported shift list (v2) without
     // touching anything admin already added, edited, or deleted. Runs once —
     // marked by _v2Seeded on the catalog doc — then never runs again, so
@@ -9795,18 +10183,18 @@ authReady.then(()=>{
   // the answer it had before.
   // [102] Quotas are read ONLY by their own page in this build — nothing else consumes them
   // yet, so nothing else is marked dirty. When they gain a consumer, add it here.
-  onSnapshot(quotasRef,snap=>{ quotasData=snap.exists()?snap.data():{}; quotasLoaded=true; markDirty('quotas'); });
+  onSnapshot(quotasRef,snap=>{ quotasData=snap.exists()?snap.data():{}; quotasLoaded=true; markDirty('quotas'); _enginePlanStale('Quotas changed since this preview'); });   // [129 · E-7]
   // [105] Rules are read ONLY by their own page in this build — the checker is not wired into
   // mutateCell or auto-populate, so nothing else is marked dirty. When the warn-and-override
   // path arrives, the cell modal joins this list.
-  onSnapshot(rulesRef,snap=>{ rulesData=snap.exists()?snap.data():{}; rulesLoaded=true; markDirty('rules','grid'); });   // [124] the grid's marks follow the rules
-  onSnapshot(requestTypesRef,snap=>{ rtData=snap.exists()?snap.data():{}; rtLoaded=true; markDirty('reqtypes','requests'); });   // [125]
+  onSnapshot(rulesRef,snap=>{ rulesData=snap.exists()?snap.data():{}; rulesLoaded=true; markDirty('rules','grid'); _enginePlanStale('Rules changed since this preview'); });   // [124] the grid's marks follow the rules · [129 · E-7] and so does a preview plan
+  onSnapshot(requestTypesRef,snap=>{ rtData=snap.exists()?snap.data():{}; rtLoaded=true; markDirty('reqtypes','requests'); _enginePlanStale('Requests changed since this preview'); });   // [125] · [129 · E-7]
   onSnapshot(printCfgRef,snap=>{ printCfg=snap.exists()?snap.data():{}; printCfgLoaded=true; markDirty('print'); });
   onSnapshot(callArchiveRef,snap=>{ callArchive=snap.exists()?snap.data():{}; callArchiveLoaded=true; markDirty('stats'); });
   onSnapshot(feedTokensRef,snap=>{ feedTokens=snap.exists()?snap.data():{}; feedTokensLoaded=true; markDirty('feeds'); });
-  onSnapshot(groupsRef,snap=>{ groupsData=snap.exists()?snap.data():{}; groupsLoaded=true; markDirty('groups','grid','reports','rules'); });
-  onSnapshot(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; membersLoaded=true; markDirty('groups','grid','reports','rules'); });
-  onSnapshot(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; categoriesLoaded=true; markDirty('groups','grid','reports','rules'); });
+  onSnapshot(groupsRef,snap=>{ groupsData=snap.exists()?snap.data():{}; groupsLoaded=true; markDirty('groups','grid','reports','rules'); _enginePlanStale('Groups or categories changed since this preview'); });   // [129 · E-7]
+  onSnapshot(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; membersLoaded=true; markDirty('groups','grid','reports','rules'); _enginePlanStale('Groups or categories changed since this preview'); });   // [129 · E-7]
+  onSnapshot(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; categoriesLoaded=true; markDirty('groups','grid','reports','rules'); _enginePlanStale('Groups or categories changed since this preview'); });   // [129 · E-7]
   // [68 · S4] TWO listeners per list — the frozen legacy array and the item docs —
   // recombined into the same {list:[]} shape every renderer already reads. An item doc
   // wins over a legacy entry with its id; _gone tombstones drop out entirely.
@@ -9817,7 +10205,7 @@ authReady.then(()=>{
     return out;
   };
   let _reqLegacy=[], _reqItems=new Map(), _swapLegacy=[], _swapItems=new Map(), _openLegacy=[], _openItems=new Map();
-  const _reMergeReq =()=>{ requests={list:mergeItems(_reqLegacy,_reqItems)};    markDirty('requests','badges','dash'); };
+  const _reMergeReq =()=>{ requests={list:mergeItems(_reqLegacy,_reqItems)};    markDirty('requests','badges','dash'); _enginePlanStale('Requests changed since this preview'); };   // [129 · E-7] approved requests are an engine input (126)
   const _reMergeSwap=()=>{ swaps={list:mergeItems(_swapLegacy,_swapItems)};     markDirty('swaps','badges','dash'); };
   const _reMergeOpen=()=>{ openShifts={list:mergeItems(_openLegacy,_openItems)}; markDirty('open','openSel','dash'); };
   onSnapshot(requestsRef,snap=>{ const d=snap.exists()?snap.data():{}; _reqLegacy=Array.isArray(d.list)?d.list:[]; _reMergeReq(); });
@@ -9826,11 +10214,11 @@ authReady.then(()=>{
   onSnapshot(swapItemsCol,qs=>{ _swapItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeSwap(); });
   onSnapshot(openRef,snap=>{ const d=snap.exists()?snap.data():{}; _openLegacy=Array.isArray(d.list)?d.list:[]; _reMergeOpen(); });
   onSnapshot(openItemsCol,qs=>{ _openItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeOpen(); });
-  onSnapshot(callBaselineRef,snap=>{ baselineData=snap.exists()?snap.data():{}; markDirty('baseline'); });
+  onSnapshot(callBaselineRef,snap=>{ baselineData=snap.exists()?snap.data():{}; markDirty('baseline'); _enginePlanStale('The call fairness baseline changed since this preview'); });   // [129 · E-7] it is the 12th month of the fairness window
   // [51] Reports. Both are dailysched documents — this site's own. Absent is a valid state:
   // no tags doc means reports use the owner's starting set, and no compPool doc means
   // everybody counts. Neither is seeded automatically, so nothing is written on page load.
-  onSnapshot(tagsRef,snap=>{ tagsData=snap.exists()?snap.data():null; ocDraft=null; markDirty('reports','rules'); });
+  onSnapshot(tagsRef,snap=>{ tagsData=snap.exists()?snap.data():null; ocDraft=null; markDirty('reports','rules'); _enginePlanStale('Rules changed since this preview'); });   // [129 · E-7] a tag IS the shift list a rule or a request points at
   // [93 · §43·2] 'groups' joins this. The group card now LISTS the members whose individual
   // setting disagrees with it, and that list is read from this document — without the repaint,
   // the one screen the ruling requires the override to be visible on would go on showing the
