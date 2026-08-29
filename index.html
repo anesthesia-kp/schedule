@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 43;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 46;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -159,6 +159,19 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 .cal .d{background:var(--s2);border:1px solid var(--b1);border-radius:9px;min-height:74px;padding:5px 7px;font-size:11px}
 .cal .d .dn{font-size:10px;color:var(--t3);font-weight:700}
 .cal .d.today{outline:2px solid var(--blue)}
+/* [44 · RA-6 V-17] A blank day says why it is blank. Three states that cannot be confused
+   with each other or with a published day that has nothing on it. */
+.st{display:inline-block;border-radius:4px;padding:0 5px;font-weight:700;font-size:10px;white-space:nowrap;line-height:16px}
+.st-draft{background:#fef3c7;color:#92400e;border:1px dashed #f59e0b}
+.st-error{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}
+.st-loading{background:var(--s3);color:var(--t3);font-weight:600}
+.st-none{color:var(--t3);font-weight:600;font-size:10px}
+.m-draft .d,table.grid.m-draft td:not(.stick1){background:#fffbeb}
+.m-error .d,table.grid.m-error td:not(.stick1){background:#fef2f2}
+/* [44 · RA-6 V-21] Quick View days get the same card as a calendar day — they were bare boxes. */
+#quickView .d{background:var(--s2);border:1px solid var(--b1);border-radius:9px;padding:5px 7px;font-size:11px}
+#quickView .d .dn{font-size:10px;color:var(--t3);font-weight:700}
+#quickView .d.today{outline:2px solid var(--blue)}
 .rowline{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px dashed var(--b1);font-size:13px;flex-wrap:wrap}
 .status-pending{color:var(--yellow)} .status-approved{color:var(--green)} .status-denied{color:var(--red)}
 .mono{font-family:var(--mono)}
@@ -285,6 +298,9 @@ table.grid th.stick1{background:var(--s2);z-index:3}
         <span><b class="cell-call">■</b> call</span>
         <span><b class="cell-off">■</b> day off</span>
         <span><b class="cell-vac">■</b> vacation (from auction)</span>
+        <span><span class="st st-none">·</span> nothing scheduled</span>
+        <span><span class="st st-draft">Not published</span> still being built</span>
+        <span><span class="st st-error">Couldn’t load</span> ask an admin</span>
       </div>
       <div id="draftNote" style="display:none;margin:0 0 10px;padding:9px 12px;border-radius:8px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e;font-size:12.5px;font-weight:700"></div>
       <div class="cal" id="myCal"></div>
@@ -306,6 +322,8 @@ table.grid th.stick1{background:var(--s2);z-index:3}
     </div>
     <div class="card">
       <div class="card-title">Everyone</div>
+      <!-- [44 · RA-6 D-2] the month notice lives on THIS panel too, not only on Home -->
+      <div id="draftNoteFull" class="monthNote" style="display:none;margin:0 0 10px;padding:9px 12px;border-radius:8px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e;font-size:12.5px;font-weight:700"></div>
       <!-- [132 · RA-6 V-2] The table's own scroll box, with the "more to the right" fade on
            the wrapper outside it — same two classes as the admin grid. -->
       <div class="gridfade" id="allGridFade">
@@ -493,11 +511,17 @@ initializeAppCheck(app, {
   isTokenAutoRefreshEnabled: true
 });
 const db=getFirestore(app), auth=getAuth(app);
-const onSnapshot=(r,cb)=>{ try{ return _onSnapshot(r,cb,err=>console.warn('listener',err&&err.code)); }catch(e){ console.warn(e); return ()=>{}; } };
+// [44 · RA-6 N-9] An optional third argument receives a listener's error, so a reader can
+// show "couldn't load" instead of sitting on its first value for ever. The console line stays.
+const onSnapshot=(r,cb,onErr)=>{ try{ return _onSnapshot(r,cb,err=>{ console.warn('listener',err&&err.code); if(onErr){ try{ onErr(err); }catch(_){} } }); }catch(e){ console.warn(e); if(onErr){ try{ onErr(e); }catch(_){} } return ()=>{}; } };
 
 // dailysched — this site's own data
 const catalogRef  = doc(db,"dailysched","shiftCatalog");
-const eligRef     = doc(db,"dailysched","eligibility");
+// [46 · RA-6 S-1] The retired eligibility grid is not read any more. Eligibility lives PER SHIFT
+// in the catalog (`elig`: allow / block / req groups + mode), and the two documents the group
+// half of that needs are read here now — the same two the admin reads.
+const groupMembersRef = doc(db,"dailysched","groupMembers");   // {initials:{groupKey:true}}
+const categoriesRef   = doc(db,"dailysched","categories");     // {initials:'MD'|'CRNA'}
 // [30 · S4] The three {list:[]} docs are LEGACY — read-only, forever. One document per
 // item now lives in dailysched/{requests|swaps|openShifts}/items/{id}; readers merge both
 // places (an item doc wins over a legacy entry with the same id; _gone = deleted), and
@@ -531,18 +555,30 @@ function daysFromSnap(qs){
 // [38 · §5] A DRAFT month shows nothing here. The month document carries `published:false`
 // while an admin is building it; absent means published. The gate is in this ONE reader, so
 // the calendar, the grid and the quick view cannot disagree about it.
+// [44 · RA-6 N-9] FAIL CLOSED. Nothing is handed out as published until BOTH halves of the
+// month have actually been seen — the month document (which carries the draft flag) and the
+// days. A month whose document is denied, slow or never delivered therefore shows no days,
+// so a later rules change can never open a draft by silencing one listener; and a denied or
+// failed listener is reported as its own state instead of leaving the first value in place
+// for ever. `state` is one of loading · draft · published · error, and `draft` stays true
+// for every state but published so no older reader can mistake "not yet" for "yes".
 function watchMonth(ym, cb){
-  let legacyDays=null, subDays={}, draft=false;
-  const emit=()=>cb({days:draft?{}:(legacyDays||subDays),draft:draft});
+  let legacyDays=null, subDays={}, draft=true, seenMd=false, seenDays=false, err=null;
+  const emit=()=>{
+    const state = err ? 'error' : (!seenMd||!seenDays) ? 'loading' : draft ? 'draft' : 'published';
+    cb({days: state==='published' ? (legacyDays||subDays) : {}, draft: state!=='published', state, error: err});
+  };
+  const fail=e=>{ err=e||new Error('listener failed'); emit(); };
   const a=onSnapshot(monthRef(ym),snap=>{
     const md=snap.exists()?snap.data():null;
     legacyDays=(md&&md.days&&Object.keys(md.days).length&&md.v2!==true)?md.days:null;
     draft=!!(md&&md.published===false);
-    emit();
-  });
-  const b=onSnapshot(daysCol(ym),qs=>{ subDays=daysFromSnap(qs); emit(); });
+    seenMd=true; emit();
+  }, fail);
+  const b=onSnapshot(daysCol(ym),qs=>{ subDays=daysFromSnap(qs); seenDays=true; emit(); }, fail);
   return ()=>{ try{a();}catch(_){} try{b();}catch(_){} };
 }
+window.watchMonth=watchMonth;   // reachable by the suite that drives the three states
 const auditRef    = doc(db,"dailysched","auditLog"); // shared with admin's Audit Log page — write-only from here
 
 // vacations — READ-ONLY: shared roster + approved vacation weeks
@@ -575,7 +611,7 @@ const MS=['January','February','March','April','May','June','July','August','Sep
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 let names=[], usernamesData={}, vAdmin={}, vPhases={};
 let loginEmailsData={}; // {INITIALS: "their-google-email"} — shared doc mapping Google accounts to accounts
-let catalog={shifts:{}}, elig={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, monthData={days:{}};
+let catalog={shifts:{}}, groupMembers={}, categories={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, monthData={days:{}};
 let me=null, curYM=null, unsubMonth=null;
 // [26] Quick View shows the next 7 days FROM TODAY, but assignments were only ever
 // loaded for the month being BROWSED — so paging away turned the whole view into the
@@ -681,8 +717,10 @@ async function itemCreate(colRef,obj){
   catch(e){ _writeFail(e); }
 }
 async function txUpdateItem(colRef, legacyRef, id, mutate){
+  let wrote=false;   // [46 · N-14] so a caller can audit a change that HAPPENED and not a no-op
   try{
     await runTransaction(db, async (tx)=>{
+      wrote=false;
       const iRef=doc(colRef,String(id));
       const iSnap=await tx.get(iRef);
       let cur=iSnap.exists()?iSnap.data():null;
@@ -694,9 +732,10 @@ async function txUpdateItem(colRef, legacyRef, id, mutate){
       if(!cur||cur._gone) return;                 // vanished / deleted — no-op
       const next=mutate({...cur});
       if(next===null||next===undefined) return;   // guard failed on fresh data — no-op
-      tx.set(iRef,next);
+      tx.set(iRef,next); wrote=true;
     });
   }catch(e){ _writeFail(e); }
+  return wrote;
 }
 // The callers deliberately have no try/catch — aborting is the correct behaviour and the
 // user has already been told. This stops the resulting rejection becoming console noise.
@@ -705,48 +744,47 @@ window.addEventListener('unhandledrejection',function(ev){
 });
 
 // ── Approved vacation weeks from the auction → {user|date: true} ──
-// A week approved in ANY completed phase, or decided live in the current
-// phase, paints all 7 days (Sun–Sat) of that week as vacation.
-function vacationDays(){
+// [admin 134 · staff 45 · RA-6 B-3] ONE function, byte-identical on both pages and pinned so
+// by build134-test — the two copies had diverged, and the admin's had never read a Phase-4
+// ROUND, so from Round 2 until Phase 4 completed every Round-1 winner's week was invisible to
+// the grid, the engine, the reports and the feeds. `released` is the clinician view (C-2 /
+// RA-H12): only what the auction has announced — a completed phase once its results were
+// e-mailed or a later phase has completed, a Phase-4 round once its results were e-mailed.
+// Not released is the admin view: every completed phase, every Phase-4 round decided so far,
+// and the live approvals document when this sign-in was allowed to read it (B-4).
+function vacationDaysFrom(vp, live, released){
   const map={};
   const addWeek=(u,wk)=>{
-    const [y,m,d]=wk.split('-').map(Number); const base=new Date(y,m-1,d);
+    const [y,m,d]=String(wk).split('-').map(Number); if(!y||!m||!d) return; const base=new Date(y,m-1,d);
     for(let i=0;i<7;i++){ const dd=new Date(base); dd.setDate(base.getDate()+i); map[u+'|'+dKey(dd)]=true; }
   };
-  // [C-2] Only paint winners from RELEASED phases — mirrors the auction's Critical
-  // invariant that clinicians never see embargoed decisions. A completed phase's
-  // winners are visible only once its results were emailed (sent) OR a later phase
-  // has completed (it is no longer the newest completed phase). No live-doc read.
-  const curPh=Number(vPhases?.currentPhase||1);
-  const sent=vPhases?.resultsSent||{};
-  const cps=vPhases?.completedPhases||{};
+  const addAll=ap=>{ for(const wk in (ap||{})) for(const u of (ap[wk]||[])) addWeek(u,wk); };
+  const curPh=Number(vp?.currentPhase||1);
+  const sent=vp?.resultsSent||{};
+  const cps=vp?.completedPhases||{};
   const completedNums=Object.keys(cps).map(Number).filter(n=>!isNaN(n));
   const maxCompleted=completedNums.length?Math.max(...completedNums):0;
   for(const ph of completedNums){
-    if(ph>curPh) continue;                        // never a future phase
-    if(ph===curPh){
-      // [36 · RA-H12] Phase 4 completes IN PLACE — the auction's currentPhase never
-      // advances past 4, so the old ph>=curPh skip hid EVERY Phase-4 winner forever
-      // (a whole year of awarded vacation weeks painted as available). A completed
-      // CURRENT phase is paintable once its results were emailed; for phases 1-3 the
-      // next Begin-Phase bumps curPh first, so this branch only ever fires for 4.
-      if(!sent[ph]) continue;
-    } else if(!(sent[ph]||ph<maxCompleted)) continue; // still embargoed (newest completed, results not yet emailed)
-    const ap=cps[ph]?.approvals||{};
-    for(const wk in ap) for(const u of (ap[wk]||[])) addWeek(u,wk);
+    if(released){
+      if(ph>curPh) continue;                        // never a future phase
+      // Phase 4 completes IN PLACE (currentPhase never passes 4): a completed CURRENT phase
+      // is paintable once its results were e-mailed; an earlier one once e-mailed or overtaken.
+      if(ph===curPh){ if(!sent[ph]) continue; }
+      else if(!(sent[ph]||ph<maxCompleted)) continue;
+    }
+    addAll(cps[ph]?.approvals);
   }
-  // [36 · RA-H12] Announced Phase-4 ROUND wins paint all year: a round's approvals become
-  // public the moment its results are emailed (p4RoundResultsSent) — the same embargo rule
-  // as phases. Without this, the rolling rounds' winners never reached the grid at all.
-  const rounds=vPhases?.p4Rounds||{};
-  const rSent=vPhases?.p4RoundResultsSent||{};
+  const rounds=vp?.p4Rounds||{};
+  const rSent=vp?.p4RoundResultsSent||{};
   for(const rn of Object.keys(rounds)){
-    if(!rSent[rn]) continue;
-    const ap=rounds[rn]?.approvals||{};
-    for(const wk in ap) for(const u of (ap[wk]||[])) addWeek(u,wk);
+    if(released&&!rSent[rn]) continue;
+    addAll(rounds[rn]?.approvals);
   }
+  if(!released) addAll(live);
   return map;
 }
+function vacationDays(){ return vacationDaysFrom(vPhases,null,true); }
+window.vacationDaysFromProbe=vacationDaysFrom;   // the suite pins both copies and executes this one
 
 // ── Month navigation ──
 function setMonth(ym){
@@ -794,12 +832,28 @@ function cellOf(u,dk){
   const dd = src.days?.[dk.slice(8)] || {};
   return dd[u]||{};
 }
+// [44 · RA-6 D-3] The state of the month a date belongs to, from the same source cellOf reads
+// — so Quick View's days in next month answer for next month, not for the month on screen.
+// A month nobody has subscribed to yet, or one whose reader has not reported, is loading.
+function monthStateOf(dk){
+  const ym=dk.slice(0,7);
+  const src = (ym===curYM) ? monthData : qvData[ym];
+  return (src&&src.state)||'loading';
+}
+const STATE_PILL={ draft:'<span class="st st-draft" title="This month is still being built and hasn’t been published">Not published</span>',
+  error:'<span class="st st-error" title="The schedule for this month could not be loaded">Couldn’t load</span>',
+  loading:'<span class="st st-loading">Loading…</span>' };
+function statePill(state){ return STATE_PILL[state]||STATE_PILL.loading; }
 // The months the next 7 days from today fall in — one, or two across a boundary.
 function qvMonths(){
   const set=new Set();
   for(let i=0;i<7;i++){ const d=new Date(); d.setDate(d.getDate()+i); set.add(dKey(d).slice(0,7)); }
   return [...set];
 }
+// [46 · RA-6 S-8] Once a minute, ask whether "the next 7 days" now reach into a month nobody
+// is subscribed to — a tab left open past a month end showed published, assigned days as blank
+// until somebody reloaded. syncQuickViewMonths is a no-op while the answer is the same.
+setInterval(()=>{ try{ if(!curYM) return; const before=qvKeys; syncQuickViewMonths(); if(qvKeys!==before) renderAll(); }catch(_){} },60000);
 function syncQuickViewMonths(){
   const months=qvMonths(), key=months.join(',');
   if(key===qvKeys) return;                 // nothing to change — avoids resubscribing on every render
@@ -828,12 +882,19 @@ function chip(id){
   const s=catalog.shifts?.[id]||{}; const bg=s.color||(s.kind==='call'?'#ede9fe':'#fef9c3');
   return '<span style="display:inline-block;background:'+esc(bg)+';color:#1e293b;border-radius:4px;padding:0 4px;font-weight:700">'+esc(s.label||id)+'</span>';
 }
-function cellHtml(u,dk,vac){
+// [44 · RA-6 D-3 / V-21] `emptyText`, when given, replaces the bare dot on a PUBLISHED day
+// with nothing on it (Quick View says "Nothing scheduled"; the grids keep the dot and the
+// legend explains it). A day in a month that is not published never shows a dot at all —
+// it shows the month's state, so a draft, a failed load and a genuinely empty day cannot
+// be confused. Vacation still paints: it comes from the auction, not from the month.
+function cellHtml(u,dk,vac,emptyText){
   const c=cellOf(u,dk); const bits=[];
   if(vac[u+'|'+dk]) bits.push('<span style="display:inline-block;background:#bbf7d0;color:#065f46;border-radius:4px;padding:0 4px;font-weight:800">VAC</span>');
+  const state=monthStateOf(dk);
+  if(state!=='published'){ bits.push(statePill(state)); return bits.join('<br>'); }
   if(c.off) bits.push('<span style="display:inline-block;background:#e2e8f0;color:#475569;border-radius:4px;padding:0 4px;font-weight:700">OFF</span>');
   for(const id of shiftsOf(c)) bits.push(chip(id));   // [52] a list, however many
-  return bits.join('<br>')||'<span style="color:var(--b2)">·</span>';
+  return bits.join('<br>')||(emptyText?'<span class="st st-none">'+esc(emptyText)+'</span>':'<span style="color:var(--b2)">·</span>');
 }
 
 // ── Rendering ──
@@ -844,9 +905,16 @@ function renderAll(){
   const vac=vacationDays();
   const nDays=new Date(y,m,0).getDate();
   const todayK=dKey(new Date());
-  { const dn=document.getElementById('draftNote'); if(dn){ const draft=!!(monthData&&monthData.draft);   // [38 · §5]
-      dn.style.display=draft?'block':'none';
-      dn.textContent=draft?('The schedule for '+MS[m-1]+' '+y+' hasn’t been published yet. You’ll see it here as soon as it is.'):''; } }
+  // [38 · §5] → [44 · RA-6 D-2 / N-9] one notice per state, on Home AND on Full Schedule.
+  const mState=(monthData&&monthData.state)||'loading';
+  { const text = mState==='draft' ? ('The schedule for '+MS[m-1]+' '+y+' hasn’t been published yet. You’ll see it here as soon as it is.')
+               : mState==='error' ? ('The schedule for '+MS[m-1]+' '+y+' couldn’t be loaded. Check your connection and reload; if it keeps happening, tell an admin.')
+               : '';
+    ['draftNote','draftNoteFull'].forEach(id=>{ const dn=document.getElementById(id); if(!dn) return;
+      dn.style.display=text?'block':'none'; dn.textContent=text;
+      dn.style.background = mState==='error' ? '#fee2e2' : '#fef3c7';
+      dn.style.borderColor = mState==='error' ? '#fca5a5' : '#fcd34d';
+      dn.style.color = mState==='error' ? '#991b1b' : '#92400e'; }); }
 
   // My calendar
   if(me){
@@ -860,10 +928,12 @@ function renderAll(){
       h+='<div class="d'+(dk===todayK?' today':'')+'" data-day="'+pad(d)+'"><div class="dn">'+d+'</div>'+cellHtml(me,dk,vac)+'</div>';
     }
     cal.innerHTML=h;
+    cal.className='cal m-'+mState;   // [44] tint the whole month by its state
   }
 
   // Everyone grid
   const g=document.getElementById('allGrid');
+  g.className='grid m-'+mState;      // [44]
   // [132 · RA-6 V-2] The name column is sticky-left, so on a phone you still know whose row
   // you are reading once the days have scrolled under it.
   let head='<tr><th class="stick1" style="text-align:left">User</th>';
@@ -905,8 +975,11 @@ function renderQuickView(vac){
     // quick view may span outside the visible month — only same-month cells have data loaded
     // [26] No "view month" placeholder any more — the data for these days is always
     // loaded, whichever month is being browsed.
-    h+='<div class="d'+(i===0?' today':'')+'" style="min-height:60px"><div class="dn">'+DS[d.getDay()]+' '+d.getDate()+'</div>'
-      +cellHtml(me,dk,vac)+'</div>';
+    // [44 · RA-6 D-3 / V-21] each day is tinted by ITS month's state, and an empty published
+    // day says "Nothing scheduled" instead of a dot that looks like a failed load.
+    const st=monthStateOf(dk);
+    h+='<div class="m-'+st+'"><div class="d'+(i===0?' today':'')+'" style="min-height:60px"><div class="dn">'+DS[d.getDay()]+' '+d.getDate()+'</div>'
+      +cellHtml(me,dk,vac,'Nothing scheduled')+'</div></div>';
   }
   el.innerHTML=h;
 }
@@ -938,6 +1011,7 @@ window.applyOpen=async function(openId){
   // is archived under a dated id before re-applying, so history survives the overwrite.
   const claimId='claim_'+openId+'_'+me;
   const req={id:claimId,user:me,date:o.date,type:'claim',shiftId:o.shiftId,openId,note:'',status:'pending',ts:Date.now()};
+  let claimed=false;   // [46 · N-14]
   try{
     await runTransaction(db, async (tx)=>{
       const iRef=doc(reqItemsCol,claimId);
@@ -950,9 +1024,10 @@ window.applyOpen=async function(openId){
         const old=iSnap.data(); const archId=claimId+'_'+(old.decidedTs||old.ts||0);
         tx.set(doc(reqItemsCol,archId),{...old,id:archId});                             // keep the decided history
       }
-      tx.set(iRef,req);
+      tx.set(iRef,req); claimed=true;
     });
   }catch(e){ _writeFail(e); }
+  if(claimed) logUserAction('open.apply',displayName(me)+' applied for the open '+(catalog.shifts?.[o.shiftId]?.label||o.shiftId)+' on '+o.date);   // [46 · N-14]
 };
 
 // [37 · defect 15] WITHDRAW. Until now a request, once submitted, could only be decided by an
@@ -961,25 +1036,39 @@ window.applyOpen=async function(openId){
 // data inside the transaction, not on the rendered row: by the time the click lands an admin may
 // already have decided it, and a withdrawal must never undo a decision.
 // Scope, deliberately: only while it is still PENDING, and only your own.
+// [46 · N-14] A request in the words the audit log uses — the built-in kinds by name, a typed
+// request by its label, a specific shift by the shift's label.
+function reqWords(r){
+  if(!r) return 'a request';
+  if(r.type==='rt') return r.label||'a request';
+  if(r.type==='shift') return (catalog.shifts?.[r.shiftId]?.label||r.shiftId||'a shift');
+  return ({dayoff:'a day off',nocall:'no call that day',other:'something else',claim:'an open shift'})[r.type]||(r.type||'a request');
+}
 window.withdrawRequest=async function(id){
   if(!me) return;
-  await txUpdateItem(reqItemsCol, requestsRef, id, item=>{
+  let what='';
+  const did=await txUpdateItem(reqItemsCol, requestsRef, id, item=>{
     if(item.user!==me) return null;                 // not yours — no-op
     if(item.status!=='pending') return null;        // already decided — the decision stands
+    what=(item.type==='claim'?'their claim on the open shift of ':reqWords(item)+' for ')+(item.date||'');
     return {...item,status:'withdrawn',withdrawnTs:Date.now()};
   });
+  if(did) logUserAction('request.withdraw',displayName(me)+' withdrew '+what);   // [46 · N-14]
 };
 // [37 · defect 15] The swap twin. Only the INITIATOR, and only before anyone else has agreed —
 // once it is pending_admin the other side has accepted and retracting it unilaterally would
 // undo someone else's agreement, so that case is deliberately not offered.
 window.withdrawSwap=async function(id){
   if(!me) return;
-  await txUpdateItem(swapItemsCol, swapsRef, id, item=>{
+  let what='';
+  const did=await txUpdateItem(swapItemsCol, swapsRef, id, item=>{
     const initiator=item.type==='3way'?(item.participants||[])[0]:item.from;
     if(initiator!==me) return null;                 // only the person who proposed it
     if(item.status!=='pending_target') return null; // someone has already accepted — leave it
+    what=item.type==='3way'?('their 3-way swap with '+(item.participants||[]).slice(1).map(displayName).join(' and ')):('their swap with '+displayName(item.to)+' on '+(item.date||''));
     return {...item,status:'withdrawn',withdrawnTs:Date.now()};
   });
+  if(did) logUserAction('swap.withdraw',displayName(me)+' withdrew '+what);   // [46 · N-14]
 };
 
 function renderMyRequests(){
@@ -1115,7 +1204,28 @@ function fillSwapWith(){ fillUserSelect('swapWith'); fillUserSelect('swap3With1'
 // future curated list; eligibility is the floor, §41 narrows further when built.
 // STAGE-4 NOTE (§53b): today an untick means "ineligible". When subgroups land (option C)
 // an untick becomes "no exception recorded" — re-point this at the one shared checker then.
-function canRequestShift(id){ return me ? (elig?.[me]?.[id]===true) : false; }
+// [46 · RA-6 S-1] THE ONE CHECKER (§19/§51). These six functions are byte-identical to the
+// admin's and pinned so by staff46-test — the staff page had been deciding eligibility from a
+// document nothing writes any more, so the request dropdown was wrong in both directions.
+function shiftElig(sh){ const e=(sh&&sh.elig)||{}; return e; }
+function eligReqKeys(sh){ const r=shiftElig(sh).req||{}; return Object.keys(r).filter(k=>r[k]); }
+function eligMode(sh){ return shiftElig(sh).mode==='all'?'all':'any'; }
+function eligListed(sh,which,u){ const m=shiftElig(sh)[which]||{}; return !!m[u]; }
+function categoryOf(u){ const c=(categories||{})[u]; return (c==='MD'||c==='CRNA')?c:''; }
+function inGroup(u,key){ return !!((groupMembers||{})[u]||{})[key]; }
+function eligFor(u,sh){
+  if(eligListed(sh,'block',u)) return {ok:false,why:'blocked'};
+  if(eligListed(sh,'allow',u)) return {ok:true,why:'individual'};
+  const keys=eligReqKeys(sh);
+  if(!keys.length) return {ok:false,why:'unset'};
+  const one=k=>{ const bits=String(k).split('|'), g=bits[0], side=bits[1]||'';
+    if(side) return categoryOf(u)===side&&inGroup(u,g);
+    return inGroup(u,g); };
+  const ok=(eligMode(sh)==='all')?keys.every(one):keys.some(one);
+  return {ok:ok,why:ok?'group':'nogroup'};
+}
+function canRequestShift(id){ return me ? eligFor(me,(catalog.shifts||{})[id]||{}).ok : false; }
+window.canRequestShiftProbe=canRequestShift;
 function fillReqShift(){
   const sel=document.getElementById('reqShift'); if(!sel) return;
   const cur=sel.value;
@@ -1171,6 +1281,7 @@ window.submitRequest=async function(){
   const req={id:'r'+Date.now()+Math.floor(Math.random()*1e4),user:me,date:date||null,type,shiftId,note,status:'pending',ts:Date.now()};
   if(rt){ req.rtId=picked.slice(3); req.kind=rt.kind; req.tag=rt.tag||''; req.strength=rt.strength||''; req.span=rt.span||'day'; req.label=rt.label||''; }   // [40 · §41] the request carries its meaning
   await itemCreate(reqItemsCol,req);
+  logUserAction('request.submit',displayName(me)+' requested '+reqWords(req)+(date?' for '+date:'')+(note?' — “'+note+'”':''));   // [46 · N-14]
   document.getElementById('reqNote').value='';
   msg.textContent='Request submitted — admin will review it.'; msg.style.color='var(--green)';
 };
@@ -1545,7 +1656,8 @@ onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll();
 // [C-2] Removed onSnapshot(vApprovalsRef,…) — the schedule site no longer reads live
 // auction approvals (privacy leak + H-4 rules now deny this read anyway).
 onSnapshot(catalogRef,snap=>{ catalog=snap.exists()?snap.data():{shifts:{}}; if(!catalog.shifts)catalog.shifts={}; renderAll(); });
-onSnapshot(eligRef,snap=>{ elig=snap.exists()?snap.data():{}; fillReqShift(); }); // [29 · §55] the load this data existed for
+onSnapshot(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; fillReqShift(); });   // [46 · S-1] the two documents the checker needs
+onSnapshot(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; fillReqShift(); });
 // [30 · S4] Two listeners per list — the frozen legacy array and the item docs —
 // recombined into the same {list:[]} shape every renderer already reads. An item doc
 // wins over a legacy entry with its id; _gone tombstones drop out entirely.

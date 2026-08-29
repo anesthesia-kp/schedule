@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 133;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 137;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -431,6 +431,10 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
 .psheet-unread{color:#b91c1c;font-style:italic}
 .psheet-empty{font-size:12px;color:var(--t3);padding:6px 0}
 .print-warn{font-size:11.5px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:6px 8px;margin-bottom:10px}
+/* [137 · RA-6 D-11] a draft day's sheet is marked in the heading AND by a dashed frame, so it
+   survives a black-and-white printer */
+.psheet-draftmark{display:inline-block;margin-left:8px;padding:0 6px;border:2px dashed #b45309;border-radius:4px;color:#b45309;font-size:12px;letter-spacing:.04em}
+.psheet.psheet-draft{outline:2px dashed #b45309;outline-offset:4px}
 @media print{
   nav,.print-hide{display:none!important}
   body{zoom:1;background:#fff}
@@ -486,6 +490,10 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     <span id="buildStamp" title="Which version of this page you are looking at — quote it if you report a problem" style="font-size:11px;color:var(--t3);font-family:var(--mono)"></span>
     <button class="btn btn-ghost" style="padding:5px 10px;font-size:12px" onclick="adminSignOut()">Sign out</button>
   </div>
+  <!-- [134 · RA-6 B-4] Shown when this sign-in is refused the auction's vacation data. Before
+       this the denial went to the browser console only, and the grid, the engine and every
+       report treated everyone as available with nothing on screen to say data was missing. -->
+  <div id="vacDeniedBanner" style="display:none;margin:0 0 14px;padding:10px 14px;border-radius:8px;background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;font-size:12.5px;font-weight:600"></div>
 
   <!-- DASHBOARD -->
   <div class="panel on" id="panel-dash">
@@ -1123,7 +1131,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   <!-- ENGINE — §123. The Simulator is retired; this is how shifts get assigned. -->
   <div class="panel" id="panel-engine">
     <div class="page-title" style="font-size:16px;margin-bottom:4px">⚙️ Engine</div>
-    <div class="page-sub" style="margin-bottom:12px">How shifts get assigned. <b>Preview</b> shows exactly what the engine would do for the month on the Schedule Grid — nothing is written until you press <b>Apply</b>. It follows every rule that is on: staffing minimums, quota totals, the post-call day, one site per day, and every rule you have made. What it cannot place, it tells you, with the rule that stopped it. You can always place a shift yourself below — a rule warns, it never blocks.</div>
+    <div class="page-sub" style="margin-bottom:12px">How shifts get assigned. <b>Preview</b> shows exactly what the engine would do for the month on the Schedule Grid — nothing is written until you press <b>Apply</b>. It follows every rule that is on: staffing minimums, quota totals, the post-call day, one site per day, and every rule you have made — except <b>Fairness balance</b>, which it satisfies by handing each shift to whoever has had it least rather than by stopping. What it cannot place, it tells you, with the rule that stopped it. You can always place a shift yourself below — a rule warns, it never blocks.</div>
 
     <div class="card" id="engPublish">
       <div class="card-title">Draft or published</div>
@@ -1408,7 +1416,9 @@ initializeAppCheck(app, {
   isTokenAutoRefreshEnabled: true
 });
 const db=getFirestore(app), auth=getAuth(app);
-const onSnapshot=(r,cb)=>{ try{ return _onSnapshot(r,cb,err=>console.warn('listener',err&&err.code)); }catch(e){ console.warn(e); return ()=>{}; } };
+// [134 · RA-6 B-4] An optional third argument receives a listener's error, so a reader can
+// say so on screen instead of sitting on its first value for ever. The console line stays.
+const onSnapshot=(r,cb,onErr)=>{ try{ return _onSnapshot(r,cb,err=>{ console.warn('listener',err&&err.code); if(onErr){ try{ onErr(err); }catch(_){} } }); }catch(e){ console.warn(e); if(onErr){ try{ onErr(e); }catch(_){} } return ()=>{}; } };
 
 // dailysched — this system's own data (fully separate from the auction)
 const catalogRef  = doc(db,"dailysched","shiftCatalog");
@@ -1548,9 +1558,10 @@ function daysFromSnap(qs){
 async function readMonth(ym){
   const mSnap=await getDoc(monthRef(ym));
   const md=mSnap.exists()?mSnap.data():null;
-  if(md && md.days && Object.keys(md.days).length && md.v2!==true) return {days:md.days,legacy:true};
+  const published=!(md&&md.published===false);   // [136 · D-5] absent means published (§5)
+  if(md && md.days && Object.keys(md.days).length && md.v2!==true) return {days:md.days,legacy:true,published:published};
   const qs=await getDocs(daysCol(ym));
-  return {days:daysFromSnap(qs),legacy:false};
+  return {days:daysFromSnap(qs),legacy:false,published:published};
 }
 // Reads ONE day. THROWS on an unconverted month rather than handing back its cells:
 // every caller of this goes on to write, and a caller that got the old month's data and
@@ -2225,6 +2236,7 @@ const PALETTE=['#fde68a','#fca5a5','#fdba74','#fcd34d','#d9f99d','#86efac','#5ee
 function onVacationIn(vac,u,dk){ return !!(vac&&vac[u+'|'+dk]); }
 function onVacation(u,dk){ return onVacationIn(vacationDays(),u,dk); }
 window.onVacationProbe=onVacation;
+window.vacationDaysProbe=vacationDays;   // [137] the memo is asserted by identity
 // [112] Which SITES a list of shift ids sits at, and how many carry no site at all (§18). One
 // definition, used by the One-site-per-day rule now and by the warn-at-change path later.
 function sitesOf(ids){
@@ -2238,15 +2250,73 @@ function sitesOf(ids){
   return {sites:seen,unsited:unsited};
 }
 window.sitesOfProbe=sitesOf;
-function vacationDays(){
+// ── Approved vacation weeks from the auction → {user|date: true} ──
+// [admin 134 · staff 45 · RA-6 B-3] ONE function, byte-identical on both pages and pinned so
+// by build134-test — the two copies had diverged, and the admin's had never read a Phase-4
+// ROUND, so from Round 2 until Phase 4 completed every Round-1 winner's week was invisible to
+// the grid, the engine, the reports and the feeds. `released` is the clinician view (C-2 /
+// RA-H12): only what the auction has announced — a completed phase once its results were
+// e-mailed or a later phase has completed, a Phase-4 round once its results were e-mailed.
+// Not released is the admin view: every completed phase, every Phase-4 round decided so far,
+// and the live approvals document when this sign-in was allowed to read it (B-4).
+function vacationDaysFrom(vp, live, released){
   const map={};
-  const addWeek=(u,wk)=>{ const [y,m,d]=wk.split('-').map(Number); const base=new Date(y,m-1,d);
-    for(let i=0;i<7;i++){ const dd=new Date(base); dd.setDate(base.getDate()+i); map[u+'|'+dKey(dd)]=true; } };
-  const cps=vPhases?.completedPhases||{};
-  for(const ph in cps){ const ap=cps[ph]?.approvals||{}; for(const wk in ap) for(const u of (ap[wk]||[])) addWeek(u,wk); }
-  for(const wk in (vApprovals||{})) for(const u of (vApprovals[wk]||[])) addWeek(u,wk);
+  const addWeek=(u,wk)=>{
+    const [y,m,d]=String(wk).split('-').map(Number); if(!y||!m||!d) return; const base=new Date(y,m-1,d);
+    for(let i=0;i<7;i++){ const dd=new Date(base); dd.setDate(base.getDate()+i); map[u+'|'+dKey(dd)]=true; }
+  };
+  const addAll=ap=>{ for(const wk in (ap||{})) for(const u of (ap[wk]||[])) addWeek(u,wk); };
+  const curPh=Number(vp?.currentPhase||1);
+  const sent=vp?.resultsSent||{};
+  const cps=vp?.completedPhases||{};
+  const completedNums=Object.keys(cps).map(Number).filter(n=>!isNaN(n));
+  const maxCompleted=completedNums.length?Math.max(...completedNums):0;
+  for(const ph of completedNums){
+    if(released){
+      if(ph>curPh) continue;                        // never a future phase
+      // Phase 4 completes IN PLACE (currentPhase never passes 4): a completed CURRENT phase
+      // is paintable once its results were e-mailed; an earlier one once e-mailed or overtaken.
+      if(ph===curPh){ if(!sent[ph]) continue; }
+      else if(!(sent[ph]||ph<maxCompleted)) continue;
+    }
+    addAll(cps[ph]?.approvals);
+  }
+  const rounds=vp?.p4Rounds||{};
+  const rSent=vp?.p4RoundResultsSent||{};
+  for(const rn of Object.keys(rounds)){
+    if(released&&!rSent[rn]) continue;
+    addAll(rounds[rn]?.approvals);
+  }
+  if(!released) addAll(live);
   return map;
 }
+// [137 · RA-6 E-15] Built ONCE per delivery of the two auction documents, not once per call.
+// The engine asks per candidate per shift per day, twice (before and after) when a "not on
+// vacation" rule is on — measured at 1.5 s of blocked main thread for one Preview, growing
+// with every completed auction phase. The listeners replace `vPhases` and `vApprovals` with
+// fresh objects on every snapshot, so their identity is an exact cache key.
+let _vacMemo={vp:null,va:null,map:null};
+function vacationDays(){
+  if(_vacMemo.map&&_vacMemo.vp===vPhases&&_vacMemo.va===vApprovals) return _vacMemo.map;
+  const map=vacationDaysFrom(vPhases,vApprovals,false);
+  _vacMemo={vp:vPhases,va:vApprovals,map:map};
+  return map;
+}
+// [134 · RA-6 B-4] The auction's live approvals document is gated on the AUCTION's admin list,
+// which is deliberately independent of this site's. A Daily Schedule admin who is not on it is
+// refused, and a refused listener never retries. This says so where the admin is looking.
+const vacDeniedWhat={};
+function vacDenied(what,e){
+  vacDeniedWhat[what]=(e&&e.code)||'error';
+  const el=document.getElementById('vacDeniedBanner'); if(!el) return;
+  const both=vacDeniedWhat.phases;
+  el.textContent = both
+    ? 'Vacation data from the Vacation Auction couldn’t be read from this sign-in ('+vacDeniedWhat.phases+'). No approved vacation is shown anywhere on this site — the grid, the Engine and the reports are treating everyone as available. Reload; if it keeps happening, tell a Vacation Auction admin.'
+    : 'Live vacation approvals couldn’t be read from this sign-in ('+vacDeniedWhat.approvals+'). You are a Daily Schedule admin but not a Vacation Auction admin, so weeks decided in the auction’s CURRENT phase are not shown here — completed phases and decided Phase-4 rounds still are. Ask a Vacation Auction admin to add you there if you need the live picture.';
+  el.style.display='block';
+}
+window.vacDeniedProbe=()=>({...vacDeniedWhat});
+window.vacationDaysFromProbe=vacationDaysFrom;
 
 // ── Navigation ──
 window.nav=function(id,el){
@@ -2481,10 +2551,14 @@ window.shiftsOf=shiftsOf; window.shiftEntries=shiftEntries; window.holdsShift=ho
 // two admins editing the same day cannot lose each other's change — the old whole-cell
 // mergeFields write had exactly that hole. `fn` gets {shifts:[entries], off} and returns
 // the same shape, or null to abort and write nothing.
-let _mcBefore=null,_mcAfter=null,_mcPublished=true;
+// [136 · RA-6 D-15] The before/after picture is LOCAL to the call. It used to sit in three
+// page-level variables, so two edits started in the same moment (Add, then the Off box without
+// waiting) shared them: the second write's diff was emitted twice and the first one's was lost.
+// [136 · RA-6 D-4 / N-10] `fn` may also return {clear:true}: the person's whole cell is removed
+// inside the same transaction, with the same feed entry the other edits get.
 async function mutateCell(ym,dd,u,fn){
   let result=null, blocked=false;
-  _mcBefore=null; _mcAfter=null; _mcPublished=true;
+  let _mcBefore=null, _mcAfter=null, _mcPublished=true;
   await runTransaction(db, async (tx)=>{
     result=null; blocked=false;                   // reset per attempt — this closure re-runs on conflict
     // [59] Is this month still unconverted? Asked HERE, against fresh data inside the
@@ -2506,8 +2580,15 @@ async function mutateCell(ym,dd,u,fn){
     const next=fn({shifts:shiftEntries(cur),off:!!cur.off});
     if(!next) return;                             // guard failed on fresh data — no-op
     // [122 · §6] What this write changes, and whether staff can see the month.
-    _mcBefore={ids:shiftsOf(cur),off:!!cur.off}; _mcAfter={ids:next.shifts.map(x=>x.s),off:!!next.off};
     _mcPublished=!(md&&md.published===false);
+    if(next.clear){                               // [136 · D-4] the whole cell goes, transactionally
+      if(!exists||!snap.data()[u]) return;        // nothing there — a no-op, not a phantom "removed"
+      _mcBefore={ids:shiftsOf(cur),off:!!cur.off}; _mcAfter={ids:[],off:false};
+      tx.update(ref,{[u]:deleteField()});
+      result={cleared:true};
+      return;
+    }
+    _mcBefore={ids:shiftsOf(cur),off:!!cur.off}; _mcAfter={ids:next.shifts.map(x=>x.s),off:!!next.off};
     const cell={
       a:next.shifts.map(x=>({s:x.s,by:x.by||_currentAdminEmail||'unknown',at:x.at||Date.now(),via:x.via||'manual'})),
       off:!!next.off,
@@ -2546,6 +2627,12 @@ window.removeCellShift=function(ym,dd,u,shiftId){
 };
 window.setCellOff=function(ym,dd,u,val){
   return mutateCell(ym,dd,u,st=>({shifts:st.shifts,off:!!val}));   // touches NO shifts
+};
+// [136 · RA-6 D-4 / N-10] The fourth operation — remove everything for one person on one day —
+// goes through the same transaction as the other three, so it cannot lose a concurrent edit
+// and it reaches the person's change feed like any other removal.
+window.clearCell=function(ym,dd,u){
+  return mutateCell(ym,dd,u,st=>({clear:true}));
 };
 
 // ── Schedule grid ──
@@ -2805,7 +2892,11 @@ function assignmentWarnings(ym,dd,u,addId,cells){
     // it at all. Owner ruling §51: one rule for "can this person do this shift".
     if(!allowed(u,addId)) msgs.push(displayName(u)+' is not ticked as eligible for '+lbl+' in the Shift Eligibility grid.');
     if(s){
-      const cap=shiftCeilingOn(s,ddDate(cellSel&&cellSel.dd));
+      // [135 · RA-6 E-4 / N-4] The ceiling for THIS day — built from the arguments. It used to
+      // read the cell editor's global, which is null on the request, swap and Assign-by-hand
+      // paths, so Number(null)=0 asked for the last day of the PREVIOUS month: a weekend shift
+      // that takes four warned "the most it asks for is 1", and a real over-fill went unwarned.
+      const cap=shiftCeilingOn(s,new Date(Number(ym.slice(0,4)),Number(ym.slice(5,7))-1,Number(dd)));
       let have=0;
       for(const usr in (cells||{})){ if(usr===u) continue; if(holdsShift(cells[usr],addId)) have++; }
       if(have>=cap) msgs.push(lbl+' is already staffed by '+have+' — the most it asks for is '+cap+'. This will go over. Nothing stops you: a ceiling is an indicator, not a refusal.');
@@ -2835,10 +2926,16 @@ window.assignmentWarnings=assignmentWarnings;   // HANDOFF trap 1
 // [120 · §123] THE CORE, shared: given a month's days as they stand, what NEW violations would
 // adding `addId` to `u` on `dd` create? Returns them with rank and label. ruleWarnings (the
 // three human paths) and fillDay (the engine) both ask this ONE question (§19).
-function ruleDiff(ym,dd,u,addId,days){
+// [137 · RA-6 E-6] A rule that compares PEOPLE (`pool:true` — Fairness balance) is checked
+// against everyone it covers, not against a one-person pool that can never be unbalanced; only
+// the new violations that name THIS person are reported. `opts.noPool` leaves those rules out:
+// the engine orders its candidates by count already and would otherwise rebuild the fairness
+// model for every candidate of every shift of every day.
+function ruleDiff(ym,dd,u,addId,days,opts){
   const out=[];
   if(!ym||!dd||!u||!addId) return out;
-  const rl=ruleList().filter(([,r])=>ruleEnabled(r)&&RULE_TYPES[r.type]&&ruleTargets(r,u));
+  const noPool=!!(opts&&opts.noPool);
+  const rl=ruleList().filter(([,r])=>ruleEnabled(r)&&RULE_TYPES[r.type]&&ruleTargets(r,u)&&!(noPool&&RULE_TYPES[r.type].pool));
   if(!rl.length) return out;
   const before=days||{};
   const cur=((before[dd]||{})[u])||{};
@@ -2850,10 +2947,12 @@ function ruleDiff(ym,dd,u,addId,days){
   const tally=(res)=>{ const m={}; for(const v of (res.violations||[])) m[v.dd+'|'+String(v.what)]=v; return m; };
   for(const [key,r] of rl){
     const t=RULE_TYPES[r.type];
-    const b=tally(t.check(r,{people:[u],ym:ym,days:before}));
-    const a=t.check(r,{people:[u],ym:ym,days:after});
+    const people=t.pool?ruleTargetNames(r):[u];   // [137 · E-6]
+    const b=tally(t.check(r,{people:people,ym:ym,days:before}));
+    const a=t.check(r,{people:people,ym:ym,days:after});
     const sv=sevOf(r);
     for(const v of (a.violations||[])){
+      if(t.pool&&v.u&&v.u!==u) continue;          // [137 · E-6] somebody else's balance is not this warning
       if(b[v.dd+'|'+String(v.what)]) continue;
       out.push({rank:sv.rank,sev:sv.k,key:key,label:r.label||key,type:r.type,dd:v.dd,what:v.what});
     }
@@ -3066,7 +3165,7 @@ window.cmClearAll=async function(){
     +(held.length?'This removes: '+held.join(', ')+'\n\n':'There are no shifts to remove.\n\n')
     +'The day-off flag is cleared too.')) return;
   try{
-    await mergeFields(dayRef(curYM,dd),{[u]:deleteField()});
+    await window.clearCell(curYM,dd,u);   // [136 · D-4] transactional, and it emits the feed entry
     auditLog('cell.clear','Cleared '+displayName(u)+'’s whole day on '+curYM+'-'+dd+(held.length?' — removed '+held.join(', '):''));
     renderCellModal();
   }catch(e){ schedToast('Could not clear it: '+((e&&e.code)||(e&&e.message)||'unknown error'),'err'); }
@@ -3210,7 +3309,7 @@ function fillDay(days,dd,dt,dk,o){
     cands.sort((a,b)=>(askRank(a)-askRank(b))||(spokenFor(a)-spokenFor(b))||(availRank(a)-availRank(b))||(cnt(a,id)-cnt(b,id))||a.localeCompare(b));
     let pick=null; const stopped=[];
     for(const u of cands){
-      const d=ruleDiff(ym,dd,u,id,days);
+      const d=ruleDiff(ym,dd,u,id,days,{noPool:true});   // [137 · E-6] fairness is the ORDER above, not a stop
       if(!d.length){ pick=u; break; }
       stopped.push(displayName(u)+' ('+[...new Set(d.map(x=>x.label))].join(', ')+')');
     }
@@ -3280,9 +3379,8 @@ window.fillDayProbe=fillDay;   // module scope — HANDOFF trap 1
 // the cell holds at planning time PLUS what the plan adds, because since build 127 the write
 // APPENDS rather than replaces. The ceiling is the same question fillDay itself asks —
 // shiftCeilingOn() over staffingOn() — asked with the date of the day being planned.
-// ⚠ The audit's E-4 / E-14 report a separate defect: other callers get the ceiling for the WRONG
-// date, because ddDate() ignores the day it is handed. That is NOT fixed here and is not touched
-// here; this call site simply passes the correct date for the day it is planning.
+// The audit's E-4 / N-4 — other callers asking the ceiling for the wrong date, through the cell
+// editor's global — is closed in assignmentWarnings itself (build 135).
 function overCeilingOn(days,dd,dt,dk,changed){
   const out=[];
   const cells=(days&&days[dd])||{};
@@ -3753,6 +3851,7 @@ window.autoPopulateYear=async function(){
     +'This can take a few seconds and writes to all 12 months.')) return;
   const vac=vacationDays();
   const _cache={}; // ym -> days; updated as we fill each month so later rolling windows see this run's fresh fills
+  const _pubCache={}; // [136 · D-5] ym -> published, read once with the month
   const _req=requestIndex();   // [126] approved requests, once per run
   const skippedLegacy=[]; // [59] months still in the pre-split format — skipped, and named at the end
   let yearFail=null;      // [127 · E-11] the day a write was refused on, if one was
@@ -3762,8 +3861,10 @@ window.autoPopulateYear=async function(){
     const ym=year+'-'+pad(m);
     const nDays=new Date(year,m,0).getDate();
     let days = (_cache[ym]!==undefined) ? _cache[ym] : {};
-    let ymLegacy=false;
-    if(_cache[ym]===undefined){ try{ const m=await readMonth(ym); days=JSON.parse(JSON.stringify(m.days)); ymLegacy=m.legacy; }catch(_){} }
+    let ymLegacy=false, ymPublished=true;
+    if(_cache[ym]===undefined){ try{ const m=await readMonth(ym); days=JSON.parse(JSON.stringify(m.days)); ymLegacy=m.legacy; ymPublished=m.published!==false; }catch(_){} }
+    else if(_pubCache[ym]!==undefined) ymPublished=_pubCache[ym];
+    _pubCache[ym]=ymPublished;
     // [59] An unconverted month is skipped, not written into, and it is NAMED at the end —
     // silently passing over four months of a year would read as "the year is done".
     if(ymLegacy){ skippedLegacy.push(ym); continue; }
@@ -3786,10 +3887,16 @@ window.autoPopulateYear=async function(){
     for(const key in changed){ const [dd,u]=key.split('.'); (addsByDay[dd]=addsByDay[dd]||{})[u]=changed[key]; }
     // [127 · E-11] The year run stops on a failure and NAMES the day, rather than dying as an
     // unhandled rejection with the months before it already written and nothing recording them.
+    const monthFeed=[];
     for(const dd of Object.keys(addsByDay).sort()){
-      try{ const r=await writePlannedDay(ym,dd,addsByDay[dd]); grandSkipped.push(...r.skipped); }
+      try{ const r=await writePlannedDay(ym,dd,addsByDay[dd]); grandSkipped.push(...r.skipped); monthFeed.push(...r.feed); }
       catch(e){ yearFail={ym:ym,dd:dd,error:(e&&(e.message||e.code))||'unknown error'}; break; }
     }
+    // [136 · RA-6 D-5] The year run tells people what landed, month by month, exactly as the
+    // month run does — it wrote 727 assignments across twelve months and emitted nothing. A
+    // draft month stays silent until it is published (§5); the days that landed before a
+    // refused write are still announced.
+    if(ymPublished&&monthFeed.length) emitChanges(monthFeed);
     if(yearFail) break;
     _cache[ym]=days; // so later months' rolling windows include this month's fresh fills
   }
@@ -7849,14 +7956,22 @@ const RULE_TYPES={
       for(const u of ctx.people){
         const iv=ruleIntervals(ctx.days,ctx.ym,u);
         skipped+=iv.skipped; considered+=iv.list.length;
-        for(let i=1;i<iv.list.length;i++){
-          const a=iv.list[i-1], b=iv.list[i];
-          const gap=Math.round((b.startAt-a.endAt)/60000);
-          if(gap>=need) continue;
-          viol.push({u:u,dd:b.dd,dk:ctx.ym+'-'+b.dd,
-            what: gap<0
-              ? (a.label+' and '+b.label+' overlap by '+fmtDur(-gap)+' — '+a.label+' runs to '+stampOf(a.endAt)+', '+b.label+' starts '+stampOf(b.startAt))
-              : (fmtDur(gap)+' between '+a.label+' ending '+stampOf(a.endAt)+' and '+b.label+' starting '+stampOf(b.startAt)+' — the rule asks for '+fmtDur(need))});
+        // [135 · RA-6 E-3] Each shift against EVERY later one that could still be too close,
+        // not only its neighbour. Sorted by start, a long shift stopped being considered the
+        // moment a shorter one started after it — a 08:00–22:00 day and a 20:00–23:00 evening
+        // with a 09:00–10:00 shift between them reported clear. Later shifts start later, so
+        // the inner loop stops at the first that is far enough away.
+        for(let i=0;i<iv.list.length;i++){
+          const a=iv.list[i];
+          for(let j=i+1;j<iv.list.length;j++){
+            const b=iv.list[j];
+            const gap=Math.round((b.startAt-a.endAt)/60000);
+            if(gap>=need) break;
+            viol.push({u:u,dd:b.dd,dk:ctx.ym+'-'+b.dd,
+              what: gap<0
+                ? (a.label+' and '+b.label+' overlap by '+fmtDur(-gap)+' — '+a.label+' runs to '+stampOf(a.endAt)+', '+b.label+' starts '+stampOf(b.startAt))
+                : (fmtDur(gap)+' between '+a.label+' ending '+stampOf(a.endAt)+' and '+b.label+' starting '+stampOf(b.startAt)+' — the rule asks for '+fmtDur(need))});
+          }
         }
       }
       return {violations:viol,considered:considered,skipped:skipped};
@@ -8166,7 +8281,8 @@ const RULE_TYPES={
   // diem, locums, no FTE — §26/§36/§43) are counted and named, never silently dropped.
   fairness:{
     label:'Fairness balance',
-    blurb:'Nobody carries more (or less) of a tagged shift than their FTE share, beyond a tolerance.',
+    pool:true,   // [137 · E-6] compares people — checked against everyone it covers, never one person alone
+    blurb:'Nobody carries more (or less) of a tagged shift than their FTE share, beyond a tolerance. Warns when you change a cell, approve a request or a swap, or assign by hand; the Engine balances by count as it fills rather than stopping on this rule.',
     text:function(r){
       const t=Math.max(0,ruleNum(r,'tol',1));
       return tagLabel(ruleVal(r,'tag','overnightCall'))+' shared by FTE across the people it covers — nobody more than '+t+' shift'+(t===1?'':'s')+' over or under their share this month';
@@ -8719,13 +8835,17 @@ function printDates(){
 }
 // The month on screen is already in memory; anything else is fetched. A failure is recorded
 // as null for that month and surfaces on the sheet, never as an empty day.
+// [137 · RA-6 D-11] `months.__draft` records which of the gathered months are DRAFTS, so the
+// one artefact that leaves the application says so on every day it prints from one — a sheet
+// printed on a Friday that spans into next month was indistinguishable from a final one.
 async function printGather(dates){
-  const months={};
+  const months={}; const draft={};
+  Object.defineProperty(months,'__draft',{value:draft,enumerable:false});
   for(const d of dates){
     const ym=ymKey(d);
     if(months[ym]!==undefined) continue;
-    if(ym===curYM && monthData && monthData.days){ months[ym]=monthData.days; continue; }
-    try{ const m=await readMonth(ym); months[ym]=(m&&m.days)||{}; }
+    if(ym===curYM && monthData && monthData.days){ months[ym]=monthData.days; if(monthPublished===false) draft[ym]=true; continue; }
+    try{ const m=await readMonth(ym); months[ym]=(m&&m.days)||{}; if(m&&m.published===false) draft[ym]=true; }
     catch(e){ months[ym]=null; }
   }
   return months;
@@ -8769,7 +8889,7 @@ window.printSheetNow=function(){ window.print(); };
 async function printBuild(){
   if(_printBusy) return;
   const dates=printDates();
-  const sig=_printMode+'|'+_printSite+'|'+dKey(dates[0])+'|'+JSON.stringify((printCfg&&printCfg.off)||{})+'|'+(curYM||'');
+  const sig=_printMode+'|'+_printSite+'|'+dKey(dates[0])+'|'+JSON.stringify((printCfg&&printCfg.off)||{})+'|'+(curYM||'')+'|'+(monthPublished===false?'draft':'pub');   // [137 · D-11]
   if(_printCache && _printCache.sig===sig) return;
   _printBusy=true;
   try{
@@ -8782,9 +8902,13 @@ async function printBuild(){
 function printSheetHTML(dates,months){
   const sites=printSitesToDraw();
   const unread=dates.filter(d=>months[ymKey(d)]===null);
+  const isDraft=d=>!!(months&&months.__draft&&months.__draft[ymKey(d)]);   // [137 · D-11]
+  const drafted=dates.filter(isDraft);
   let out='';
   if(unread.length) out+='<div class="print-warn">⚠ '+unread.length+' day'+(unread.length===1?'':'s')
     +' could not be read from the database and '+(unread.length===1?'is':'are')+' shown as “not read”, not as empty.</div>';
+  if(drafted.length) out+='<div class="print-warn print-draft-warn">⚠ DRAFT — '+drafted.length+' of these '+dates.length+' day'+(dates.length===1?'':'s')
+    +' fall'+(drafted.length===1?'s':'')+' in a month that has NOT been published. Staff cannot see it yet and it may still change. Each such sheet is marked.</div>';
   for(const site of sites){
     const groups=printShiftsAt(site);
     // [109] One BLOCK PER DAY, wrapped per site. A week is seven daily sheets, not a grid —
@@ -8797,8 +8921,9 @@ function printSheetHTML(dates,months){
       continue;
     }
     for(const d of dates){
-      out+='<section class="psheet">'
-        +'<h2 class="psheet-h">'+esc((site||'No site set')+' — '+printDayHead(d))+'</h2>'
+      const dr=isDraft(d);   // [137 · D-11]
+      out+='<section class="psheet'+(dr?' psheet-draft':'')+'">'
+        +'<h2 class="psheet-h">'+esc((site||'No site set')+' — '+printDayHead(d))+(dr?' <span class="psheet-draftmark">DRAFT — NOT PUBLISHED</span>':'')+'</h2>'
         // [109] Times are OFF the sheet by his instruction. They are still in the catalog and
         // on screen; the paper carries who is on, and room to write.
         +'<table class="psheet-t">'
@@ -10247,8 +10372,8 @@ authReady.then(()=>{
   onSnapshot(emailsRef,snap=>{ emailsData=snap.exists()?snap.data():{}; emailsLoaded=true; renderAll(); });
   onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; loginEmailsLoaded=true; markDirty('users'); });
   onSnapshot(adminAccessRef,snap=>{ adminAccessEmails=snap.exists()?(snap.data().emails||[]).map(x=>String(x).toLowerCase()):[]; markDirty('adminAccess'); });
-  onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); _enginePlanStale('Vacation changed since this preview'); });   // [129 · E-7]
-  onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); _enginePlanStale('Vacation changed since this preview'); });   // [129 · E-7]
+  onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); _enginePlanStale('Vacation changed since this preview'); }, e=>vacDenied('phases',e));   // [129 · E-7] [134 · B-4]
+  onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); _enginePlanStale('Vacation changed since this preview'); }, e=>vacDenied('approvals',e));   // [129 · E-7] [134 · B-4]
   onSnapshot(catalogRef,async snap=>{
     if(!snap.exists()||!snap.data().shifts||!Object.keys(snap.data().shifts).length){
       await setDoc(catalogRef,{shifts:DEFAULT_SHIFTS},{merge:true}); return; // seed once; listener refires
