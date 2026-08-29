@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 37;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 40;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -206,6 +206,7 @@ table.grid .wkend{background:var(--s3)}
     <a onclick="nav('open',this)">📢 Open Shifts</a>
     <a onclick="nav('requests',this)">📥 My Requests <span class="navbadge" id="reqNavBadge" style="display:none"></span></a>
     <a onclick="nav('swaps',this)">🔁 My Swaps <span class="navbadge" id="swapNavBadge" style="display:none"></span></a>
+    <a onclick="nav('changes',this)">🔔 Changes <span class="navbadge" id="chgNavBadge" style="display:none"></span></a>
   </nav>
   <div class="content"><div class="wrap">
 
@@ -237,6 +238,7 @@ table.grid .wkend{background:var(--s3)}
         <span><b class="cell-off">■</b> day off</span>
         <span><b class="cell-vac">■</b> vacation (from auction)</span>
       </div>
+      <div id="draftNote" style="display:none;margin:0 0 10px;padding:9px 12px;border-radius:8px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e;font-size:12.5px;font-weight:700"></div>
       <div class="cal" id="myCal"></div>
     </div>
   </div>
@@ -294,6 +296,16 @@ table.grid .wkend{background:var(--s3)}
   </div>
 
   <!-- MY SWAPS — its own page -->
+  <!-- [39 · §6] CHANGES FOR ME — every change to a published month that involves me, newest first. -->
+  <div class="panel" id="panel-changes">
+    <div class="card">
+      <div class="card-title" style="display:flex;align-items:center;gap:10px">Changes to my schedule<span style="flex:1"></span>
+        <button class="btn btn-ghost" style="font-size:11.5px;padding:3px 9px" onclick="markChangesSeen()">Mark all as read</button></div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Anything an admin or the engine changes on a published month that involves you lands here — a shift added or taken away, a day marked off, a month published or cleared. You only ever see your own.</div>
+      <div id="chgList"></div>
+    </div>
+  </div>
+
   <div class="panel" id="panel-swaps">
     <div class="card">
       <div class="card-title">Swap Requests</div>
@@ -399,7 +411,7 @@ table.grid .wkend{background:var(--s3)}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, collection, getDoc, setDoc, updateDoc, arrayUnion, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, collection, query, where, getDoc, setDoc, updateDoc, arrayUnion, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 
@@ -443,6 +455,8 @@ const requestsRef = doc(db,"dailysched","requests");   // LEGACY — never writt
 const swapsRef    = doc(db,"dailysched","swaps");      // LEGACY — never written since 30
 const openRef     = doc(db,"dailysched","openShifts"); // LEGACY — admin-posted; never written since 30
 const reqItemsCol  = collection(db,"dailysched","requests","items");
+const changesCol   = collection(db,"dailysched","changes","items");   // [39 · §6] read only my own
+const requestTypesRef = doc(db,"dailysched","requestTypes");           // [40 · §41] what can be requested — the admin's list
 const swapItemsCol = collection(db,"dailysched","swaps","items");
 const openItemsCol = collection(db,"dailysched","openShifts","items");
 // [59 · §47] A month is now one document PER DAY: dailysched/sched_YYYY-MM/days/{DD}.
@@ -462,12 +476,16 @@ function daysFromSnap(qs){
 }
 // Subscribes to both places and hands back whichever is authoritative, re-deciding on
 // every update. Returns an unsubscribe for the pair.
+// [38 · §5] A DRAFT month shows nothing here. The month document carries `published:false`
+// while an admin is building it; absent means published. The gate is in this ONE reader, so
+// the calendar, the grid and the quick view cannot disagree about it.
 function watchMonth(ym, cb){
-  let legacyDays=null, subDays={};
-  const emit=()=>cb({days:legacyDays||subDays});
+  let legacyDays=null, subDays={}, draft=false;
+  const emit=()=>cb({days:draft?{}:(legacyDays||subDays),draft:draft});
   const a=onSnapshot(monthRef(ym),snap=>{
     const md=snap.exists()?snap.data():null;
     legacyDays=(md&&md.days&&Object.keys(md.days).length&&md.v2!==true)?md.days:null;
+    draft=!!(md&&md.published===false);
     emit();
   });
   const b=onSnapshot(daysCol(ym),qs=>{ subDays=daysFromSnap(qs); emit(); });
@@ -765,6 +783,9 @@ function renderAll(){
   const vac=vacationDays();
   const nDays=new Date(y,m,0).getDate();
   const todayK=dKey(new Date());
+  { const dn=document.getElementById('draftNote'); if(dn){ const draft=!!(monthData&&monthData.draft);   // [38 · §5]
+      dn.style.display=draft?'block':'none';
+      dn.textContent=draft?('The schedule for '+MS[m-1]+' '+y+' hasn’t been published yet. You’ll see it here as soon as it is.'):''; } }
 
   // My calendar
   if(me){
@@ -891,10 +912,11 @@ function renderMyRequests(){
   const el=document.getElementById('myReqList'); if(!el||!me) return;
   const mine=(requests.list||[]).filter(r=>r.user===me).sort((a,b)=>b.ts-a.ts);
   const typeLbl={shift:'Shift request',dayoff:'Day off',nocall:'No call',claim:'Open-shift claim',other:'Other'};
+  const lblOf=r=>r.type==='rt'?esc((r.label||'request')+(r.strength?' ['+String(r.strength).toUpperCase()+']':'')+(r.span==='weekend'?' (the weekend)':'')):(typeLbl[r.type]||esc(r.type));   // [40]
   el.innerHTML=mine.length?mine.map(r=>`
     <div class="rowline">
       <span class="mono" style="font-size:12px">${esc(r.date||'—')}</span>
-      <span style="font-weight:700">${typeLbl[r.type]||esc(r.type)}${r.shiftId?': '+esc(shiftLabel(r.shiftId)):''}</span>
+      <span style="font-weight:700">${lblOf(r)}${r.shiftId?': '+esc(shiftLabel(r.shiftId)):''}</span>
       ${r.note?'<span style="color:var(--t2)">“'+esc(r.note)+'”</span>':''}
       ${(r.status==='denied'&&(r.reason||r.autoDenied))?'<span style="color:#b42318;font-size:12px">— '+esc(r.reason||r.autoDenied)+'</span>':''}
       <span style="margin-left:auto" class="status-${r.status}">${
@@ -1002,15 +1024,39 @@ function fillReqShift(){
 window.onReqType=function(){
   document.getElementById('reqShift').style.display=document.getElementById('reqType').value==='shift'?'':'none';
 };
+// [40 · §41] THE PICKER READS THE ADMIN'S LIST. Grouped by kind in the words he uses; "Other"
+// is always there. While the list is empty the four built-in choices stand, so nothing is lost
+// the day this ships. A type that is not offered, or a work/avoid type with no shift list, is
+// not shown — that decision is the admin's, on the Request Types page.
+let rtData={};
+const RT_GROUPS=[['work','Work something'],['avoid','Avoid something'],['off','Time off'],['absence','Absence'],['available','Availability']];
+function rtOffered(){ return Object.entries(rtData||{}).filter(([,t])=>t&&t.label&&t.active!==false&&((t.kind!=='work'&&t.kind!=='avoid')||t.tag)).sort((a,b)=>((a[1].order??99)-(b[1].order??99))||String(a[1].label).localeCompare(String(b[1].label))); }
+function rtLabel(t){ return (t.label||'')+(t.strength?' ['+String(t.strength).toUpperCase()+']':''); }
+function fillReqTypes(){
+  const sel=document.getElementById('reqType'); if(!sel) return;
+  const cur=sel.value; const offered=rtOffered();
+  if(!offered.length){
+    sel.innerHTML='<option value="shift">Specific shift</option><option value="dayoff">Day off</option><option value="nocall">No call that day</option><option value="other">Other</option>';
+  } else {
+    sel.innerHTML=RT_GROUPS.map(([k,g])=>{ const rows=offered.filter(([,t])=>t.kind===k); return rows.length?('<optgroup label="'+esc(g)+'">'+rows.map(([id,t])=>'<option value="rt:'+esc(id)+'">'+esc(rtLabel(t))+'</option>').join('')+'</optgroup>'):''; }).join('')
+      +'<option value="other">Other</option>';
+  }
+  if(cur&&[...sel.options].some(o=>o.value===cur)) sel.value=cur;
+  onReqType();
+}
+onSnapshot(requestTypesRef,snap=>{ rtData=snap.exists()?snap.data():{}; fillReqTypes(); renderMyRequests(); });
 
 // ── Actions ──
 window.submitRequest=async function(){
   const msg=document.getElementById('reqMsg'); msg.textContent='';
   const date=document.getElementById('reqDate').value;
-  const type=document.getElementById('reqType').value;
+  const picked=document.getElementById('reqType').value;
+  const rt=picked.startsWith('rt:')?(rtData[picked.slice(3)]||null):null;
+  const type=rt?'rt':picked;
   const shiftId=type==='shift'?document.getElementById('reqShift').value:null;
   const note=document.getElementById('reqNote').value.trim();
   if(!me) return;
+  if(picked.startsWith('rt:')&&!rt){ msg.textContent='That choice is no longer offered — pick again.'; msg.style.color='var(--red)'; fillReqTypes(); return; }
   if(!date&&type!=='other'){ msg.textContent='Pick a date first.'; msg.style.color='var(--red)'; return; }
   // [29 · §55] The dropdown only offers eligible shifts, but the handler refuses regardless
   // of what the DOM looks like — same defence-in-depth shape as usersLockedRefuse().
@@ -1019,6 +1065,7 @@ window.submitRequest=async function(){
     msg.style.color='var(--red)'; return; }
   if(type==='other'&&!note){ msg.textContent='Describe what you\'re requesting in the note.'; msg.style.color='var(--red)'; return; }
   const req={id:'r'+Date.now()+Math.floor(Math.random()*1e4),user:me,date:date||null,type,shiftId,note,status:'pending',ts:Date.now()};
+  if(rt){ req.rtId=picked.slice(3); req.kind=rt.kind; req.tag=rt.tag||''; req.strength=rt.strength||''; req.span=rt.span||'day'; req.label=rt.label||''; }   // [40 · §41] the request carries its meaning
   await itemCreate(reqItemsCol,req);
   document.getElementById('reqNote').value='';
   msg.textContent='Request submitted — admin will review it.'; msg.style.color='var(--green)';
@@ -1148,8 +1195,42 @@ function resolveByEmail(email){
 // safe no-op because the sign-in markup no longer references it, but leaving the
 // global defined avoids ReferenceErrors from any stale handler.
 window.onSignUserInput=function(){};
+// [39 · §6] My change feed: subscribed the moment I am known, filtered to me at the query so
+// nobody else's changes are ever fetched. Newest first; "unread" is anything after the moment I
+// last pressed Mark all as read, kept in this browser only.
+let myChanges=[], _unsubChanges=null;
+function chgSeenKey(){ return 'schedChangesSeen.'+me; }
+function chgSeenAt(){ try{ return Number(localStorage.getItem(chgSeenKey())||0); }catch(_){ return 0; } }
+window.markChangesSeen=function(){ try{ localStorage.setItem(chgSeenKey(),String(Date.now())); }catch(_){} renderChanges(); };
+function watchChanges(){
+  if(_unsubChanges){ try{_unsubChanges();}catch(_){} _unsubChanges=null; }
+  myChanges=[];
+  if(!me) return;
+  _unsubChanges=onSnapshot(query(changesCol,where('u','==',me)),qs=>{
+    myChanges=qs.docs.map(d=>d.data()).filter(c=>c&&c.u===me).sort((a,b)=>(b.at||0)-(a.at||0));
+    renderChanges();
+  });
+}
+function renderChanges(){
+  const el=document.getElementById('chgList'), badge=document.getElementById('chgNavBadge');
+  const seen=chgSeenAt();
+  const unread=myChanges.filter(c=>(c.at||0)>seen).length;
+  if(badge){ badge.textContent=unread?String(unread):''; badge.style.display=unread?'':'none'; }
+  if(!el) return;
+  if(!myChanges.length){ el.innerHTML='<div style="font-size:12px;color:var(--t3)">Nothing has changed for you yet.</div>'; return; }
+  el.innerHTML=myChanges.slice(0,100).map(c=>{
+    const when=c.at?new Date(c.at).toLocaleString():'';
+    const fresh=(c.at||0)>seen;
+    return '<div class="rowline" style="'+(fresh?'background:#fffbeb;':'')+'padding:6px 8px;border-radius:6px">'
+      +(fresh?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;margin-right:6px" title="New since you last looked"></span>':'')
+      +'<span style="font-size:12.5px">'+esc(c.text||'changed')+'</span>'
+      +'<span class="mono" style="margin-left:auto;font-size:11px;color:var(--t3)">'+esc(when)+'</span></div>';
+  }).join('')+(myChanges.length>100?'<div style="font-size:11px;color:var(--t3);margin-top:6px">Showing the newest 100.</div>':'');
+}
+window.renderChangesProbe=renderChanges;
 async function finishSignIn(u){
   me=u;
+  watchChanges();
   // Remembering is opt-in via the checkbox — same rule as the Vacation
   // Auction's login. quickSignIn() pre-checks it before calling this, so
   // continuing as a remembered user keeps you remembered by default.

@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 117;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 126;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -114,19 +114,16 @@ nav a.on{color:var(--blue);border-left-color:var(--blue);background:var(--s2)}
    bars trades clutter for a guessing game, which is the same failure wearing the opposite coat. */
 .secth{cursor:pointer;user-select:none;display:flex;align-items:center;gap:7px;margin:-4px -6px 10px;padding:5px 6px;border-radius:8px}
 .secth:hover{background:var(--s2)}
-/* [111] THE COLLAPSE CONTROL, STYLED LIKE THE VACATION SITE'S. Owner, 26 Aug: "style the
-   collapse/expand like the vacation site to be more visible." It was a 10px --t3 arrow nine
-   pixels wide — the faintest thing on the page, on the control you press most. The auction
-   admin says "▸ Show" / "▾ Hide" in words (its `.chev`), and words are the difference: an
-   arrow tells you the state, a word tells you what pressing it will DO. */
-.secta{font-size:11.5px;font-weight:600;color:var(--t2);white-space:nowrap;
-  display:inline-flex;align-items:center;gap:4px;width:auto;
-  background:var(--s2);border:1px solid var(--b2);border-radius:999px;padding:2px 9px;
-  text-transform:none;letter-spacing:0}
-.secth:hover .secta{background:var(--s3);border-color:var(--blue);color:var(--t1)}
-/* A per-item card — one quota, one rule, one group — keeps the bare disclosure. It sits beside
-   a NAME, and "Show" repeated once per card is noise rather than help. */
-.secta.bare{background:none;border:0;padding:0;font-size:11px;width:11px;justify-content:center}
+/* [119 · §122] THE COLLAPSE CONTROL IS THE VACATION ADMIN'S `.chev`, COPIED — not approximated.
+   Owner, 28 Aug: "I want them to be identical to the vacay site and they need to be more
+   visible." Build 111 made a pill for section bars and kept a bare arrow on per-item cards;
+   that was neither identical nor visible enough. This is the auction admin's rule verbatim
+   (its --t2 is #3d5568, written here as the literal so the colour matches to the byte), on
+   EVERY control — section bars, family bands, and each quota, rule and group card — reading
+   "▸ Show" / "▾ Hide" like the auction does. text-transform is reset because the schedule's
+   card titles are uppercase and the auction's control is not. */
+.secta,.chev{font-size:12px;font-weight:600;color:#3d5568;white-space:nowrap;text-transform:none;letter-spacing:0}
+.secth:hover .secta{color:#0a2540}
 .sectsum{margin-left:auto;font-weight:700;color:var(--t3);text-transform:none;letter-spacing:0;font-size:11px}
 .btn{border:1px solid var(--b2);background:var(--s1);color:var(--t1);border-radius:8px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer}
 .btn:hover{background:var(--s3)}
@@ -150,6 +147,13 @@ table.grid{border-collapse:collapse;font-size:11px}
 table.grid th,table.grid td{border:1px solid var(--b1);padding:2px 3px;text-align:center;white-space:nowrap}
 table.grid th{background:var(--s2);font-size:10px;color:var(--t2)}
 table.grid td.cell{cursor:pointer;min-width:44px}
+/* [124 · §90] A cell with a standing rule violation carries a mark in its corner — one colour per
+   severity, the same three as the report — and its tooltip names the rule and the reason. */
+table.grid td.cell{position:relative}
+table.grid td.cell.viol::after{content:'';position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 1.5px #fff}
+table.grid td.cell.viol-serious::after{background:#b91c1c}
+table.grid td.cell.viol-warn::after{background:#d97706}
+table.grid td.cell.viol-note::after{background:#64748b}
 table.grid td.cell:hover{outline:2px solid var(--blue)}
 table.grid .wkend{background:var(--s3)}
 table.grid .stick1{position:sticky;left:0;z-index:2;background:var(--s1);border-right:2px solid var(--b2)}
@@ -407,20 +411,20 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   <div class="nav-section">People</div>
   <a onclick="nav('users',this)">👤 Users</a>
   <a onclick="nav('groups',this)">🧩 Groups</a>
+  <div class="nav-section">Admin</div>
+  <a onclick="nav('engine',this)">⚙️ Engine</a>
+  <a onclick="nav('reports',this)">📈 Reports</a>
+  <a onclick="nav('feeds',this)">📆 Calendar Feeds</a>
+  <a onclick="nav('audit',this)">🧾 Audit Log</a>
   <div class="nav-section">Setup</div>
   <a onclick="nav('elig',this)">🎯 Shift Eligibility</a>
   <a onclick="nav('catalog',this)">🧰 Shift Catalog</a>
   <a onclick="nav('families',this)">🎨 Shift Families</a>
   <a onclick="nav('quotas',this)">🧮 Quotas</a>
   <a onclick="nav('rules',this)">📐 Rules</a>
+  <a onclick="nav('reqtypes',this)">📝 Request Types</a>
   <a onclick="nav('stats',this)">📊 Stats</a>
   <a onclick="nav('coverage',this)">🩺 Coverage</a>
-  <div class="nav-section">Testing</div>
-  <a onclick="nav('simulator',this)">🎲 Simulator</a>
-  <div class="nav-section">Admin</div>
-  <a onclick="nav('reports',this)">📈 Reports</a>
-  <a onclick="nav('feeds',this)">📆 Calendar Feeds</a>
-  <a onclick="nav('audit',this)">🧾 Audit Log</a>
   <div class="nav-section">Other Systems</div>
   <a href="https://anesthesia-kp.github.io/vacation/admin/" target="_blank" rel="noopener">🏖️ Vacation Auction Admin →</a>
 </nav>
@@ -497,6 +501,8 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       <button class="btn btn-ghost" style="font-size:12px" onclick="moveYear(-1)" title="Previous year">« Year</button>
       <button class="btn" onclick="moveMonth(-1)">⟨</button>
       <div id="monthLabel" style="font-size:16px;font-weight:800;min-width:170px;text-align:center"></div>
+      <span id="monthState" class="chipp" style="font-size:10.5px;font-weight:800" title="Draft: staff cannot see this month yet. Published: staff see it and every change lands at once. Change it on the Engine page."></span>
+      <a id="gridViolCount" class="chipp" style="display:none;font-size:10.5px;font-weight:800;background:#fee2e2;color:#b91c1c;cursor:pointer;text-decoration:none" title="Every cell with a mark in its corner breaks a rule — hover it for the reason. Click to open the report." onclick="nav('rules',document.querySelector('nav a[onclick*=rules]'))"></a>
       <button class="btn" onclick="moveMonth(1)">⟩</button>
       <button class="btn btn-ghost" style="font-size:12px" onclick="moveYear(1)" title="Next year">Year »</button>
       <button class="btn btn-ghost" style="font-size:12px" onclick="gotoToday()">Today</button>
@@ -543,10 +549,9 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <option value="">All groups</option>
       </select>
       <span style="flex:1"></span>
-      <!-- [53] Auto-Populate and Clear Month moved to Testing → Simulator (DECISIONS §45).
-           They are testing tools, not daily work, and this is a page people use every day. -->
-      <a onclick="nav('simulator',document.querySelector('nav a[onclick*=simulator]'))"
-         style="font-size:11.5px;color:var(--t2);cursor:pointer;text-decoration:underline">🎲 Auto-populate and Clear Month moved to Testing →</a>
+      <!-- [53] The fill and Clear Month live off this page — it is used every day. [120 · §123] They are on the Engine page now. -->
+      <a onclick="nav('engine',document.querySelector('nav a[onclick*=engine]'))"
+         style="font-size:11.5px;color:var(--t2);cursor:pointer;text-decoration:underline">⚙️ Fill or clear this month on the Engine page →</a>
     </div>
     <!-- [59 · §47] Shown ONLY while the month on screen is still stored the old way.
          It is a lock, not a nag: everything below is read-only until Convert is pressed. -->
@@ -579,7 +584,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       </div>
     </div>
     <div class="card" style="padding:10px 14px;margin-bottom:10px">
-      <div style="font-size:12px;color:var(--t2)"><b>Call fairness:</b> fairness is measured on a <b>rolling 12-month average</b> — the last 12 months of the actual saved schedule, plus each person's starting baseline below. This feeds the <b>fairness view</b> on the Reports page and the simulator's distribution. The baseline stays here because it is real fairness data, not a testing tool.</div>
+      <div style="font-size:12px;color:var(--t2)"><b>Call fairness:</b> fairness is measured on a <b>rolling 12-month average</b> — the last 12 months of the actual saved schedule, plus each person's starting baseline below. This feeds the <b>fairness view</b> on the Reports page and the engine's choice of who has done a shift least. The baseline stays here because it is real fairness data.</div>
       <details style="margin-top:8px">
         <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--t1)">⚙️ Set starting baseline — prior call not yet in the system</summary>
         <div style="font-size:11px;color:var(--t2);margin:6px 0 8px">Enter how many of each call shift each person has already done in the past ~12 months. These seed the rolling window so fairness starts from the right place. As the system builds a full 12-month history, lower these toward 0.</div>
@@ -994,6 +999,23 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   </div>
 
   <!-- STATS -->
+  <!-- REQUEST TYPES — [125 · §41]. What staff may ask for is a list the admin keeps, not the catalog. -->
+  <div class="panel" id="panel-reqtypes">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">Request Types</div>
+    <div class="page-sub" style="margin-bottom:12px">What a person can ask for on the staff site. <b>Not every shift can be requested</b>, so this is a list you keep — not the catalog. Five kinds: <b>work</b> something (points at a shift list), <b>avoid</b> something (points at a shift list), a day <b>off</b>, an <b>absence</b> with a reason, and <b>available</b>. Shift lists are the tags on the Reports page; a list of one shift is still a list.</div>
+    <div class="card">
+      <div class="card-title">Add a request type</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input class="inp" id="rtLabel" placeholder="Label, in the words they already use — e.g. Req OAK Call" style="min-width:260px">
+        <select class="sel" id="rtKind"><option value="work">work something</option><option value="avoid">avoid something</option><option value="off">day off</option><option value="absence">absence</option><option value="available">available</option></select>
+        <button class="btn btn-primary" onclick="addReqType()">Add</button>
+        <span style="flex:1"></span>
+        <button class="btn" onclick="seedStandardReqTypes()" title="The current system's Task dropdown — 26 entries; Use PTO if off is a modifier, not an entry. Work and avoid entries still need their shift list picked.">Add the standard list</button>
+      </div>
+    </div>
+    <div class="card"><div class="card-title">The list</div><div id="rtBody"></div></div>
+  </div>
+
   <div class="panel" id="panel-stats">
     <div class="page-title" style="font-size:16px;margin-bottom:10px">Stats — <span id="statsMonth"></span></div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
@@ -1046,36 +1068,51 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
   </div>
 
   <!-- SIMULATOR — testing tools, armed behind one switch (DECISIONS §45) -->
-  <div class="panel" id="panel-simulator">
-    <div class="page-title" style="font-size:16px;margin-bottom:4px">🎲 Simulator</div>
-    <div class="page-sub" style="margin-bottom:10px">Tools for filling a month quickly so you can see how the site behaves with data in it. They are here, and not on the Schedule Grid, because they are for testing — <b>and because the real thing is not this.</b> A rules-driven engine that reads approved requests is what will eventually build a schedule (§44); auto-populate is a crude ancestor of it and must not grow into it.</div>
+  <!-- ENGINE — §123. The Simulator is retired; this is how shifts get assigned. -->
+  <div class="panel" id="panel-engine">
+    <div class="page-title" style="font-size:16px;margin-bottom:4px">⚙️ Engine</div>
+    <div class="page-sub" style="margin-bottom:12px">How shifts get assigned. <b>Preview</b> shows exactly what the engine would do for the month on the Schedule Grid — nothing is written until you press <b>Apply</b>. It follows every rule that is on: staffing minimums, quota totals, the post-call day, one site per day, and every rule you have made. What it cannot place, it tells you, with the rule that stopped it. You can always place a shift yourself below — a rule warns, it never blocks.</div>
 
-    <div id="rehearseBanner" style="display:none;padding:11px 15px;border-radius:10px;margin-bottom:12px;background:rgba(220,38,38,.12);border:2px solid var(--red);color:var(--red);font-weight:800;font-size:13.5px;line-height:1.45"></div>
+    <div class="card" id="engPublish">
+      <div class="card-title">Draft or published</div>
+      <div id="engPubBody"></div>
+    </div>
 
     <div class="card">
-      <div class="card-title">Rehearsal mode</div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">
-        One switch for every tool below. <b>This is not a sandbox.</b> Everything here writes the real schedule, and everyone sees the result immediately — the switch exists so that filling or wiping a month is always two deliberate acts instead of one stray click. It is in memory, so it turns itself off when you reload.
+      <div class="card-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">Run the engine
+        <span style="flex:1"></span>
+        <button class="btn btn-ghost" style="font-size:12px;padding:3px 9px" onclick="moveMonth(-1)" title="Previous month">◀</button>
+        <span id="engMonth" style="font-size:13px;font-weight:800;color:var(--t1);text-transform:none;letter-spacing:0;min-width:130px;text-align:center"></span>
+        <button class="btn btn-ghost" style="font-size:12px;padding:3px 9px" onclick="moveMonth(1)" title="Next month">▶</button>
       </div>
-      <div id="rehearseBtns" class="row" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">Each shift is filled to its staffing minimum, then each quota to its total, giving every shift to whoever has done it least over the rolling twelve months — <b>after the people who asked for it</b> (approved requests, strongest first) and the people who said they are available. An approved <i>avoid</i> is kept. <b>One shift per person per day.</b> Existing assignments are kept; nothing is ever removed.</div>
+      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <button class="btn btn-primary" id="engPreviewBtn" onclick="enginePreview()">🔍 Preview this month</button>
+        <button class="btn" onclick="autoPopulateYear()" title="Runs the same engine for all twelve months of the year on screen, writing as it goes">⚡ Run the whole year</button>
+      </div>
+      <div id="engPlan"></div>
     </div>
 
-    <div class="card" id="simTools">
-      <div class="card-title">Fill</div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">
-        Gives each shift to whoever has done it least over the rolling 12 months (real schedule + the baseline on the Schedule Grid). Existing assignments are kept. <b>One shift per person per day</b> — the simulator never doubles anyone up (§45), so what it produces is easy to read.
+    <div class="card">
+      <div class="card-title">Assign by hand</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">One shift on one day, or several shifts across a run of days. Preview first; every warning the engine would have stopped on is shown, and you decide. Nothing here blocks — the override is recorded.</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px">
+        <label style="font-size:12px;color:var(--t2);display:flex;flex-direction:column;gap:4px">person<select class="sel" id="mhWho" style="font-size:12.5px;min-width:180px"></select></label>
+        <label style="font-size:12px;color:var(--t2);display:flex;flex-direction:column;gap:4px">from<input class="inp" type="date" id="mhFrom" style="font-size:12.5px"></label>
+        <label style="font-size:12px;color:var(--t2);display:flex;flex-direction:column;gap:4px">to<input class="inp" type="date" id="mhTo" style="font-size:12.5px"></label>
+        <div style="font-size:12px;color:var(--t2);display:flex;flex-direction:column;gap:4px">on these days<div id="mhDows" style="display:flex;gap:8px;flex-wrap:wrap"></div></div>
       </div>
-      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="autoPopulate()">⚡ Auto-populate this month</button>
-        <button class="btn btn-primary" onclick="autoPopulateYear()">⚡ Auto-populate the whole year</button>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:4px">shifts</div>
+      <div id="mhShifts" style="display:flex;gap:6px 14px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <button class="btn btn-primary" onclick="manualPreview()">🔍 Preview</button>
       </div>
+      <div id="mhPlan"></div>
     </div>
 
-    <div class="card" id="simDanger">
-      <div class="card-title">Wipe</div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">
-        <b>Clear Month removes every assignment for the month you are viewing, for everybody.</b> There is no undo, and staff see it at once. It is parked here for now because it is a testing tool; when the site is in real use it needs a better answer than a button.
-      </div>
+    <div class="card" id="engDanger">
+      <div class="card-title">Clear a month</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px"><b>Removes every assignment for the month on the Schedule Grid, for everybody.</b> There is no undo, and staff see it at once. Vacation weeks stay — they come from the auction.</div>
       <button class="btn btn-danger" onclick="clearMonth()">🗑 Clear the month I'm viewing</button>
     </div>
   </div>
@@ -1340,6 +1377,7 @@ const feedTokensRef   = doc(db,"dailysched","feedTokens");   // [110] {initials:
 // [110] The rendered calendar itself: dailysched/feeds/items/{token}. One document per
 // doctor, holding finished .ics text, so the hosted endpoint is a lookup and nothing else.
 const rulesRef        = doc(db,"dailysched","rules");    // [105] Stage 5 rule instances
+const requestTypesRef = doc(db,"dailysched","requestTypes");   // [125 · §41] the admin-curated list of what can be requested
 const groupsRef       = doc(db,"dailysched","groups");
 const groupMembersRef = doc(db,"dailysched","groupMembers");
 const categoriesRef   = doc(db,"dailysched","categories");
@@ -1529,6 +1567,31 @@ const schedFteRef = doc(db,"dailysched","fteMap"); // THIS SITE's own FTE per us
 // and never written to again. No banner, no lock, no button.
 const auditRef     = doc(db,"dailysched","auditLog");                       // legacy {log:[…]} — read for ever, never appended to again
 const auditColRef  = collection(db,"dailysched","auditLog","entries");      // the truth from build 63 on
+// [122 · §6] THE PERSONAL CHANGE FEED. One document per person per change to a PUBLISHED month:
+// {u, dk, at, by, added:[ids], removed:[ids], off, text}. Staff read only their own (§6:
+// "Users should only see changes that involve them"). A draft month emits nothing until it is
+// published, and publishing emits one entry per person who holds anything in it (§5).
+const changesCol   = collection(db,"dailysched","changes","items");
+function changeText(c){
+  const lbl=id=>shiftLabel(id);
+  const bits=[];
+  if(c.published) return (c.monthName||c.dk)+' was published — you have '+c.count+' shift'+(c.count===1?'':'s')+' in it.';
+  if(c.cleared) return 'Every shift you held in '+(c.monthName||c.dk)+' was removed.';
+  if((c.added||[]).length) bits.push('added '+c.added.map(lbl).join(' + '));
+  if((c.removed||[]).length) bits.push('removed '+c.removed.map(lbl).join(' + '));
+  if(c.off===true) bits.push('marked off'); else if(c.off===false) bits.push('no longer marked off');
+  return (bits.length?bits.join(', '):'changed')+' on '+c.dk;
+}
+async function emitChanges(list){
+  // Never throws — a feed entry must not break the write it describes (same rule as auditLog).
+  for(const c of (list||[])){
+    if(!c||!c.u) continue;
+    const entry=Object.assign({at:Date.now(),by:_currentAdminEmail||'unknown'},c);
+    entry.text=changeText(entry);
+    try{ await setDoc(doc(changesCol),entry); }catch(e){ console.warn('change feed append failed',e); }
+  }
+}
+window.changeTextProbe=changeText;
 const AUDIT_SHOWN  = 300;                                                   // how many the page displays, NOT how many are kept
 // Sorts by time and does not collide. The id is padded so a plain string sort is a time
 // sort, which is what makes the query cheap.
@@ -1607,6 +1670,7 @@ let schedFte={}, schedFteLoaded=false, namesLoaded=false, baselineData={};
 let groupsData={}, groupMembers={}, categories={};
 let quotasData={}; let quotasLoaded=false; let _renamingQuota='';
 let rulesData={}, rulesLoaded=false;   // [105] Stage 5 — see §S17
+let rtData={}, rtLoaded=false;         // [125] request types — {id:{label,kind,tag,strength,span,note,order,active}}
 let printCfg={}, printCfgLoaded=false; // [107] printable sheets — see §S18
 let callArchive={}, callArchiveLoaded=false; // [108] across-years — see §S19
 let feedTokens={}, feedTokensLoaded=false;   // [110] calendar feed — see §S20
@@ -2143,6 +2207,7 @@ window.nav=function(id,el){
   if(id!=='elig'&&typeof _eligOpen!=='undefined'&&_eligOpen){ _eligOpen=''; }
   // [66 · S2] entering a panel renders it fresh — data may have changed while hidden.
   if(typeof PANEL_KEYS!=='undefined'&&PANEL_KEYS[id]) markDirty(...PANEL_KEYS[id]);
+  if(id==='engine'&&typeof renderEngine==='function') renderEngine();   // [120] the month label and the form
 };
 
 // ── Month ──
@@ -2167,7 +2232,11 @@ function setMonth(ym){
   const unsubA=onSnapshot(monthRef(ym),snap=>{
     const md=snap.exists()?snap.data():null;
     legacyDays=(md&&md.days&&Object.keys(md.days).length&&md.v2!==true)?md.days:null;
+    monthPublished=!(md&&md.published===false);                       // [121 · §5] absent means published
+    monthPubMeta={at:(md&&md.publishedAt)||null,by:(md&&md.publishedBy)||''};
+    if(typeof markDirty==='function') markDirty('grid');               // the badge lives on the grid header
     recombine();
+    if(typeof renderEngine==='function') renderEngine();
   });
   const unsubB=onSnapshot(daysCol(ym),qs=>{ subDays=daysFromSnap(qs); recombine(); });
   unsubMonth=()=>{ try{unsubA();}catch(_){}; try{unsubB();}catch(_){} };
@@ -2176,6 +2245,13 @@ function setMonth(ym){
 // True while the month on screen is still in the pre-59 single-document format.
 // Every writer checks this. It is not a warning — it is a lock (see monthLockRefuse).
 let monthLegacy=false, monthLoaded=false;
+// [121 · §5] DRAFT vs PUBLISHED. The month document carries `published:false` while a month is
+// being built; ABSENT MEANS PUBLISHED, so nothing already on the site disappears from staff the
+// day this ships. Staff see nothing of a draft month; an admin sees everything, with the state
+// on the grid and on the Engine page. Approvals on a draft build the draft (§5).
+let monthPublished=true, monthPubMeta={};
+function monthIsPublished(){ return monthPublished!==false; }
+window.monthIsPublishedProbe=monthIsPublished;
 function monthLockRefuse(){
   if(!monthLegacy) return false;
   schedToast('This month is still in the old storage format. Convert it first — the banner above the grid has the button.','err');
@@ -2298,8 +2374,10 @@ window.shiftsOf=shiftsOf; window.shiftEntries=shiftEntries; window.holdsShift=ho
 // two admins editing the same day cannot lose each other's change — the old whole-cell
 // mergeFields write had exactly that hole. `fn` gets {shifts:[entries], off} and returns
 // the same shape, or null to abort and write nothing.
+let _mcBefore=null,_mcAfter=null,_mcPublished=true;
 async function mutateCell(ym,dd,u,fn){
   let result=null, blocked=false;
+  _mcBefore=null; _mcAfter=null; _mcPublished=true;
   await runTransaction(db, async (tx)=>{
     result=null; blocked=false;                   // reset per attempt — this closure re-runs on conflict
     // [59] Is this month still unconverted? Asked HERE, against fresh data inside the
@@ -2320,6 +2398,9 @@ async function mutateCell(ym,dd,u,fn){
     const cur=(exists&&snap.data()[u])||{};
     const next=fn({shifts:shiftEntries(cur),off:!!cur.off});
     if(!next) return;                             // guard failed on fresh data — no-op
+    // [122 · §6] What this write changes, and whether staff can see the month.
+    _mcBefore={ids:shiftsOf(cur),off:!!cur.off}; _mcAfter={ids:next.shifts.map(x=>x.s),off:!!next.off};
+    _mcPublished=!(md&&md.published===false);
     const cell={
       a:next.shifts.map(x=>({s:x.s,by:x.by||_currentAdminEmail||'unknown',at:x.at||Date.now(),via:x.via||'manual'})),
       off:!!next.off,
@@ -2334,6 +2415,11 @@ async function mutateCell(ym,dd,u,fn){
   if(blocked){
     schedToast(ym+' is still in the old storage format and cannot be edited until it is converted — see the banner above the grid.','err');
     return null;
+  }
+  if(result&&_mcBefore&&_mcAfter&&_mcPublished){   // [122 · §6] a published month tells the person
+    const added=_mcAfter.ids.filter(x=>_mcBefore.ids.indexOf(x)<0), removed=_mcBefore.ids.filter(x=>_mcAfter.ids.indexOf(x)<0);
+    const off=(_mcBefore.off!==_mcAfter.off)?_mcAfter.off:null;
+    if(added.length||removed.length||off!==null) emitChanges([{u:u,dk:ym+'-'+dd,added:added,removed:removed,off:off}]);
   }
   return result;
 }
@@ -2356,10 +2442,26 @@ window.setCellOff=function(ym,dd,u,val){
 };
 
 // ── Schedule grid ──
+// [124 · §90] The grid's own view of the conflict report: every standing violation this month,
+// by person and day, computed ONCE per render from the same checkMonth the Rules page uses (§19).
+let _gridViol={};
+function gridViolIndex(){
+  const idx={}; let n=0;
+  try{
+    const res=checkMonth(curYM,(monthData&&monthData.days)||{});
+    for(const v of (res.all||[])){ (idx[v.u+'|'+v.dd]=idx[v.u+'|'+v.dd]||[]).push({sev:v.sev,label:v.label,what:v.what}); n++; }
+  }catch(e){ console.warn('grid violations',e); }
+  return {idx:idx,n:n};
+}
 function renderGrid(){
   const g=document.getElementById('schedGrid'); if(!g||!curYM) return;
+  { const gv=gridViolIndex(); _gridViol=gv.idx;   // [124]
+    const el=document.getElementById('gridViolCount'); if(el){ el.style.display=gv.n?'':'none';
+      el.innerHTML='⚠ '+gv.n+' rule conflict'+(gv.n===1?'':'s')+' this month'; } }
   const [y,m]=curYM.split('-').map(Number);
   document.getElementById('monthLabel').textContent=MS[m-1]+' '+y;
+  { const st=document.getElementById('monthState'); if(st){ const pub=monthIsPublished();   // [121 · §5]
+      st.textContent=pub?'PUBLISHED':'DRAFT — staff cannot see it'; st.style.background=pub?'#dcfce7':'#fef3c7'; st.style.color=pub?'#166534':'#92400e'; } }
   const nDays=new Date(y,m,0).getDate();
   const vac=vacationDays();
   // [67] today is marked, holidays get a dot in the header, and the header row is
@@ -2420,6 +2522,9 @@ function renderGrid(){
     for(const dd of vis){
       const d=Number(dd), dk=curYM+'-'+dd, wd=new Date(y,m-1,d).getDay();
       const c=cellOf(u,dd); const onVac=!!vac[u+'|'+dk]; let inner;
+      const vv=_gridViol[u+'|'+dd]||null;   // [124] standing violations on this cell
+      const vCls=vv?(' viol viol-'+vv[0].sev):'';
+      const vTitle=vv?(' title="'+esc(vv.map(x=>x.label+': '+x.what).join('\n'))+'"'):'';
       if(gridDensity==='compact'){ inner=cellBlocksHtml(c,onVac); }
       else {
       const bits=[];
@@ -2427,7 +2532,7 @@ function renderGrid(){
       if(c.off) bits.push('<span class="chipp" style="background:#e2e8f0;color:#475569">OFF</span>');
       for(const id of shiftsOf(c)) bits.push(chipHtml(id));   // [52] a list, however many
       inner=bits.join('<br>'); }
-      rows+='<td data-day="'+dd+'" class="cell '+((wd===0||wd===6)?'wkend':'')+(dd===todayDD?' today':'')+'" onclick="openCell(\''+esc(u)+'\',\''+dd+'\')">'+(inner||'')+'</td>';
+      rows+='<td data-day="'+dd+'" class="cell '+((wd===0||wd===6)?'wkend':'')+(dd===todayDD?' today':'')+vCls+'"'+vTitle+' onclick="openCell(\''+esc(u)+'\',\''+dd+'\')">'+(inner||'')+'</td>';
     }
     rows+='</tr>';
   }
@@ -2596,22 +2701,22 @@ window.assignmentWarnings=assignmentWarnings;   // HANDOFF trap 1
 // and the ones that span days (rest, cooldown, caps) are checked against that one day and
 // SAY the rest of the month was not in view. Reading a month on every Approve is a later
 // decision, not a silent read (§2's cost arithmetic).
-function ruleWarnings(ym,dd,u,addId,cells){
+// [120 · §123] THE CORE, shared: given a month's days as they stand, what NEW violations would
+// adding `addId` to `u` on `dd` create? Returns them with rank and label. ruleWarnings (the
+// three human paths) and fillDay (the engine) both ask this ONE question (§19).
+function ruleDiff(ym,dd,u,addId,days){
   const out=[];
   if(!ym||!dd||!u||!addId) return out;
   const rl=ruleList().filter(([,r])=>ruleEnabled(r)&&RULE_TYPES[r.type]&&ruleTargets(r,u));
   if(!rl.length) return out;
-  const open = (ym===curYM && monthData && monthData.days) ? monthData.days : null;
-  const before = open ? Object.assign({},open) : {};
-  const cur=(cells&&cells[u])||{};
-  before[dd]=Object.assign({},(open&&open[dd])||cells||{},{[u]:cur});
+  const before=days||{};
+  const cur=((before[dd]||{})[u])||{};
   const after=Object.assign({},before);
   const entries=shiftEntries(cur).slice();
   if(!entries.some(x=>x.s===addId)) entries.push({s:addId});
-  after[dd]=Object.assign({},before[dd],{[u]:Object.assign({},cur,{a:entries})});
+  after[dd]=Object.assign({},before[dd]||{},{[u]:Object.assign({},cur,{a:entries})});
   delete after[dd][u].day; delete after[dd][u].call;   // the legacy pair — `a` is the truth
   const tally=(res)=>{ const m={}; for(const v of (res.violations||[])) m[v.dd+'|'+String(v.what)]=v; return m; };
-  const spans=[];
   for(const [key,r] of rl){
     const t=RULE_TYPES[r.type];
     const b=tally(t.check(r,{people:[u],ym:ym,days:before}));
@@ -2619,13 +2724,23 @@ function ruleWarnings(ym,dd,u,addId,cells){
     const sv=sevOf(r);
     for(const v of (a.violations||[])){
       if(b[v.dd+'|'+String(v.what)]) continue;
-      const when=(v.dd===dd)?'':(' (on the '+Number(v.dd)+')');
-      out.push({rank:sv.rank,text:(sv.k==='serious'?'⛔ SERIOUS — ':(sv.k==='note'?'Note — ':''))+'“'+(r.label||key)+'”'+when+': '+v.what});
+      out.push({rank:sv.rank,sev:sv.k,key:key,label:r.label||key,type:r.type,dd:v.dd,what:v.what});
     }
-    if(!open && /minRest|maxPerPeriod|cooldown/.test(r.type)) spans.push(r.label||key);
   }
   out.sort((x,y)=>x.rank-y.rank);
-  const msgs=out.map(x=>x.text);
+  return out;
+}
+window.ruleDiffProbe=ruleDiff;
+function ruleWarnings(ym,dd,u,addId,cells){
+  if(!ym||!dd||!u||!addId) return [];
+  const open = (ym===curYM && monthData && monthData.days) ? monthData.days : null;
+  const days = open ? Object.assign({},open) : {};
+  const cur=(cells&&cells[u])||{};
+  days[dd]=Object.assign({},(open&&open[dd])||cells||{},{[u]:cur});
+  const diff=ruleDiff(ym,dd,u,addId,days);
+  const msgs=diff.map(x=>(x.sev==='serious'?'⛔ SERIOUS — ':(x.sev==='note'?'Note — ':''))+'“'+x.label+'”'+((x.dd===dd)?'':(' (on the '+Number(x.dd)+')'))+': '+x.what);
+  const spans=[];
+  if(!open) for(const [key,r] of ruleList()) if(ruleEnabled(r)&&ruleTargets(r,u)&&/minRest|maxPerPeriod|cooldown/.test(r.type)) spans.push(r.label||key);
   if(spans.length) msgs.push('“'+spans.join('”, “')+'” '+(spans.length===1?'was':'were')+' checked against this day only — '+ym+' is not the month on screen, so the rest of it was not in view.');
   return msgs;
 }
@@ -2796,55 +2911,9 @@ async function windowShiftCounts(endYm, priorMonths, cache){
 // with the LOWEST rolling-12-month count for that shift (window + baseline + this
 // month so far) — this is what keeps call16/call24/OB PM evenly spread.
 // ══ [53] REHEARSAL MODE — DECISIONS §45 ══════════════════════════════════════
-// Mirrors the Vacation Auction's switch of the same name rather than inventing one: the
-// two sites are deliberately convergent (§34), and the auction's wording is already honest
-// about the thing that matters — this is NOT a sandbox. Every tool it arms writes the real
-// schedule and every user sees the result at once.
-// In memory on purpose, so it disarms on reload rather than remembering an unlock — same
-// reasoning as the Users-page lock in build 50.
-// [60] Armed by default. §45 made the simulator a testing tool; gating a testing tool
-// behind a switch you must find first is friction with no payoff this far from real use.
-// The CONFIRMATION on Clear Month stays — that is not a lock, it is a question, and it is
-// the thing that actually stops an accidental wipe.
-let rehearsalOn=true, _rehearsalArmedBy=null;
-function renderRehearsal(){
-  const bar=document.getElementById('rehearseBanner'), btns=document.getElementById('rehearseBtns');
-  if(!btns) return;
-  if(bar){
-    bar.style.display=rehearsalOn?'block':'none';
-    // [60] The warning is the point and it STAYS. What changed is that it no longer has
-    // to be switched on first — the danger it names is unchanged, so the words are too.
-    bar.innerHTML='🎭 <b>REHEARSAL MODE IS ON.</b> Auto-populate and Clear Month are available. '
-      +'This is <b>not</b> a sandbox — everything writes the real schedule and staff see it immediately. '
-      +'Clear Month has no undo. Turn it off if you want them out of reach.';
-  }
-  btns.innerHTML = rehearsalOn
-    ? '<button class="btn btn-primary" onclick="setRehearsal(false)">Turn rehearsal mode OFF</button>'
-      +'<span style="font-size:11.5px;color:var(--t2)">'
-      +(_rehearsalArmedBy?('Turned on by '+esc(_rehearsalArmedBy)+'.'):'On by default while the site is being built.')
-      +' Reloading puts it back to on.</span>'
-    : '<button class="btn" onclick="setRehearsal(true)">Turn rehearsal mode ON</button>'
-      +'<span style="font-size:11.5px;color:var(--t2)">You turned it off. The tools below refuse until it is back on; reloading also turns it back on.</span>';
-  const dim=x=>{ const e=document.getElementById(x); if(e) e.className='card'+(rehearsalOn?'':' pagelocked'); };
-  dim('simTools'); dim('simDanger');
-}
-window.setRehearsal=function(v){
-  if(v && !confirm('Turn rehearsal mode ON?\n\n'
-    +'It unlocks auto-populate and Clear Month.\n\n'
-    +'This is NOT a sandbox. Everything they do writes the REAL schedule for this site, and '
-    +'staff see the result immediately. Clear Month has no undo.\n\n'
-    +'It turns itself off when you reload the page.')) return;
-  rehearsalOn=!!v; _rehearsalArmedBy=v?(_currentAdminEmail||'you'):null;
-  auditLog('rehearsal.'+(v?'on':'off'),'Rehearsal mode turned '+(v?'ON — auto-populate and Clear Month unlocked':'off'));
-  renderRehearsal();
-};
-// Defence in depth: the handlers refuse regardless of what the DOM looks like. A lock that
-// only dims buttons is not a lock — the same lesson as the Users page in build 50.
-function rehearsalRefuse(){
-  if(rehearsalOn) return false;
-  schedToast('Turn rehearsal mode on first — Testing → Simulator','err');
-  return true;
-}
+// [120 · §123] Rehearsal mode is RETIRED with the Simulator. Owner: "get rid of the simulator, I
+// don't need it." The engine writes the real schedule and says so on its page; Clear Month keeps
+// its confirmation, which was always the thing that actually stopped an accidental wipe (§3/§5).
 
 // ═══ [117] ONE FILL FOR ONE DAY — month and year both call this. ═══════════════════════════
 // Until this build the month and year fillers were two copies of the same loop (§19's exact
@@ -2863,18 +2932,82 @@ function rehearsalRefuse(){
 // WHAT IT NEVER DOES: remove anything (§8). A quota already OVER its total — because the
 // member shifts' own minimums add up past it — is a CONFLICT, reported and left standing
 // for a person to resolve. And a quota it cannot fill says which and by how many.
+// ═══ [126] APPROVED REQUESTS, AS THE ENGINE READS THEM ═══════════════════════════════════════
+// A request the admin has APPROVED is a decision, and the engine keeps it: an approved AVOID
+// keeps that person off every shift in that list that day; an approved WORK request puts that
+// person first in line for any shift in its list that day (strongest first: MAX, HIGH, LOW,
+// then none); an approved AVAILABLE puts them ahead of the fairness order for anything that
+// day. Pending requests are not decisions and are not read. The legacy kinds map the same way:
+// "nocall" is an avoid over the Overnight call tag, "shift" is a work request over one shift.
+const REQ_RANK={max:0,high:1,low:2,'':3};
+function requestIndex(){
+  const idx={avoid:{},work:{},avail:{}};
+  for(const r of (requests.list||[])){
+    if(!r||r.status!=='approved'||!r.date||!r.user) continue;
+    const dks=(r.type==='rt')?rtDates(r):[r.date];
+    for(const dk of dks){
+      const key=r.user+'|'+dk;
+      if(r.type==='rt'&&r.kind==='avoid'&&r.tag){ const set=(idx.avoid[key]=idx.avoid[key]||new Set()); for(const id of tagShiftSet(r.tag)) set.add(id); }
+      else if(r.type==='nocall'){ const set=(idx.avoid[key]=idx.avoid[key]||new Set()); for(const id of overnightSet()) set.add(id); }
+      else if(r.type==='rt'&&r.kind==='work'&&r.tag){ for(const id of tagShiftSet(r.tag)){ const k2=dk+'|'+id; (idx.work[k2]=idx.work[k2]||[]).push({u:r.user,rank:REQ_RANK[r.strength||'']??3}); } }
+      else if(r.type==='shift'&&r.shiftId){ const k2=dk+'|'+r.shiftId; (idx.work[k2]=idx.work[k2]||[]).push({u:r.user,rank:3}); }
+      else if(r.type==='rt'&&r.kind==='available'){ idx.avail[key]=true; }
+    }
+  }
+  return idx;
+}
+window.requestIndexProbe=requestIndex;
 function fillDay(days,dd,dt,dk,o){
-  const out={filled:0,notAsked:0,unfillable:[],quotaFilled:0,quotaConflicts:[]};
+  const out={filled:0,notAsked:0,unfillable:[],quotaFilled:0,quotaConflicts:[],declined:[],onRequest:0};
+  const req=o.req||{avoid:{},work:{},avail:{}};
   days[dd]=days[dd]||{};
   const cnt=(u,s)=>o.counts[u+'|'+s]||0;
-  const free=u=>allowed(u,o.id)&&!o.vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!shiftsOf(days[dd][u]).length;   // [53 · §45] one per person per day, total
+  // [118 · §121] The post-call day: somebody whose shift YESTERDAY ran past midnight is not a
+  // candidate today. Yesterday is this month's previous day, or — on the 1st — the last day of
+  // the previous month when the caller holds it (the year filler does; the month filler cannot,
+  // and the 1st is therefore unguarded there, §121 ④).
+  const pc=postCallOn();
+  const yday=(()=>{ const d=Number(dd)-1; if(d>=1) return days[pad(d)]||{}; const pv=o.prevDays||null; if(!pv) return {}; const ks=Object.keys(pv).sort(); return ks.length?(pv[ks[ks.length-1]]||{}):{}; })();
+  const postCall=u=>pc&&shiftsOf(yday[u]).some(id=>{ const sh=(catalog.shifts||{})[id]; return !!(sh&&sh.start&&sh.end&&crossesMidnight(sh.start,sh.end)); });
+  const avoids=u=>{ const a=req.avoid[u+'|'+dk]; return !!(a&&a.has(o.id)); };   // [126] an approved avoid is a decision
+  const free=u=>allowed(u,o.id)&&!o.vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!shiftsOf(days[dd][u]).length&&!postCall(u)&&!avoids(u);   // [53 · §45] one per person per day, total · [118] never on a post-call day · [126] never against an approved avoid
   const have=id=>Object.values(days[dd]).filter(c=>holdsShift(c,id)).length;
+  // [120 · §123] "The engine must follow all rules that are set." Candidates are tried in
+  // fairness order and the first one NO enabled rule objects to is placed — any severity,
+  // because severity is how loudly a PERSON is warned, not permission for a machine. When
+  // every candidate is stopped, the slot is declined and says who was stopped by what.
+  const ym=String(dk).slice(0,7);
   const place=(id,via)=>{
     o.id=id;
     const cands=names.filter(free);
-    if(!cands.length) return false;
-    cands.sort((a,b)=>cnt(a,id)-cnt(b,id)||a.localeCompare(b));
-    const pick=cands[0];
+    if(!cands.length){
+      // Nobody free — but if the only thing standing between a free person and this shift is
+      // the built-in post-call day, that is a rule stopping the engine, and it is said as one.
+      const pc=names.filter(u=>allowed(u,id)&&!o.vac[u+'|'+dk]&&!(days[dd][u]?.off)&&!shiftsOf(days[dd][u]).length&&postCall(u));
+      if(pc.length){ const sh=(catalog.shifts||{})[id]; out.declined.push(dk+' '+(sh&&sh.label||id)+': '+pc.length+' eligible, every one stopped by a rule — '+pc.slice(0,6).map(u=>displayName(u)+' (Post-call day)').join('; ')+(pc.length>6?'; …':'')); }
+      return false;
+    }
+    // [126] Who asked comes first — strongest request first — then whoever said they are
+    // available, then the fairness order. Every one of them still has to pass the rules.
+    const askers=(req.work[dk+'|'+id]||[]).slice().sort((a,b)=>a.rank-b.rank).map(x=>x.u);
+    const askRank=u=>{ const i=askers.indexOf(u); return i<0?99:i; };
+    // Somebody who asked for a DIFFERENT shift today is spoken for: they go to the back of the
+    // line for this one, so the shift they asked for still finds them free when its turn comes.
+    const spokenFor=u=>askers.indexOf(u)<0 && Object.keys(req.work).some(k=>k.indexOf(dk+'|')===0 && k!==dk+'|'+id && req.work[k].some(x=>x.u===u)) ? 1 : 0;
+    const availRank=u=>req.avail[u+'|'+dk]?0:1;
+    cands.sort((a,b)=>(askRank(a)-askRank(b))||(spokenFor(a)-spokenFor(b))||(availRank(a)-availRank(b))||(cnt(a,id)-cnt(b,id))||a.localeCompare(b));
+    let pick=null; const stopped=[];
+    for(const u of cands){
+      const d=ruleDiff(ym,dd,u,id,days);
+      if(!d.length){ pick=u; break; }
+      stopped.push(displayName(u)+' ('+[...new Set(d.map(x=>x.label))].join(', ')+')');
+    }
+    if(pick&&askers.indexOf(pick)>=0) out.onRequest++;
+    if(!pick){
+      const sh=(catalog.shifts||{})[id];
+      out.declined.push(dk+' '+(sh&&sh.label||id)+': '+cands.length+' eligible, every one stopped by a rule — '+stopped.slice(0,6).join('; ')+(stopped.length>6?'; …':''));
+      return false;
+    }
     days[dd][pick]={a:[...shiftEntries(days[dd][pick]),{s:id,by:_currentAdminEmail||'unknown',at:Date.now(),via:via}],off:!!days[dd][pick]?.off};
     o.counts[pick+'|'+id]=cnt(pick,id)+1;
     o.changed[dd+'.'+pick]=true;
@@ -2887,7 +3020,7 @@ function fillDay(days,dd,dt,dk,o){
     if(capacity<=0){ out.notAsked++; continue; }        // §9: silence is not a gap
     let h=have(id);
     while(h<capacity){
-      if(!place(id,'auto')){ out.unfillable.push(dk+' '+s.label+(capacity>1?' ('+(capacity-h)+' more needed)':'')); break; }
+      if(!place(id,'auto')){ if(!out.declined.length||!out.declined[out.declined.length-1].startsWith(dk+' '+s.label+':')) out.unfillable.push(dk+' '+s.label+(capacity>1?' ('+(capacity-h)+' more needed)':'')); break; }
       h++;
     }
   }
@@ -2920,50 +3053,249 @@ function fillDay(days,dd,dt,dk,o){
 }
 window.fillDayProbe=fillDay;   // module scope — HANDOFF trap 1
 
+// ═══ [120 · §123] THE ENGINE, IN TWO HALVES: PLAN (in memory, nothing written) and WRITE. ═══
+// The Engine page previews a plan and applies it on a second press; autoPopulate() below is
+// the old one-step form kept for the year runner's wording and for the suites that drive it.
+async function enginePlan(ym){
+  const [y,m]=ym.split('-').map(Number);
+  const nDays=new Date(y,m,0).getDate();
+  const anyDemand=anyDemandConfigured();
+  const vac=vacationDays();
+  const days=JSON.parse(JSON.stringify((ym===curYM&&monthData&&monthData.days)||{}));
+  // Rolling 12-month fairness: 11 prior months of real schedule + the admin baseline…
+  const counts= await windowShiftCounts(ym, 11);
+  // …plus THIS month's already-placed assignments (the 12th month of the window).
+  for(const dd in days) for(const u in days[dd]) for(const id of shiftsOf(days[dd][u])) counts[u+'|'+id]=(counts[u+'|'+id]||0)+1;
+  const plan={ym:ym,at:Date.now(),anyDemand:anyDemand,filled:0,notAsked:0,quotaFilled:0,onRequest:0,unfillable:[],declined:[],quotaConflicts:[],changed:{},days:days,byDay:{}};
+  const req=requestIndex();   // [126] approved requests, once per plan
+  for(let d=1;d<=nDays;d++){
+    const dd=pad(d), dk=ym+'-'+dd;
+    const r=fillDay(days,dd,new Date(y,m-1,d),dk,{vac:vac,counts:counts,anyDemand:anyDemand,changed:plan.changed,req:req});   // [117] one fill · [126] with the requests
+    plan.filled+=r.filled; plan.notAsked+=r.notAsked; plan.quotaFilled+=r.quotaFilled; plan.onRequest+=r.onRequest;
+    plan.unfillable.push(...r.unfillable); plan.declined.push(...r.declined); plan.quotaConflicts.push(...r.quotaConflicts);
+  }
+  // What would be written, by day and person — the preview reads this.
+  for(const key in plan.changed){ const [dd,u]=key.split('.'); (plan.byDay[dd]=plan.byDay[dd]||{})[u]=days[dd][u]; }
+  return plan;
+}
+async function engineWrite(plan){
+  // [M-20] Write ONLY the cells the plan assigns, as a targeted field patch, instead of a
+  // full-month setDoc — a whole-month write would revert any change another admin/tab
+  // made during the multi-second fairness read above. [59] Grouped BY DAY.
+  for(const dd in plan.byDay) await mergeFields(dayRef(plan.ym,dd),plan.byDay[dd]);
+  const [y,m]=plan.ym.split('-').map(Number);
+  if(plan.ym===curYM&&monthIsPublished()){   // [122 · §6] the engine's fills reach people too
+    const list=[];
+    for(const dd in plan.byDay) for(const u in plan.byDay[dd]){
+      const added=shiftEntries(plan.byDay[dd][u]).filter(x=>x.via==='auto'&&x.at>=plan.at-1000).map(x=>x.s);
+      if(added.length) list.push({u:u,dk:plan.ym+'-'+dd,added:added,removed:[],off:null});
+    }
+    emitChanges(list);
+  }
+  auditLog('engine.month','Engine filled '+MS[m-1]+' '+y+' — '+plan.filled+' assignments'+(plan.quotaFilled?' ('+plan.quotaFilled+' to meet quota totals)':'')+(plan.unfillable.length?', '+plan.unfillable.length+' unfillable':'')+(plan.declined.length?', '+plan.declined.length+' declined by a rule':'')+(plan.notAsked?', '+plan.notAsked+' shift-days not asked for':'')+(plan.quotaConflicts.length?', '+plan.quotaConflicts.length+' quota conflict(s)':''));
+}
+window.enginePlanProbe=enginePlan;
+function planSummary(plan){
+  return plan.filled+' assignments'
+    +(plan.quotaFilled?' ('+plan.quotaFilled+' to meet quota totals)':'')
+    +(plan.onRequest?' · '+plan.onRequest+' placed on request':'')
+    +(plan.notAsked?' · '+plan.notAsked+' shift-day(s) not asked for (§9)':'')
+    +(plan.unfillable.length?' · '+plan.unfillable.length+' could not be filled':'')
+    +(plan.declined.length?' · '+plan.declined.length+' stopped by a rule':'')
+    +(plan.quotaConflicts.length?' · '+plan.quotaConflicts.length+' quota conflict(s)':'');
+}
+let _enginePlan=null;
+window.enginePreview=async function(){
+  if(monthLockRefuse()) return;                    // [59] never fill an unconverted month
+  const btn=document.getElementById('engPreviewBtn'); if(btn){ btn.disabled=true; btn.textContent='Working…'; }
+  try{ _enginePlan=await enginePlan(curYM); }
+  catch(e){ schedToast('Could not build the plan: '+((e&&e.message)||'unknown error'),'err'); }
+  if(btn){ btn.disabled=false; btn.textContent='🔍 Preview this month'; }
+  renderEngine();
+};
+window.engineApply=async function(){
+  const plan=_enginePlan; if(!plan) return;
+  if(plan.ym!==curYM){ schedToast('That preview was for '+plan.ym+' — preview again for the month on screen.','err'); _enginePlan=null; renderEngine(); return; }
+  if(monthLockRefuse()) return;
+  const [y,m]=plan.ym.split('-').map(Number);
+  if(!confirm('Apply the engine\'s plan for '+MS[m-1]+' '+y+'?\n\n'+planSummary(plan)+'\n\nExisting assignments are kept. '
+    +(monthIsPublished()?'This month is PUBLISHED — staff see the result immediately.':'This month is a DRAFT — staff will not see it until you publish.'))) return;
+  await engineWrite(plan);
+  _enginePlan=null;
+  schedToast('Applied — '+plan.filled+' assignments made.','ok');
+  renderEngine();
+};
+window.engineDiscard=function(){ _enginePlan=null; renderEngine(); };
+const listHtml=(title,items,n)=> items.length ? ('<div style="margin-top:8px"><div style="font-size:11.5px;font-weight:700;color:var(--t2);margin-bottom:3px">'+title+' ('+items.length+')</div>'
+  +'<div style="font-size:11.5px;color:var(--t1);line-height:1.5;max-height:220px;overflow:auto;background:var(--s2);border-radius:8px;padding:6px 9px">'+items.slice(0,n).map(x=>esc(x)).join('<br>')+(items.length>n?'<br>…and '+(items.length-n)+' more':'')+'</div></div>') : '';
+// [121 · §5] The month's state, and the two buttons that change it. Publishing names how many
+// rule violations are standing (design/RULES.md: "the publish confirmation names how many are
+// outstanding") — a report, not a gate.
+window.publishMonth=async function(){
+  if(!curYM) return;
+  const [y,m]=curYM.split('-').map(Number); const nm=MS[m-1]+' '+y;
+  const standing=(checkMonth(curYM,(monthData&&monthData.days)||{}).all||[]).length;
+  if(!confirm('Publish '+nm+'?\n\nStaff will see the whole month at once, and from then on every change — hand edits, approvals, the engine — lands for them immediately.'
+    +(standing?'\n\n⚠️ '+standing+' rule violation'+(standing===1?' is':'s are')+' standing in this month (see the Rules page). Publishing does not clear them.':'\n\nNo rule violations are standing.'))) return;
+  await mergeFields(monthRef(curYM),{published:true,publishedAt:Date.now(),publishedBy:_currentAdminEmail||'unknown'});
+  auditLog('month.publish','Published '+nm+(standing?' with '+standing+' rule violation'+(standing===1?'':'s')+' standing':''));
+  { // [122 · §6] "reaches people at publish" — one entry per person who holds anything in the month
+    const counts={}; const days=(monthData&&monthData.days)||{};
+    for(const dd in days) for(const u in days[dd]) counts[u]=(counts[u]||0)+shiftsOf(days[dd][u]).length;
+    emitChanges(Object.keys(counts).filter(u=>counts[u]>0).map(u=>({u:u,dk:curYM,monthName:nm,published:true,count:counts[u]})));
+  }
+  schedToast(nm+' is published.','ok');
+};
+window.unpublishMonth=async function(){
+  if(!curYM) return;
+  const [y,m]=curYM.split('-').map(Number); const nm=MS[m-1]+' '+y;
+  if(!confirm('Return '+nm+' to DRAFT?\n\nStaff will stop seeing this month until you publish it again. Nothing on it is removed.')) return;
+  await mergeFields(monthRef(curYM),{published:false});
+  auditLog('month.unpublish','Returned '+nm+' to draft');
+  schedToast(nm+' is a draft again — staff cannot see it.','ok');
+};
+function renderPublishCard(){
+  const host=document.getElementById('engPubBody'); if(!host||!curYM) return;
+  const [y,m]=curYM.split('-').map(Number); const nm=MS[m-1]+' '+y;
+  const pub=monthIsPublished();
+  const when=monthPubMeta.at?new Date(monthPubMeta.at).toLocaleDateString():'';
+  host.innerHTML=pub
+    ? '<div style="font-size:12.5px;color:var(--t1);margin-bottom:8px"><span class="chipp" style="background:#dcfce7;color:#166534;font-size:10.5px;font-weight:800">PUBLISHED</span> '
+        +esc(nm)+' is what staff see'+(when?' — published '+esc(when)+(monthPubMeta.by?' by '+esc(monthPubMeta.by):''):'')+'. Every change lands for them at once.</div>'
+      +'<button class="btn" onclick="unpublishMonth()">Return to draft</button>'
+    : '<div style="font-size:12.5px;color:var(--t1);margin-bottom:8px"><span class="chipp" style="background:#fef3c7;color:#92400e;font-size:10.5px;font-weight:800">DRAFT</span> '
+        +esc(nm)+' is being built — <b>staff cannot see it</b>. Run the engine, adjust by hand, then publish. Requests staff make now become part of the draft.</div>'
+      +'<button class="btn btn-primary" onclick="publishMonth()">✅ Publish '+esc(nm)+'</button>';
+}
+function renderEngine(){
+  const mEl=document.getElementById('engMonth'); if(!mEl) return;
+  const [y,m]=(curYM||ymKey(new Date())).split('-').map(Number);
+  mEl.textContent=MS[m-1]+' '+y;
+  renderPublishCard();
+  const host=document.getElementById('engPlan');
+  const plan=_enginePlan;
+  if(!plan||plan.ym!==curYM){
+    host.innerHTML=plan?'<div style="font-size:12px;color:#92400e">The preview you had was for another month. Preview again for '+esc(MS[m-1]+' '+y)+'.</div>':'';
+  } else {
+    const dayRows=Object.keys(plan.byDay).sort().map(dd=>{ const c=plan.byDay[dd]; const who=Object.keys(c).sort().map(u=>displayName(u)+' → '+shiftEntries(c[u]).filter(x=>x.via==='auto'&&x.at>=plan.at-1000).map(x=>shiftLabel(x.s)).join(' + ')); return plan.ym+'-'+dd+': '+who.join(' · '); });
+    host.innerHTML='<div style="font-size:12.5px;color:var(--t1);font-weight:700;margin-bottom:6px">'+esc(planSummary(plan))+'</div>'
+      +'<div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">'
+        +'<button class="btn btn-primary" id="engApplyBtn" onclick="engineApply()"'+(plan.filled?'':' disabled')+'>✅ Apply — write '+plan.filled+' assignment'+(plan.filled===1?'':'s')+'</button>'
+        +'<button class="btn btn-ghost" onclick="engineDiscard()">Discard</button>'
+      +'</div>'
+      +listHtml('Would assign',dayRows,31)
+      +listHtml('Stopped by a rule — nobody eligible could take these without breaking one',plan.declined,20)
+      +listHtml('Could not fill — nobody eligible and free',plan.unfillable,20)
+      +listHtml('Quota conflicts — left standing, nothing removed',plan.quotaConflicts,20);
+  }
+  renderManualForm();
+}
 window.autoPopulate=async function(){
-  if(rehearsalRefuse()) return;
   if(monthLockRefuse()) return;                    // [59] never fill an unconverted month
   const [y,m]=curYM.split('-').map(Number);
-  const nDays=new Date(y,m,0).getDate();
   const _anyDemand=anyDemandConfigured();
-  // [78 · defect 5] The dialog now says what the button will actually do. It used to promise
-  // "every shift in the catalog", which was true and was the defect.
+  // [78 · defect 5] The dialog says what the button will actually do.
   if(!confirm('Auto-populate '+MS[m-1]+' '+y+'?\n\n'
     +(_anyDemand
       ? 'Fills what the STAFFING RULES ask for on each day, using eligibility + even call distribution. A shift with no rule for a day is not asked for and is left empty (§9).'
       : 'No shift has staffing rules yet, so this falls back to filling every shift every day, to shift capacity. Set staffing rules in the Shift Catalog to control which days are actually asked for.')
     +'\n\nExisting assignments are kept. Users see changes immediately.')) return;
-  const vac=vacationDays();
-  const days=JSON.parse(JSON.stringify(monthData.days||{}));
-  // Rolling 12-month fairness: 11 prior months of real schedule + the admin baseline…
-  const counts= await windowShiftCounts(curYM, 11);
-  const cnt=(u,s)=>counts[u+'|'+s]||0;
-  // …plus THIS month's already-placed assignments (the 12th month of the window).
-  for(const dd in days) for(const u in days[dd]) for(const id of shiftsOf(days[dd][u])) counts[u+'|'+id]=(counts[u+'|'+id]||0)+1;
-  let filled=0, unfillable=[], notAsked=0, quotaFilled=0, quotaConflicts=[];
-  const changed={}; // [M-20] only the cells THIS run actually assigns, so we don't clobber concurrent edits
-  for(let d=1;d<=nDays;d++){
-    const dd=pad(d), dk=curYM+'-'+dd;
-    const r=fillDay(days,dd,new Date(y,m-1,d),dk,{vac:vac,counts:counts,anyDemand:_anyDemand,changed:changed});   // [117] one fill
-    filled+=r.filled; notAsked+=r.notAsked; quotaFilled+=r.quotaFilled;
-    unfillable.push(...r.unfillable); quotaConflicts.push(...r.quotaConflicts);
-  }
-  // [M-20] Write ONLY the cells we filled, as a targeted field patch, instead of a
-  // full-month setDoc — a whole-month write would revert any change another admin/tab
-  // made during the multi-second fairness read above.
-  // [59] Grouped BY DAY, one write per day document that actually changed.
-  const byDay={};
-  for(const key in changed){ const [dd,u]=key.split('.'); (byDay[dd]=byDay[dd]||{})[u]=days[dd][u]; }
-  for(const dd in byDay) await mergeFields(dayRef(curYM,dd),byDay[dd]);
-  auditLog('autopopulate.month','Auto-populated '+MS[m-1]+' '+y+' — '+filled+' assignments'+(quotaFilled?' ('+quotaFilled+' to meet quota totals)':'')+(unfillable.length?', '+unfillable.length+' unfillable':'')+(notAsked?', '+notAsked+' shift-days not asked for':'')+(quotaConflicts.length?', '+quotaConflicts.length+' quota conflict(s)':''));
-  // [78] Say what was SKIPPED as well as what was filled. "Complete — 12 assignments" while
-  // 900 shift-days were deliberately passed over is the kind of true-sounding sentence that
-  // sends someone hunting for a bug that is not there. Same reasoning as [59]'s named months.
+  const plan=await enginePlan(curYM);
+  await engineWrite(plan);
+  const {filled,quotaFilled,notAsked,unfillable,declined,quotaConflicts}=plan;
+  // [78] Say what was SKIPPED as well as what was filled.
   alert('Auto-populate complete — '+filled+' assignments made.'
     +(quotaFilled?'\n\n🧮 '+quotaFilled+' of them were placed to meet QUOTA totals, on top of the shifts’ own minimums.':'')
     +(notAsked?'\n\n⏭️ '+notAsked+' shift-day(s) were not asked for by any staffing rule and were left empty (§9).':'')
+    +(declined.length?'\n\n⛔ Stopped by a rule (nobody eligible could take these without breaking one):\n'+declined.slice(0,15).join('\n')+(declined.length>15?'\n…and '+(declined.length-15)+' more':''):'')
     +(unfillable.length?'\n\n⚠️ Could not fill (no eligible user):\n'+unfillable.slice(0,15).join('\n')+(unfillable.length>15?'\n…and '+(unfillable.length-15)+' more':''):'')
     +(quotaConflicts.length?'\n\n⚠️ QUOTA CONFLICTS — left standing for you to resolve, nothing was removed:\n'+quotaConflicts.slice(0,15).join('\n')+(quotaConflicts.length>15?'\n…and '+(quotaConflicts.length-15)+' more':''):''));
+};
+
+// ═══ [120 · §123 ④] ASSIGN BY HAND — one shift on one day, or several across a run of days,
+// through the SAME checker as the cell editor and the approval queues (§51). Warns, never
+// blocks; the override is recorded per assignment.
+const DOW_NAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+let _manualPlan=null, _mhDrawn=false;
+function renderManualForm(){
+  const who=document.getElementById('mhWho'); if(!who) return;
+  if(!_mhDrawn){
+    _mhDrawn=true;
+    const [y,m]=(curYM||ymKey(new Date())).split('-').map(Number);
+    const first=y+'-'+pad(m)+'-01';
+    const f=document.getElementById('mhFrom'), t=document.getElementById('mhTo');
+    if(f&&!f.value) f.value=first; if(t&&!t.value) t.value=first;
+    const dows=document.getElementById('mhDows');
+    if(dows) dows.innerHTML=DOW_NAMES.map((n,i)=>'<label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="mhDow" value="'+i+'" checked>'+n+'</label>').join('');
+  }
+  const cur=who.value;
+  who.innerHTML='<option value="">— pick a person —</option>'+(names||[]).map(u=>'<option value="'+esc(u)+'"'+(u===cur?' selected':'')+'>'+esc(displayName(u))+'</option>').join('');
+  const sh=document.getElementById('mhShifts');
+  if(sh){
+    const ticked=new Set([...sh.querySelectorAll('input:checked')].map(x=>x.value));
+    sh.innerHTML=shiftList().map(([id,s])=>'<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer"><input type="checkbox" class="mhShift" value="'+esc(id)+'"'+(ticked.has(id)?' checked':'')+'>'+esc(s.label||id)
+      +(who.value&&!allowed(who.value,id)?' <span style="font-size:10px;color:#92400e" title="Not ticked as eligible — you can still assign it; it will warn">not eligible</span>':'')+'</label>').join('');
+  }
+  const host=document.getElementById('mhPlan');
+  if(host&&_manualPlan) host.innerHTML=manualPlanHtml(_manualPlan);
+}
+window.manualPreview=async function(){
+  const u=(document.getElementById('mhWho')||{}).value||'';
+  const ids=[...document.querySelectorAll('.mhShift:checked')].map(x=>x.value);
+  const dows=new Set([...document.querySelectorAll('.mhDow:checked')].map(x=>Number(x.value)));
+  const from=(document.getElementById('mhFrom')||{}).value||'', to=(document.getElementById('mhTo')||{}).value||from;
+  if(!u){ schedToast('Pick a person first.','err'); return; }
+  if(!ids.length){ schedToast('Tick at least one shift.','err'); return; }
+  if(!from){ schedToast('Pick a date.','err'); return; }
+  const a=new Date(from+'T00:00:00'), b=new Date((to||from)+'T00:00:00');
+  if(isNaN(a)||isNaN(b)||b<a){ schedToast('The dates do not make a range.','err'); return; }
+  if((b-a)/86400000>62){ schedToast('Two months at a time at most.','err'); return; }
+  const rows=[]; const dayCache={};
+  for(let d=new Date(a); d<=b; d.setDate(d.getDate()+1)){
+    if(!dows.has(d.getDay())) continue;
+    const ym=ymKey(d), dd=pad(d.getDate()), key=ym+'-'+dd;
+    let cells;
+    if(ym===curYM&&monthData&&monthData.days) cells=monthData.days[dd]||{};
+    else { if(!(key in dayCache)){ try{ dayCache[key]=await readDay(ym,dd); }catch(e){ dayCache[key]=null; } } cells=dayCache[key]||{}; }
+    for(const id of ids){
+      const already=holdsShift(cells[u],id);
+      rows.push({ym:ym,dd:dd,dk:key,id:id,label:shiftLabel(id),already:already,warn:already?[]:assignmentWarnings(ym,dd,u,id,cells)});
+    }
+  }
+  _manualPlan={u:u,rows:rows,at:Date.now()};
+  const host=document.getElementById('mhPlan'); if(host) host.innerHTML=manualPlanHtml(_manualPlan);
+};
+function manualPlanHtml(pl){
+  const todo=pl.rows.filter(r=>!r.already), warned=todo.filter(r=>r.warn.length);
+  return '<div style="font-size:12.5px;font-weight:700;color:var(--t1);margin-bottom:6px">'+esc(displayName(pl.u))+': '+todo.length+' assignment'+(todo.length===1?'':'s')
+      +(warned.length?' — '+warned.length+' with a warning':'')+(pl.rows.length-todo.length?' · '+(pl.rows.length-todo.length)+' already held, skipped':'')+'</div>'
+    +'<div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">'
+      +'<button class="btn btn-primary" id="mhApplyBtn" onclick="manualApply()"'+(todo.length?'':' disabled')+'>✅ Assign '+todo.length+'</button>'
+      +'<button class="btn btn-ghost" onclick="manualDiscard()">Discard</button></div>'
+    +'<div style="font-size:11.5px;line-height:1.55;max-height:260px;overflow:auto;background:var(--s2);border-radius:8px;padding:6px 9px">'
+      +pl.rows.map(r=>'<div>'+esc(r.dk)+' · <b>'+esc(r.label)+'</b>'+(r.already?' <span style="color:var(--t3)">already held</span>':(r.warn.length?' <span style="color:#92400e">⚠ '+r.warn.map(x=>esc(x)).join(' · ')+'</span>':' <span style="color:#166534">clear</span>'))+'</div>').join('')
+    +'</div>';
+}
+window.manualDiscard=function(){ _manualPlan=null; const h=document.getElementById('mhPlan'); if(h) h.innerHTML=''; };
+window.manualApply=async function(){
+  const pl=_manualPlan; if(!pl) return;
+  const todo=pl.rows.filter(r=>!r.already), warned=todo.filter(r=>r.warn.length);
+  if(!todo.length) return;
+  if(!confirm('Assign '+todo.length+' shift'+(todo.length===1?'':'s')+' to '+displayName(pl.u)+'?'
+    +(warned.length?'\n\n⚠️ '+warned.length+' of them carry a warning:\n'+warned.slice(0,8).map(r=>r.dk+' '+r.label+' — '+r.warn.join(' · ')).join('\n')+(warned.length>8?'\n…and '+(warned.length-8)+' more':'')+'\n\nYou can do this anyway — nothing is blocked. Each override will be recorded.':'')
+    +'\n\nNothing already on those days will be removed.')) return;
+  let done=0, skipped=0;
+  for(const r of todo){
+    try{
+      const ok=await window.addCellShift(r.ym,r.dd,pl.u,r.id,'manual');
+      if(!ok){ skipped++; continue; }
+      done++;
+      auditLog('cell.add','Added '+r.label+' to '+displayName(pl.u)+' on '+r.dk+' (Engine · by hand)'+(r.warn.length?' — OVERRIDE: '+r.warn.join(' · '):''));
+    }catch(e){ skipped++; }
+  }
+  _manualPlan=null;
+  schedToast('Assigned '+done+(skipped?' ('+skipped+' skipped)':'')+'.','ok');
+  renderEngine();
 };
 // Same fill as autoPopulate() above, run for all 12 months of the viewed
 // year in calendar order, chaining fairness counts in memory month-to-month
@@ -2973,7 +3305,6 @@ window.autoPopulate=async function(){
 // setMonth()'s live listener, so this doesn't disturb whatever month is
 // currently on screen.
 window.autoPopulateYear=async function(){
-  if(rehearsalRefuse()) return;
   const year=curYM?Number(curYM.split('-')[0]):new Date().getFullYear();
   const _anyDemand=anyDemandConfigured();
   if(!confirm('Auto-populate ALL 12 months of '+year+' (January–December)?\n\nRuns the same fill as Auto-Populate Month, one month at a time in order, keeping existing assignments and balancing call fairness across the whole year. '
@@ -2981,6 +3312,7 @@ window.autoPopulateYear=async function(){
     +'This can take a few seconds and writes to all 12 months.')) return;
   const vac=vacationDays();
   const _cache={}; // ym -> days; updated as we fill each month so later rolling windows see this run's fresh fills
+  const _req=requestIndex();   // [126] approved requests, once per run
   const skippedLegacy=[]; // [59] months still in the pre-split format — skipped, and named at the end
   let grandFilled=0, grandNotAsked=0, grandQuota=0; const grandUnfillable=[], grandConflicts=[];
   for(let m=1;m<=12;m++){
@@ -3000,9 +3332,9 @@ window.autoPopulateYear=async function(){
     const changed={}; // [M-20] cells THIS month's fill actually assigns
     for(let d=1;d<=nDays;d++){
       const dd=pad(d), dk=ym+'-'+dd;
-      const r=fillDay(days,dd,new Date(year,m-1,d),dk,{vac:vac,counts:counts,anyDemand:_anyDemand,changed:changed});   // [117] the SAME fill as the month
+      const r=fillDay(days,dd,new Date(year,m-1,d),dk,{vac:vac,counts:counts,anyDemand:_anyDemand,changed:changed,prevDays:(m>1?_cache[year+'-'+pad(m-1)]:null)||null,req:_req});   // [117] the SAME fill as the month · [118] with last month's tail for the 1st · [126] with the requests
       grandFilled+=r.filled; grandNotAsked+=r.notAsked; grandQuota+=r.quotaFilled;
-      grandUnfillable.push(...r.unfillable); grandConflicts.push(...r.quotaConflicts);
+      grandUnfillable.push(...r.unfillable, ...r.declined); grandConflicts.push(...r.quotaConflicts);   // [120] declined-by-rule rides with unfillable in the year summary
     }
     // [M-20] targeted patch — only this run's fills, never a whole-month overwrite.
     // [59] Grouped BY DAY, one write per day document that actually changed.
@@ -3021,7 +3353,6 @@ window.autoPopulateYear=async function(){
     +(skippedLegacy.length?'\n\n⏭️ SKIPPED — still in the old storage format, nothing was written to '+(skippedLegacy.length>1?'these months':'this month')+':\n'+skippedLegacy.join(', ')+'\n\nOpen each one in Schedule and press Convert, then run this again.':'')+(grandUnfillable.length?'\n\n⚠️ Could not fill (no eligible user) — '+grandUnfillable.length+' slot(s):\n'+grandUnfillable.slice(0,15).join('\n')+(grandUnfillable.length>15?'\n…and '+(grandUnfillable.length-15)+' more':''):''));
 };
 window.clearMonth=async function(){
-  if(rehearsalRefuse()) return;
   if(monthLockRefuse()) return;
   const [y,m]=curYM.split('-').map(Number);
   if(!confirm('Clear ALL assignments for '+MS[m-1]+' '+y+'? Vacation weeks stay (they come from the auction). This cannot be undone.')) return;
@@ -3031,11 +3362,13 @@ window.clearMonth=async function(){
   // assignment the owner just cleared reappears. Setting the marker says "the
   // subcollection is the truth here" even when the truthful answer is nothing.
   const qs=await getDocs(daysCol(curYM));
+  const held={}; qs.forEach(d=>{ const v=d.data()||{}; for(const u in v) if(shiftsOf(v[u]).length) held[u]=true; });   // [122]
   const batch=writeBatch(db);
   qs.forEach(d=>batch.delete(dayRef(curYM,d.id)));
   batch.set(monthRef(curYM),{v2:true},{merge:true});
   await batch.commit();
   auditLog('month.clear','Cleared ALL assignments for '+MS[m-1]+' '+y+' — '+qs.size+' day document(s) removed');
+  if(monthIsPublished()) emitChanges(Object.keys(held).map(u=>({u:u,dk:curYM,monthName:MS[m-1]+' '+y,cleared:true})));   // [122 · §6]
 };
 
 // ── Requests ──
@@ -3047,11 +3380,21 @@ function renderRequests(){
   const done=(requests.list||[]).filter(r=>r.status!=='pending').sort((a,b)=>b.ts-a.ts).slice(0,40);
   const badge=document.getElementById('reqBadge'); if(badge) badge.textContent=pend.length?('('+pend.length+')'):'';
   const typeLbl={shift:'Shift request',dayoff:'Day off',nocall:'No call',claim:'Open-shift claim',other:'Other'};
+  // [125] A typed request shows its label, its strength and what it points at; a "work" request
+  // over a list of several shifts gets a picker on its row — the admin decides which one.
+  const rtText=r=>{ if(r.type!=='rt') return typeLbl[r.type]||esc(r.type);
+    const strength=r.strength?' <span class="chipp" style="background:#e0e7ff;color:#3730a3;font-size:10px">'+esc(String(r.strength).toUpperCase())+'</span>':'';
+    const tag=r.tag?' <span style="font-weight:400;color:var(--t2)">→ '+esc(tagLabel(r.tag))+'</span>':'';
+    const span=r.span==='weekend'?' <span style="font-weight:400;color:var(--t2)">(the weekend)</span>':'';
+    return esc(r.label||'request')+strength+tag+span; };
+  const rtPicker=r=>{ if(r.type!=='rt'||r.kind!=='work'||!r.tag) return '';
+    const ids=[...tagShiftSet(r.tag)]; if(ids.length<=1) return '';
+    return '<select class="sel" id="rtShift_'+esc(r.id)+'" style="font-size:11px;margin-right:6px" title="Which shift from the list to give them">'+ids.map(id=>'<option value="'+esc(id)+'">'+esc(shiftLabel(id))+'</option>').join('')+'</select>'; };
   const row=(r,buttons)=>`
     <div class="rowline">
       <span style="font-weight:800">${esc(displayName(r.user))}</span>
       <span class="mono" style="font-size:12px">${esc(r.date||'—')}</span>
-      <span style="font-weight:700">${typeLbl[r.type]||esc(r.type)}${r.shiftId?': ':''}${r.shiftId?chipHtml(r.shiftId):''}</span>
+      <span style="font-weight:700">${rtText(r)}${r.shiftId?': ':''}${r.shiftId?chipHtml(r.shiftId):''}</span>
       ${r.note?'<span style="color:var(--t2)">“'+esc(r.note)+'”</span>':''}
       <span style="margin-left:auto">${buttons}</span>
     </div>`;
@@ -3063,7 +3406,7 @@ function renderRequests(){
   // Playwright suites that drive this page, and forcing a reason would slow an admin working
   // a queue. Empty is allowed and behaves exactly as before.
   document.getElementById('reqPending').innerHTML=pend.length?pend.map(r=>row(r,
-    `<input id="denyWhy_${esc(r.id)}" class="inp" style="font-size:11px;width:150px;padding:3px 6px;margin-right:6px" placeholder="reason (optional)" maxlength="140">
+    rtPicker(r)+`<input id="denyWhy_${esc(r.id)}" class="inp" style="font-size:11px;width:150px;padding:3px 6px;margin-right:6px" placeholder="reason (optional)" maxlength="140">
      <button class="btn btn-success" style="font-size:12px" onclick="decideReq('${esc(r.id)}','approved')">✓ Approve</button>
      <button class="btn btn-danger" style="font-size:12px" onclick="decideReq('${esc(r.id)}','denied')">✗ Deny</button>`)).join('')
     :'<div style="font-size:12px;color:var(--t3)">Nothing pending.</div>';
@@ -3092,10 +3435,17 @@ window.decideReq=async function(id,status){
   // at the warning must leave the world exactly as it was. Approving first and asking
   // second would strand an "approved" request with nothing assigned — the same shape as
   // the bug decideSwap already carries a note about.
-  let overrode='';
+  let overrode='', rtShift='';
   if(status==='approved'){
     const pre=(requests.list||[]).find(x=>x.id===id && x.status==='pending');
-    if(pre && pre.date && (pre.type==='shift'||pre.type==='claim')){
+    // [125] A typed "work" request resolves to ONE shift here: the row's picker, or the list's only shift.
+    if(pre && pre.type==='rt' && pre.kind==='work'){
+      const ids=[...tagShiftSet(pre.tag||'')];
+      if(!ids.length){ schedToast('This request type points at no shift list, or an empty one — set it on the Request Types page first. Nothing was approved.','err'); return; }
+      rtShift=ids.length===1?ids[0]:String((document.getElementById('rtShift_'+id)||{}).value||'');
+      if(!rtShift||ids.indexOf(rtShift)<0){ schedToast('Pick which shift to give them first.','err'); return; }
+    }
+    if(pre && pre.date && (pre.type==='shift'||pre.type==='claim'||(pre.type==='rt'&&pre.kind==='work'))){
       const mk=pre.date.slice(0,7), dd=pre.date.slice(8);
       let cells=null, readErr=null;
       try{ cells=await readDay(mk,dd); }catch(e){ readErr=e; }
@@ -3103,7 +3453,7 @@ window.decideReq=async function(id,status){
         schedToast('Could not check this request: '+((readErr&&readErr.message)||'the month could not be read')+' Nothing was approved.','err');
         return;
       }
-      const warn=assignmentWarnings(mk,dd,pre.user,pre.shiftId,cells);
+      const warn=assignmentWarnings(mk,dd,pre.user,pre.type==='rt'?rtShift:pre.shiftId,cells);
       if(warn.length){
         if(!confirm('Approve this request for '+displayName(pre.user)+' on '+pre.date+'?\n\n'
           +'⚠️ '+warn.join('\n⚠️ ')
@@ -3181,6 +3531,29 @@ window.decideReq=async function(id,status){
         let removed=[];
         await mutateCell(mk,dd,r.user,st=>{ removed=st.shifts.map(x=>x.s); return {shifts:[],off:true}; });
         applied='marked them off'+(removed.length?' and REMOVED '+removed.map(lbl).join(', '):' (they held nothing that day)');
+      }
+      else if(r.type==='rt'){
+        // [125] The five kinds. work → the one shift resolved above; off/absence → OFF on every
+        // day the request covers (a weekend is two); avoid → remove anything held from that list
+        // that day, exactly as "No call" always has; available → a decision, nothing to write.
+        if(r.kind==='work'){
+          let wasOff=false, already=false;
+          await mutateCell(mk,dd,r.user,st=>{ wasOff=st.off; already=st.shifts.some(x=>x.s===rtShift);
+            return {shifts:already?st.shifts:[...st.shifts,{s:rtShift,via:'request'}],off:false}; });
+          applied=(already?'they already held ':'added ')+lbl(rtShift)+(wasOff?', and cleared their day-off flag':'')+'. Nothing else on that day was touched.';
+        } else if(r.kind==='off'||r.kind==='absence'){
+          const outs=[];
+          for(const dkx of rtDates(r)){ const mk2=dkx.slice(0,7), dd2=dkx.slice(8); let removed=[];
+            await mutateCell(mk2,dd2,r.user,st=>{ removed=st.shifts.map(x=>x.s); return {shifts:[],off:true}; });
+            outs.push(dkx+(removed.length?' (removed '+removed.map(lbl).join(', ')+')':'')); }
+          applied='marked them off'+(r.kind==='absence'?' ('+(r.label||'absence')+')':'')+' on '+outs.join(' and ');
+        } else if(r.kind==='avoid'){
+          const set=tagShiftSet(r.tag||''); let removed=[];
+          await mutateCell(mk,dd,r.user,st=>{ removed=st.shifts.filter(x=>set.has(x.s)).map(x=>x.s); if(!removed.length) return null; return {shifts:st.shifts.filter(x=>!set.has(x.s)),off:st.off}; });
+          applied=removed.length?('removed '+removed.map(lbl).join(', ')+' — they had asked to avoid '+tagLabel(r.tag)):('nothing to remove — they held nothing from '+tagLabel(r.tag)+' that day; the engine will not give them one');
+        } else {
+          applied='recorded — '+(r.label||'available')+' (nothing to write)';
+        }
       }
       else if(r.type==='nocall'){
         // [52] "No call" now means the OVERNIGHT-CALL TAG — the list the admin set (§27) —
@@ -3285,15 +3658,91 @@ function renderSwaps(){
 // Only ever acts on a swap that's already been accepted by everyone whose
 // turn came before admin's (status==='pending_admin') — admin is always
 // the last step, never the first.
+async function decideSwapTx(id,status){
+  let s=null, blocked=null, changes=[];
+  await runTransaction(db, async (tx)=>{
+    s=null; blocked=null; changes=[];               // reset per attempt — this closure re-runs on conflict
+    const iRef=doc(swapItemsCol,String(id));
+    const iSnap=await tx.get(iRef);
+    let item=iSnap.exists()?iSnap.data():null;
+    if(!item){
+      const lSnap=await tx.get(swapsRef);
+      const l=(lSnap.exists()&&Array.isArray(lSnap.data().list))?lSnap.data().list:[];
+      item=l.find(x=>x&&x.id===id)||null;
+    }
+    if(!item||item._gone||item.status!=='pending_admin') return;   // decided already, or gone
+    // What moves. 2-way: an exchange of each side's shifts OF THAT KIND on one day. 3-way:
+    // A→B→C→A, each leg a one-directional handoff of the giver's shifts of that kind.
+    const legs=[];
+    if(item.type==='3way'){
+      const [a,b,c]=item.participants||[]; const L=item.legs||[];
+      [[a,b,L[0]],[b,c,L[1]],[c,a,L[2]]].forEach(([giver,receiver,leg])=>{ if(leg&&leg.date) legs.push({mk:String(leg.date).slice(0,7),dd:String(leg.date).slice(8),giver,receiver,k:leg.part==='call'?'call':'day'}); });
+    } else if(item.date){
+      const mk=String(item.date).slice(0,7), dd=String(item.date).slice(8), k=item.part==='call'?'call':'day';
+      legs.push({mk,dd,giver:item.from,receiver:item.to,k,exchange:true});
+    }
+    // READS FIRST (Firestore requires it): every month document and every day document, once each.
+    const months={}, dayDocs={}, dayData={};
+    if(status==='approved'){
+      for(const l of legs){
+        if(!months[l.mk]){ const m=await tx.get(monthRef(l.mk)); months[l.mk]=m.exists()?m.data():null; }
+        const key=l.mk+'|'+l.dd;
+        if(!dayDocs[key]){ const d=await tx.get(dayRef(l.mk,l.dd)); dayDocs[key]={exists:d.exists()}; dayData[key]=JSON.parse(JSON.stringify(d.exists()?d.data():{})); }
+      }
+      for(const mk in months){ const md=months[mk]; if(md&&md.days&&Object.keys(md.days).length&&md.v2!==true){ blocked=mk+' is still in the old storage format. Convert it first.'; return; } }
+    }
+    // COMPUTE, in memory, in order.
+    const touched={};   // key -> {u:true}
+    const before={};    // key|u -> ids
+    const cellOf=(key,u)=>dayData[key][u]||{};
+    const setCell=(key,u,shifts,off)=>{ dayData[key][u]={a:shifts.map(x=>({s:x.s,by:x.by||_currentAdminEmail||'unknown',at:x.at||Date.now(),via:x.via||'swap'})),off:!!off}; (touched[key]=touched[key]||{})[u]=true; };
+    const note=(key,u)=>{ if(!(key+'|'+u in before)) before[key+'|'+u]=shiftsOf(cellOf(key,u)); };
+    if(status==='approved'){
+      for(const l of legs){
+        const key=l.mk+'|'+l.dd;
+        if(l.exchange){
+          note(key,l.giver); note(key,l.receiver);
+          const A=cellOf(key,l.giver), B=cellOf(key,l.receiver);
+          const aMove=shiftsOf(A).filter(x=>kindOfShift(x)===l.k), bMove=shiftsOf(B).filter(x=>kindOfShift(x)===l.k);
+          const into=(cell,keepOut,bringIn)=>[...shiftEntries(cell).filter(x=>keepOut.indexOf(x.s)<0), ...bringIn.filter(id=>!shiftEntries(cell).some(y=>y.s===id)).map(id=>({s:id,via:'swap'}))];
+          const newA=into(A,aMove,bMove), newB=into(B,bMove,aMove);
+          setCell(key,l.giver,newA,A.off); setCell(key,l.receiver,newB,B.off);
+        } else {
+          note(key,l.giver); note(key,l.receiver);
+          const G=cellOf(key,l.giver), R=cellOf(key,l.receiver);
+          const moving=shiftsOf(G).filter(x=>kindOfShift(x)===l.k);
+          if(!moving.length) continue;
+          const newR=[...shiftEntries(R), ...moving.filter(id=>!shiftEntries(R).some(y=>y.s===id)).map(id=>({s:id,via:'swap'}))];
+          const newG=shiftEntries(G).filter(x=>moving.indexOf(x.s)<0);
+          setCell(key,l.receiver,newR,R.off); setCell(key,l.giver,newG,G.off);
+        }
+      }
+    }
+    // WRITES: the swap, then every changed cell — one commit.
+    tx.set(iRef,{...item,status,decidedTs:Date.now()});
+    for(const key in touched){
+      const [mk,dd]=key.split('|');
+      for(const u in touched[key]){
+        const cell=dayData[key][u];
+        if(dayDocs[key].exists) tx.update(dayRef(mk,dd),{[u]:cell}); else tx.set(dayRef(mk,dd),{[u]:cell},{merge:true});
+        dayDocs[key].exists=true;
+        const was=before[key+'|'+u]||[], now=shiftsOf(cell);
+        const added=now.filter(x=>was.indexOf(x)<0), removed=was.filter(x=>now.indexOf(x)<0);
+        const md=months[mk]; const published=!(md&&md.published===false);
+        if(published&&(added.length||removed.length)) changes.push({u:u,dk:mk+'-'+dd,added:added,removed:removed,off:null});
+      }
+    }
+    s=item;
+  });
+  return {s:s,blocked:blocked,changes:changes};
+}
 window.decideSwap=async function(id,status){
   // [H-10/M-16] Flip status inside a transaction on the FRESH swaps list, guarded on
   // pending_admin. This prevents (a) a concurrent swap submission being lost to a whole-list
   // rewrite, and (b) a re-click re-applying/REVERSING an already-approved 2-way swap — the
   // second click reads status='approved', mutate aborts, and the apply below is skipped.
-  // NOTE (residual): the schedule-cell writes below are still separate follow-on writes, not
-  // part of this commit, so a mid-apply crash can leave "approved" with only some legs moved;
-  // that case is surfaced (toast + audit marker) rather than silently swallowed. Full
-  // swap-status+schedule single-commit atomicity is deferred.
+  // [123] The residual that stood here — legs as separate follow-on writes — is CLOSED: see
+  // decideSwapTx above. Status and legs commit together or not at all.
   // [59] Refuse BEFORE the status flip if any month this swap touches is unconverted.
   // The apply below is a follow-on write, not part of the status commit (see the note
   // above), so approving first and discovering the problem second would leave the swap
@@ -3323,55 +3772,21 @@ window.decideSwap=async function(id,status){
       }
     }
   }
-  let s=null;
-  const wrote=await txUpdateItem(swapItemsCol, swapsRef, id, item=>{
-    if(item.status!=='pending_admin'){ s=null; return null; } // already decided / vanished — abort
-    s=item;
-    return {...item,status,decidedTs:Date.now()};
-  });
-  if(!wrote || !s) return; // gate on the transaction's REAL outcome, not a flag set inside the retried closure
-  let applyErr=null;
-  if(status==='approved'){
-    try{
-      if(s.type==='3way'){
-        // A→B→C→A: for each leg, the GIVER's slot on that date/part transfers to the RECEIVER
-        // (a one-directional handoff). Done sequentially so writes to the same month never race.
-        const [a,b,c]=s.participants;
-        const chain=[[a,b,s.legs[0]],[b,c,s.legs[1]],[c,a,s.legs[2]]];
-        for(const [giver,receiver,leg] of chain){
-          const mk=leg.date.slice(0,7), dd=leg.date.slice(8);
-          const k=leg.part==='call'?'call':'day';
-          // [52] Move the ACTUAL shifts the giver holds of that kind — add to the receiver,
-          // then remove from the giver. Two named operations. The old version copied a slot
-          // wholesale, which overwrote anything the receiver already had in it.
-          const dSnap=await readDay(mk,dd); const dayMap=dSnap;
-          const moving=shiftsOf(dayMap[giver]).filter(x=>kindOfShift(x)===k);
-          for(const sid of moving){
-            await mutateCell(mk,dd,receiver,st=>st.shifts.some(x=>x.s===sid)?null:({shifts:[...st.shifts,{s:sid,via:'swap'}],off:st.off}));
-            await mutateCell(mk,dd,giver,st=>({shifts:st.shifts.filter(x=>x.s!==sid),off:st.off}));
-          }
-        }
-      } else {
-        const mk=s.date.slice(0,7), dd=s.date.slice(8);
-        const k=s.part==='call'?'call':'day';
-        // [52] An exchange of the shifts each side holds OF THAT KIND. Whatever either of
-        // them holds of the OTHER kind is left alone — previously the slot copy could wipe it.
-        const dSnap=await readDay(mk,dd); const dayMap=dSnap;
-        const aMove=shiftsOf(dayMap[s.from]).filter(x=>kindOfShift(x)===k);
-        const bMove=shiftsOf(dayMap[s.to]).filter(x=>kindOfShift(x)===k);
-        const swapInto=(keepOut,bringIn)=>st=>({
-          shifts:[...st.shifts.filter(x=>keepOut.indexOf(x.s)<0),
-                  ...bringIn.filter(id=>!st.shifts.some(y=>y.s===id)).map(id=>({s:id,via:'swap'}))],
-          off:st.off});
-        await mutateCell(mk,dd,s.from,swapInto(aMove,bMove));
-        await mutateCell(mk,dd,s.to,  swapInto(bMove,aMove));
-      }
-    }catch(e){
-      applyErr=e;
-      if(typeof schedToast==='function') schedToast('Swap marked approved, but applying it to the schedule failed — please re-check the affected day(s)','err');
-      console.warn('swap apply failed',e);
-    }
-  }
+  // ══ [123 · defect 3 CLOSED] ONE TRANSACTION: the status flip AND every schedule leg. ══
+  // Until this build the flip was one transaction and each leg a follow-on mutateCell — up to six
+  // for a 3-way — so a crash between them left a swap marked approved with only some of it moved,
+  // surfaced by a toast rather than prevented. Now a Firestore transaction reads the swap, the
+  // month documents and the day documents it touches, computes every changed cell in memory in
+  // the same order as before (3-way: sequential handoffs), and commits the status and the cells
+  // together. Either everything moves, or nothing does and the swap stays pending.
+  let r;
+  try{ r=await decideSwapTx(id,status); }
+  catch(e){ schedToast('Nothing was '+(status==='approved'?'approved':'decided')+' — the swap is still pending: '+((e&&e.message)||'the write failed'),'err'); console.warn('swap decide failed',e); return; }
+  if(!r.s) return;                 // already decided / vanished — nothing written, nothing audited
+  const s=r.s;
+  let applyErr=r.blocked?new Error(r.blocked):null;
+  if(applyErr){ schedToast('Nothing was approved: '+r.blocked,'err'); return; }
+  if(status==='approved'&&r.changes.length) emitChanges(r.changes);   // [122 · §6] on published months only
   if(s.type==='3way'){
     const [a,b,c]=s.participants;
     auditLog('swap.decide',(status==='approved'?(applyErr?'Approved (apply FAILED) ':'Approved '):'Denied ')+'3-way swap '+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)
@@ -4996,12 +5411,10 @@ function sectApply(k){
   if(!body) return;
   body.style.display=sectOpen[k]?'':'none';
   if(!arrow) return;
-  // [111] A section BAR says what pressing it will do; a per-item card keeps the bare arrow.
-  // The keys tell them apart on their own — every per-item key is prefixed (`qta:`, `rul:`,
-  // `grp:`) — so nothing had to be passed in and no markup changed.
-  const bare = k.indexOf(':')>=0;
-  arrow.classList.toggle('bare', bare);
-  arrow.textContent = sectOpen[k] ? (bare?'▾':'▾ Hide') : (bare?'▸':'▸ Show');
+  // [119 · §122] EVERY control says what pressing it will do — section bars and per-item cards
+  // alike, identical to the vacation admin. 111's bare-arrow exception is retired by ruling.
+  arrow.classList.remove('bare');
+  arrow.textContent = sectOpen[k] ? '▾ Hide' : '▸ Show';
 }
 window.toggleSect=function(k){
   sectOpen[k]=!sectOpen[k];
@@ -5277,7 +5690,7 @@ function catRowsHtml(list,famHead){
       const shut=!!catCollapsedFams[f];
       out+='<div class="catband" onclick="catToggleFam('+jsArg(f)+')" '
         +'style="display:flex;align-items:center;gap:8px;margin:12px 0 4px;cursor:pointer;padding:4px 8px;border-radius:8px;background:'+esc(col)+'33">'
-        +'<span style="font-size:10px;color:var(--t2);width:10px">'+(shut?'▸':'▾')+'</span>'
+        +'<span class="secta">'+(shut?'▸ Show':'▾ Hide')+'</span>'   // [119 · §122] the one control, everywhere
         +'<span style="width:12px;height:12px;border-radius:4px;background:'+esc(col)+';border:1px solid var(--b2)"></span>'
         +'<b style="font-size:12px;color:var(--t1)">'+esc(f)+'</b>'
         +'<span style="font-size:10.5px;color:var(--t3)">'+counts[f]+'</span>'
@@ -6733,10 +7146,34 @@ function sevOf(r){
 // which is the exact failure design/RULES.md's "a rule that cannot match anything must say
 // so" exists to prevent.
 function ruleEnabled(r){ return !!r && r.off!==true; }
+// ── [118 · §121] BUILT-IN CHECKS. Two things a physician roster always wants checked, so
+// they are not rules he has to remember to create: ONE SITE PER DAY (§18) and the POST-CALL DAY
+// (any shift that crosses midnight makes the next day off-limits). Each is a switch — on by
+// default, absent means on — with a severity, always covering everyone, never deletable or
+// renamable. Their settings live under reserved keys in dailysched/rules so nothing new is
+// listened to; ruleList() prepends them, so the checker, the report, the card and the
+// warn-at-change path all see them exactly as they see a rule the admin made.
+const BUILTIN_RULES=[
+  {key:'_ONE_SITE',  type:'oneSite',  label:'One site per day', order:-2},
+  {key:'_POST_CALL', type:'postCall', label:'Post-call day',    order:-1},
+];
+function builtinRule(b){
+  const st=((rulesData||{})[b.key])||{};
+  return {label:b.label,type:b.type,order:b.order,builtin:true,severity:st.severity||'warn',off:st.off===true,target:{all:true},params:{}};
+}
+function isBuiltinKey(key){ return BUILTIN_RULES.some(b=>b.key===key); }
+// The one lookup every writer uses: a stored rule, or a built-in's synthetic instance.
+function ruleGet(key){
+  const b=BUILTIN_RULES.find(x=>x.key===key);
+  return b?builtinRule(b):((rulesData||{})[key]||null);
+}
+function postCallOn(){ return ruleEnabled(ruleGet('_POST_CALL')); }
+window.ruleGetProbe=ruleGet; window.postCallOnProbe=postCallOn;
 function ruleList(){
-  return Object.entries(rulesData||{})
-    .filter(([,r])=>r&&typeof r==='object'&&r.type)
+  const made=Object.entries(rulesData||{})
+    .filter(([k,r])=>r&&typeof r==='object'&&r.type&&!isBuiltinKey(k))
     .sort((a,b)=>((a[1].order??99)-(b[1].order??99))||String(a[1].label||a[0]).localeCompare(String(b[1].label||b[0])));
+  return BUILTIN_RULES.map(b=>[b.key,builtinRule(b)]).concat(made);
 }
 function ruleKeyFrom(label){
   return String(label==null?'':label).toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_+|_+$/g,'');
@@ -6966,6 +7403,7 @@ const RULE_TYPES={
   // Two shifts at two sites on one person on one day. A shift with NO site cannot be judged;
   // it is counted and named rather than silently treated as compatible with everything.
   oneSite:{
+    builtin:true,   // [118 · §121] a switch, not a rule he creates — see BUILTIN_RULES
     label:'One site per day',
     blurb:'Somebody holding shifts at two different sites on the same day.',
     text:function(){ return 'Nobody it covers works at more than one site on the same day'; },
@@ -6987,6 +7425,46 @@ const RULE_TYPES={
       }
       const notes=[];
       if(unsited) notes.push(unsited+' shift'+(unsited===1?'':'s')+' held by these people '+(unsited===1?'has':'have')+' no site set and could not be judged. Set it in the Shift Catalog.');
+      return {violations:viol,considered:considered,skipped:0,notes:notes};
+    },
+  },
+  // ── [118 · §121] THE POST-CALL DAY, FROM THE CLOCK. Owner: "any shift going past midnight
+  // should be such that person isn't given another shift on the post-call day." Built in and
+  // switchable; the engine never places one (fillDay); an admin may, through the confirmation,
+  // with the override recorded (§4). Reads the shift's TIMES — crossesMidnight — so it needs no
+  // tag and cannot be defeated by one. The tag-based cooldown below stays for anything else.
+  postCall:{
+    builtin:true,
+    label:'Post-call day',
+    blurb:'Nobody is given a shift the day after a shift that runs past midnight.',
+    text:function(){ return 'The day after any shift that runs past midnight is a post-call day — no shift is given on it. The engine never places one; an admin may, with a confirmation.'; },
+    fields:[],
+    check:function(r,ctx){
+      const viol=[]; let considered=0, untimed=0; const notes=[];
+      const Y=Number(ctx.ym.slice(0,4)), M=Number(ctx.ym.slice(5,7));
+      const dim=new Date(Y,M,0).getDate();
+      for(const u of ctx.people){
+        for(const dd of Object.keys(ctx.days||{}).sort()){
+          const cell=ctx.days[dd]&&ctx.days[dd][u];
+          if(!cell) continue;
+          const held=shiftsOf(cell);
+          if(!held.length) continue;
+          const late=held.filter(id=>{ const sh=(catalog.shifts||{})[id]; if(!sh) return false; if(!sh.start||!sh.end){ untimed++; return false; } return crossesMidnight(sh.start,sh.end); });
+          considered+=held.length;
+          if(!late.length) continue;
+          const d=Number(dd)+1;
+          if(d>dim) continue;   // the next day is next month — §121 ④: not read
+          const dk2=pad(d);
+          const c2=ctx.days[dk2]&&ctx.days[dk2][u];
+          if(!c2) continue;
+          for(const id of shiftsOf(c2)){
+            const sh=(catalog.shifts||{})[id], lsh=(catalog.shifts||{})[late[0]];
+            viol.push({u:u,dd:dk2,dk:ctx.ym+'-'+dk2,what:(sh&&sh.label||id)+' on the post-call day after '+(lsh&&lsh.label||late[0])+' (which runs past midnight) on the '+Number(dd)});
+          }
+        }
+      }
+      if(untimed) notes.push(untimed+' shift'+(untimed===1?'':'s')+' held by these people '+(untimed===1?'has':'have')+' no times set, so whether '+(untimed===1?'it runs':'they run')+' past midnight is unknown. Set them in the Shift Catalog.');
+      notes.push('The 1st cannot see the last day of the month before (§121 ④).');
       return {violations:viol,considered:considered,skipped:0,notes:notes};
     },
   },
@@ -7222,7 +7700,7 @@ function checkMonth(ym,days){
   return {byKey:byKey,all:all};
 }
 window.checkMonthProbe=checkMonth;      // module scope — HANDOFF trap 1
-window.RULE_TYPES_PROBE=RULE_TYPES;     // [112] so a suite can assert the dropdown offers the WHOLE vocabulary
+window.RULE_TYPES_PROBE=Object.fromEntries(Object.entries(RULE_TYPES).filter(([,v])=>!v.builtin));     // [112/118] the ADDABLE vocabulary — the dropdown must equal it
 window.checkRuleProbe=checkRule;
 window.ruleTargetsProbe=ruleTargets;
 window.ruleIntervalsProbe=ruleIntervals;
@@ -7238,6 +7716,7 @@ window.addRule=async function(){
   if((rulesData||{})[key]){ schedToast('There is already a rule called '+(rulesData[key].label||key),'err'); return; }
   const type=(document.getElementById('ruleType')||{}).value||'minRest';
   const t=RULE_TYPES[type]; if(!t){ schedToast('Unknown rule type.','err'); return; }
+  if(t.builtin){ schedToast(t.label+' is built in — switch it on or off in its own card.','err'); return; }   // [118]
   const params={};
   for(const f of t.fields) params[f.k]=f.def;
   const order=Math.max(0,...Object.values(rulesData||{}).map(r=>(r&&r.order)||0))+1;
@@ -7249,7 +7728,7 @@ window.addRule=async function(){
   if(el) el.value='';
   schedToast('Rule "'+label+'" added — open it to set who it covers and how loud it is.','ok');
 };
-window.renameRule=function(key){ _renamingRule=key; renderRules(); };
+window.renameRule=function(key){ if(isBuiltinKey(key)) return; _renamingRule=key; renderRules(); };   // [118] built-ins keep their names
 window.renameRuleCancel=function(){ _renamingRule=''; renderRules(); };
 window.renameRuleSave=async function(key){
   const box=document.getElementById('rulRename_'+key);
@@ -7261,6 +7740,7 @@ window.renameRuleSave=async function(key){
   _renamingRule=''; renderRules();
 };
 window.deleteRule=async function(key){
+  if(isBuiltinKey(key)){ schedToast('That check is built in — turn it off instead.','err'); return; }   // [118]
   const r=(rulesData||{})[key]; if(!r) return;
   if(!confirm('Delete the rule "'+(r.label||key)+'"?\n\nIt stops being checked immediately. Nothing already on the schedule changes.')) return;
   await mergeFields(rulesRef,{[key]:deleteField()});
@@ -7268,13 +7748,13 @@ window.deleteRule=async function(key){
   schedToast('Rule deleted.','ok');
 };
 window.setRuleSeverity=async function(key,v){
-  const r=(rulesData||{})[key]; if(!r) return;
+  const r=ruleGet(key); if(!r) return;   // [118] a built-in has no stored document until its first switch
   if(!SEVERITIES.some(s=>s.k===v)) return;
   await mergeFields(rulesRef,{[key+'.severity']:v});
   auditLog('rule.severity','"'+(r.label||key)+'" is now '+(SEVERITIES.find(s=>s.k===v)||{}).label);
 };
 window.setRuleOff=async function(key,off){
-  const r=(rulesData||{})[key]; if(!r) return;
+  const r=ruleGet(key); if(!r) return;   // [118]
   await mergeFields(rulesRef,{[key+'.off']:!!off});
   auditLog('rule.enable','"'+(r.label||key)+'" was turned '+(off?'off':'on'));
 };
@@ -7343,24 +7823,22 @@ function renderRules(){
   const rep=document.getElementById('ruleReport');
   if(!host) return;
   const sel=document.getElementById('ruleType');
-  if(sel && sel.options.length!==Object.keys(RULE_TYPES).length){
+  const addable=Object.entries(RULE_TYPES).filter(([,v])=>!v.builtin);   // [118] built-ins are switches, not additions
+  if(sel && sel.options.length!==addable.length){
     const was=sel.value;
-    sel.innerHTML=Object.entries(RULE_TYPES).map(([k,v])=>'<option value="'+esc(k)+'">'+esc(v.label)+'</option>').join('');
+    sel.innerHTML=addable.map(([k,v])=>'<option value="'+esc(k)+'">'+esc(v.label)+'</option>').join('');
     if(was) sel.value=was;
   }
   if(!rulesLoaded){ host.innerHTML='<div style="font-size:12px;color:var(--t3)">Loading…</div>'; if(rep) rep.innerHTML=''; return; }
   const rl=ruleList();
   const days=(monthData&&monthData.days)||{};
   const res=checkMonth(curYM,days);
-  if(!rl.length){
-    host.innerHTML='<div style="font-size:12px;color:var(--t3)">No rules yet. Add one above — a rule is how you say '
+  const madeAny=rl.some(([,r])=>!r.builtin);   // [120] the built-ins are always there (§121); "none yet" is about HIS rules
+  const emptyHint=madeAny?'':'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">No rules yet of your own. Add one above — a rule is how you say '
       +'<b>“nobody starts a shift within ten hours of finishing one”</b> and have every month checked against it. '
-      +'A rule never blocks anything; it warns, and the report below lists what is standing.</div>';
-    if(rep) rep.innerHTML='<div style="font-size:12px;color:var(--t3)">Nothing to report — there are no rules yet.</div>';
-    return;
-  }
+      +'A rule never blocks anything; it warns, and the report below lists what is standing. The two built-in checks below are always here.</div>';
   const groups=groupList();
-  host.innerHTML='<div style="display:flex;flex-direction:column;gap:8px">'+rl.map(([key,r])=>{
+  host.innerHTML=emptyHint+'<div style="display:flex;flex-direction:column;gap:8px">'+rl.map(([key,r])=>{
     const t=RULE_TYPES[r.type]||{label:'Unknown',fields:[],text:()=>'—'};
     const c=res.byKey[key]||{violations:[],notes:[],people:0};
     const n=c.violations.length;
@@ -7381,8 +7859,10 @@ function renderRules(){
         +'<span class="chipp" style="background:var(--s3);color:var(--t2);font-size:10px">'+esc(ruleTargetText(r))+'</span>'
         +'<span style="font-size:11px">'+state+'</span>'
         +'<span style="flex:1"></span>'
-        +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="event.stopPropagation();renameRule('+jsArg(key)+')">Rename</button>'
-        +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px;color:var(--red)" onclick="event.stopPropagation();deleteRule('+jsArg(key)+')">Delete</button>'
+        +(r.builtin
+          ? '<span class="chipp" style="background:#dbeafe;color:#1e3a8a;font-size:10px" title="Always here. Turn it off inside if you do not want it checked.">built in</span>'
+          : '<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="event.stopPropagation();renameRule('+jsArg(key)+')">Rename</button>'
+           +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px;color:var(--red)" onclick="event.stopPropagation();deleteRule('+jsArg(key)+')">Delete</button>')
       +'</div>'
       +(_renamingRule===key?('<div style="display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap" onclick="event.stopPropagation()">'
           +'<input class="inp" id="rulRename_'+esc(key)+'" style="font-size:13px;width:240px" value="'+esc(r.label||key)+'">'
@@ -7433,6 +7913,7 @@ function renderRules(){
         +'</div>'
         +'<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Severity sorts the report and decides how loud the confirmation is. '
           +'It never blocks anything — <b>nothing in this app is ever hard-blocked</b>.</div>'
+        +(r.builtin ? '<div style="font-size:11.5px;color:var(--t2);margin-top:6px">Built in — it always covers <b>everyone</b>. Turn it off above if you do not want it checked.</div>' : (''
         +'<div class="page-sub" style="margin:10px 0 4px"><b>Who it covers</b> — tick any combination. '
           +'A person is covered if any one of these matches them.</div>'
         +'<label style="font-size:12.5px;display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:6px">'
@@ -7458,7 +7939,7 @@ function renderRules(){
                 +'<input type="checkbox" '+((((r.target||{}).people||{})[u])?'checked':'')+' onchange="toggleRuleTarget('+jsArg(key)+',\'people\','+jsArg(u)+')">'
                 +esc(displayName(u))+'</label>').join('')+'</div>'
             : '<div style="font-size:11.5px;color:var(--t3)">No people on the roster yet.</div>')
-        +'</div>'
+        +'</div>'))
         +'<div style="font-size:11.5px;color:var(--t2);margin-top:8px">Covers <b>'+c.people+'</b> '+(c.people===1?'person':'people')+' right now.</div>'
       +'</div>'
     +'</div>';
@@ -7487,7 +7968,8 @@ function ruleReportHTML(res){
     out+='<div style="margin:12px 0 5px;display:flex;align-items:center;gap:7px">'+sevChip(s.k)
       +'<span style="font-size:12px;color:var(--t2)">'+rows.length+' '+(rows.length===1?'conflict':'conflicts')+'</span></div>'
       +'<div style="display:flex;flex-direction:column;gap:3px">'
-      +rows.map(v=>'<div style="display:flex;gap:8px;font-size:12px;align-items:baseline;border-left:3px solid '+s.color+';padding:3px 0 3px 8px">'
+      +rows.map(v=>'<div style="display:flex;gap:8px;font-size:12px;align-items:baseline;border-left:3px solid '+s.color+';padding:3px 0 3px 8px;cursor:pointer" '
+        +'title="Open this day on the Schedule Grid" onclick="gotoViolation('+jsArg(v.dk)+')">'   // [124] "a click goes to that day cell"
         +'<b style="min-width:132px">'+esc(displayName(v.u))+'</b>'
         +'<span class="mono" style="font-size:10.5px;color:var(--t3);min-width:78px">'+esc(v.dk)+'</span>'
         +'<span style="color:var(--t3);min-width:130px;font-size:11px">'+esc(v.label)+'</span>'
@@ -7497,6 +7979,116 @@ function ruleReportHTML(res){
   return out;
 }
 window.renderRules=renderRules;
+
+// ═══ [125 · §41] REQUEST TYPES — the curated list of what can be requested. ═══════════════════
+// design/REQUEST-TYPES.md: two objects, a SHIFT LIST (the tags that shipped in 51) and a REQUEST
+// TYPE {label, kind, tag, strength, span, note, order, active}. Five kinds and no sixth. The
+// list is data (§11): the admin edits it here and the staff picker reads it; nothing here needs
+// a build. Strength is a FIELD, shown as [MAX]/[HIGH]/[LOW], never three entries with the word
+// inside the label. "Use PTO if off" is a modifier, not a type (the design's own finding).
+const RT_KINDS={work:'work something',avoid:'avoid something',off:'day off',absence:'absence',available:'available'};
+const RT_STRENGTHS=[['','—'],['low','LOW'],['high','HIGH'],['max','MAX']];
+function rtList(){ return Object.entries(rtData||{}).filter(([,t])=>t&&typeof t==='object'&&t.label).sort((a,b)=>((a[1].order??99)-(b[1].order??99))||String(a[1].label).localeCompare(String(b[1].label))); }
+function rtLabel(t){ return (t.label||'')+(t.strength?' ['+String(t.strength).toUpperCase()+']':''); }
+function rtNeedsTag(t){ return t&&(t.kind==='work'||t.kind==='avoid'); }
+function rtReady(t){ return !!(t&&t.active!==false&&(!rtNeedsTag(t)||(t.tag&&tagShiftSet(t.tag).size>0))); }
+// The days a request covers: one, or the Saturday and Sunday of its weekend (Sunday-anchored
+// weeks everywhere on this platform: the weekend is the Saturday and the Sunday that follows).
+function rtDates(r){
+  if(!r||!r.date) return [];
+  if(r.span!=='weekend') return [r.date];
+  const d=new Date(r.date+'T00:00:00'); const dow=d.getDay();
+  const sat=new Date(d); sat.setDate(d.getDate()+(dow===0?-1:(6-dow)));
+  const sun=new Date(sat); sun.setDate(sat.getDate()+1);
+  return [dKey(sat),dKey(sun)];
+}
+window.rtDatesProbe=rtDates; window.rtReadyProbe=rtReady;
+window.addReqType=async function(){
+  const el=document.getElementById('rtLabel'); const label=String((el&&el.value)||'').trim();
+  const kind=(document.getElementById('rtKind')||{}).value||'work';
+  if(!label){ schedToast('Give it a label first.','err'); return; }
+  if(!RT_KINDS[kind]){ schedToast('Unknown kind.','err'); return; }
+  const id='rt'+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36);
+  const order=Math.max(0,...rtList().map(([,t])=>Number(t.order)||0))+1;
+  await mergeFields(requestTypesRef,{[id]:{label:label,kind:kind,tag:(kind==='avoid'&&/no call/i.test(label))?'overnightCall':'',strength:'',span:'day',note:'',order:order,active:true}});
+  auditLog('reqtype.add','Added the request type "'+label+'" ('+RT_KINDS[kind]+')');
+  if(el) el.value='';
+};
+window.seedStandardReqTypes=async function(){
+  const have=new Set(rtList().map(([,t])=>rtLabel(t)));
+  const std=[
+  {label:'MD Sat D',kind:'work'},{label:'PACU MD',kind:'work'},{label:'CVpm',kind:'work'},{label:'DE',kind:'work'},
+  {label:'RCH, 8hr, MD only (R8:MD)',kind:'work'},{label:'Admin',kind:'work'},{label:'Admin AM',kind:'work'},{label:'Admin PM',kind:'work'},
+  {label:'Req OAK Call',kind:'work'},{label:'Req OAK Call AM',kind:'work'},{label:'Req OAK Call PM',kind:'work'},{label:'Req RCH Call',kind:'work'},
+  {label:'No Call',kind:'avoid',tag:'overnightCall'},{label:'No OAK AM',kind:'avoid'},{label:'No OAK PM',kind:'avoid'},
+  {label:'No Late',kind:'avoid',strength:'max'},{label:'No Late',kind:'avoid',strength:'high'},{label:'No Late',kind:'avoid',strength:'low'},
+  {label:'CV-Day Off',kind:'off'},{label:'Day Off',kind:'off',strength:'max'},{label:'Day Off',kind:'off',strength:'high'},{label:'Day Off',kind:'off',strength:'low'},
+  {label:'Weekend Off',kind:'off',span:'weekend'},
+  {label:'Ed Leave',kind:'absence'},{label:'Jury Duty (JD)',kind:'absence'},
+  {label:'AVAILABLE',kind:'available'}
+];
+  const add={}; let order=Math.max(0,...rtList().map(([,t])=>Number(t.order)||0)); let n=0;
+  for(const e of std){
+    const t={label:e.label,kind:e.kind,tag:e.tag||'',strength:e.strength||'',span:e.span||'day',note:'',order:++order,active:true};
+    if(have.has(rtLabel(t))) continue;
+    add['rt'+order.toString(36)+Math.floor(Math.random()*1e6).toString(36)]=t; n++;
+  }
+  if(!n){ schedToast('The standard list is already here.','ok'); return; }
+  if(!confirm('Add '+n+' standard request type'+(n===1?'':'s')+'?\n\nEvery "work" and "avoid" entry still needs its shift list picked here before staff can choose it; "No Call" points at the Overnight call tag already.')) return;
+  await mergeFields(requestTypesRef,add);
+  auditLog('reqtype.seed','Added '+n+' standard request types');
+  schedToast('Added '+n+'. Now pick a shift list for each work/avoid entry.','ok');
+};
+window.setRtField=async function(id,f,val){
+  const t=(rtData||{})[id]; if(!t) return;
+  let v=val;
+  if(f==='kind'&&!RT_KINDS[v]) return;
+  if(f==='strength'&&!RT_STRENGTHS.some(x=>x[0]===v)) return;
+  if(f==='span'&&v!=='day'&&v!=='weekend') return;
+  if(f==='active') v=!!val;
+  if(f==='label'){ v=String(val||'').trim(); if(!v){ schedToast('A request type needs a label.','err'); renderReqTypes(); return; } }
+  await mergeFields(requestTypesRef,{[id+'.'+f]:v});
+  auditLog('reqtype.edit','"'+rtLabel(t)+'": '+f+' → '+(f==='tag'?(tagLabel(v)||'none'):String(v)));
+};
+window.deleteReqType=async function(id){
+  const t=(rtData||{})[id]; if(!t) return;
+  if(!confirm('Delete the request type "'+rtLabel(t)+'"?\n\nRequests already made with it keep their wording. Staff can no longer pick it.')) return;
+  await mergeFields(requestTypesRef,{[id]:deleteField()});
+  auditLog('reqtype.delete','Deleted the request type "'+rtLabel(t)+'"');
+};
+function renderReqTypes(){
+  const host=document.getElementById('rtBody'); if(!host) return;
+  if(!rtLoaded){ host.innerHTML='<div style="font-size:12px;color:var(--t3)">Loading…</div>'; return; }
+  const list=rtList();
+  if(!list.length){ host.innerHTML='<div style="font-size:12px;color:var(--t3)">Nothing yet. Add one above, or press <b>Add the standard list</b>. Until this list has something in it the staff site offers its four built-in choices.</div>'; return; }
+  const tags=tagChoices();
+  const kinds=['work','avoid','off','absence','available'];
+  host.innerHTML=kinds.map(k=>{
+    const rows=list.filter(([,t])=>t.kind===k); if(!rows.length) return '';
+    return '<div style="font-size:11.5px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.04em;margin:10px 0 4px">'+esc(RT_KINDS[k])+' · '+rows.length+'</div>'
+      +rows.map(([id,t])=>{
+        const ready=rtReady(t);
+        return '<div class="rowline" style="flex-wrap:wrap;gap:8px;'+(t.active===false?'opacity:.55':'')+'">'
+          +'<input class="inp" style="font-size:12.5px;width:210px;padding:3px 7px" value="'+esc(t.label)+'" onchange="setRtField('+jsArg(id)+',\'label\',this.value)" title="The words staff see">'
+          +'<select class="sel" style="font-size:11.5px" onchange="setRtField('+jsArg(id)+',\'kind\',this.value)">'+kinds.map(x=>'<option value="'+x+'"'+(t.kind===x?' selected':'')+'>'+esc(RT_KINDS[x])+'</option>').join('')+'</select>'
+          +(rtNeedsTag(t)?('<select class="sel" style="font-size:11.5px'+(t.tag?'':';border-color:#f59e0b;background:#fffbeb')+'" onchange="setRtField('+jsArg(id)+',\'tag\',this.value)" title="Which shift list this points at"><option value="">— pick a shift list —</option>'+tags.map(x=>'<option value="'+esc(x.k)+'"'+(t.tag===x.k?' selected':'')+'>'+esc(x.label)+' ('+tagShiftSet(x.k).size+')</option>').join('')+'</select>'):'')
+          +'<select class="sel" style="font-size:11.5px" onchange="setRtField('+jsArg(id)+',\'strength\',this.value)" title="Strength — shown as [MAX] / [HIGH] / [LOW]">'+RT_STRENGTHS.map(([v,l])=>'<option value="'+v+'"'+((t.strength||'')===v?' selected':'')+'>'+(v?l:'no strength')+'</option>').join('')+'</select>'
+          +(t.kind==='off'?('<select class="sel" style="font-size:11.5px" onchange="setRtField('+jsArg(id)+',\'span\',this.value)"><option value="day"'+(t.span!=='weekend'?' selected':'')+'>one day</option><option value="weekend"'+(t.span==='weekend'?' selected':'')+'>the weekend</option></select>'):'')
+          +'<label style="font-size:11.5px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" '+(t.active!==false?'checked':'')+' onchange="setRtField('+jsArg(id)+',\'active\',this.checked)">offered</label>'
+          +(ready?'<span class="chipp" style="background:#dcfce7;color:#166534;font-size:10px">ready</span>':'<span class="chipp" style="background:#fef3c7;color:#92400e;font-size:10px" title="Staff cannot pick it until it is offered and, for work/avoid, points at a shift list with shifts in it">not offered yet</span>')
+          +'<span style="flex:1"></span>'
+          +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px;color:var(--red)" onclick="deleteReqType('+jsArg(id)+')">Delete</button>'
+        +'</div>'; }).join('');
+  }).join('');
+}
+window.renderReqTypes=renderReqTypes;
+// [124] From a report row to the day on the grid: switch panels, then let jumpToDate move the
+// month if it must and flash the column.
+window.gotoViolation=function(dk){
+  const a=document.querySelector('nav a[onclick*="\'grid\'"]');
+  nav('grid',a);
+  setTimeout(()=>jumpToDate(dk),60);
+};
 window.ruleReportProbe=ruleReportHTML;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -8135,10 +8727,10 @@ window.renderFeeds=renderFeeds;
 const RENDER_FN={
   dash:renderDash, board:renderBoard, grid:renderGrid, baseline:renderBaseline,
   cellmodal:()=>{ if(cellSel) renderCellModal(); },
-  legacyBanner:renderLegacyBanner, rehearsal:renderRehearsal, catLock:renderCatLock,
+  legacyBanner:renderLegacyBanner, engine:renderEngine, catLock:renderCatLock,
   requests:renderRequests, swaps:renderSwaps, open:renderOpenAdmin, openSel:fillOpenShiftSel,
   users:renderUsersGrid, usersLock:renderUsersLock, adminAccess:renderAdminAccess,
-  groups:renderGroups, quotas:renderQuotas, rules:renderRules, print:renderPrint, feeds:renderFeeds,
+  groups:renderGroups, quotas:renderQuotas, rules:renderRules, reqtypes:renderReqTypes, print:renderPrint, feeds:renderFeeds,
   elig:renderElig, catalog:renderCatalog, families:renderFamilies, stats:renderStats,
   coverage:renderCoverage, audit:renderAudit, reports:renderReports, badges:renderBadges,
 };
@@ -8146,13 +8738,13 @@ const PANEL_KEYS={
   dash:['board','dash'], grid:['grid','baseline','cellmodal','legacyBanner'],
   requests:['requests'], swaps:['swaps'], open:['open','openSel'],
   users:['users','usersLock','adminAccess'], groups:['groups'], elig:['elig'],
-  quotas:['quotas'], rules:['rules'], print:['print'], feeds:['feeds'],
+  quotas:['quotas'], rules:['rules'], reqtypes:['reqtypes'], print:['print'], feeds:['feeds'],
   catalog:['catalog','catLock'], families:['families'], stats:['stats'],
-  coverage:['coverage'], simulator:['rehearsal'], reports:['reports'], audit:['audit'],
+  coverage:['coverage'], engine:['engine'], reports:['reports'], audit:['audit'],
 };
 // Always rendered even for hidden panels: nav badges, the unconverted-month banner (its
 // STATE gates writers), the rehearsal pill, the cell modal (floats over everything).
-const ALWAYS_KEYS=new Set(['badges','legacyBanner','rehearsal','cellmodal']);
+const ALWAYS_KEYS=new Set(['badges','legacyBanner','cellmodal']);   // [120] 'rehearsal' retired
 function renderBadges(){
   const rb=document.getElementById('reqBadge');
   if(rb){ const p=(requests.list||[]).filter(r=>r.status==='pending').length; rb.textContent=p?('('+p+')'):''; }
@@ -9207,7 +9799,8 @@ authReady.then(()=>{
   // [105] Rules are read ONLY by their own page in this build — the checker is not wired into
   // mutateCell or auto-populate, so nothing else is marked dirty. When the warn-and-override
   // path arrives, the cell modal joins this list.
-  onSnapshot(rulesRef,snap=>{ rulesData=snap.exists()?snap.data():{}; rulesLoaded=true; markDirty('rules'); });
+  onSnapshot(rulesRef,snap=>{ rulesData=snap.exists()?snap.data():{}; rulesLoaded=true; markDirty('rules','grid'); });   // [124] the grid's marks follow the rules
+  onSnapshot(requestTypesRef,snap=>{ rtData=snap.exists()?snap.data():{}; rtLoaded=true; markDirty('reqtypes','requests'); });   // [125]
   onSnapshot(printCfgRef,snap=>{ printCfg=snap.exists()?snap.data():{}; printCfgLoaded=true; markDirty('print'); });
   onSnapshot(callArchiveRef,snap=>{ callArchive=snap.exists()?snap.data():{}; callArchiveLoaded=true; markDirty('stats'); });
   onSnapshot(feedTokensRef,snap=>{ feedTokens=snap.exists()?snap.data():{}; feedTokensLoaded=true; markDirty('feeds'); });
