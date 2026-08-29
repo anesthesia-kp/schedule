@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 137;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 138;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -1681,14 +1681,13 @@ const emailToUserRef = doc(db,"vacations","emailToUser"); // [H-3] reverse map t
 // default admins still work on both sites via the rules' fallback when a list is empty.
 const adminAccessRef= doc(db,"dailysched","adminAccess");
 const vPhasesRef    = doc(db,"vacations","phases");
-const vApprovalsRef = doc(db,"vacations","approvals");
 
 const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 // ═══════════════════════════════════════════════════════════════════════════
 // §S02 · GLOBAL STATE — every top-level mutable; sections below name what they own
 // ═══════════════════════════════════════════════════════════════════════════
-let names=[], usernamesData={}, emailsData={}, loginEmailsData={}, adminAccessEmails=[], vPhases={}, vApprovals={};
+let names=[], usernamesData={}, emailsData={}, loginEmailsData={}, adminAccessEmails=[], vPhases={};
 // [69 - S5a] Owned by the schedule grid. 'detail' keeps the text chips, 'compact' swaps
 // them for family-coloured blocks. Remembered across reloads; a browser that refuses
 // storage simply starts on detail every time.
@@ -2290,29 +2289,29 @@ function vacationDaysFrom(vp, live, released){
   if(!released) addAll(live);
   return map;
 }
-// [137 · RA-6 E-15] Built ONCE per delivery of the two auction documents, not once per call.
-// The engine asks per candidate per shift per day, twice (before and after) when a "not on
-// vacation" rule is on — measured at 1.5 s of blocked main thread for one Preview, growing
-// with every completed auction phase. The listeners replace `vPhases` and `vApprovals` with
-// fresh objects on every snapshot, so their identity is an exact cache key.
-let _vacMemo={vp:null,va:null,map:null};
+// [138 · §127] OWNER RULING, 29 Aug 2026: "schedule can only populate vacations approved once
+// admin has sent the e-mail results." So the admin reads the RELEASED view — the same words the
+// staff page reads: a completed phase once its results were e-mailed or a later phase completed,
+// a Phase-4 round once its results were e-mailed. Nothing decided-but-unannounced reaches the
+// grid, the engine, the reports or the feeds, and the live approvals document is not read at all
+// (which also retires B-4's "schedule-only admin" case: the phases document is readable by every
+// registered account). Build 134's admin view — every decided week — is overruled.
+// [137 · RA-6 E-15] Built ONCE per delivery of the phases document, not once per call: the
+// listener hands over a fresh object on every snapshot, so its identity is an exact cache key.
+let _vacMemo={vp:null,map:null};
 function vacationDays(){
-  if(_vacMemo.map&&_vacMemo.vp===vPhases&&_vacMemo.va===vApprovals) return _vacMemo.map;
-  const map=vacationDaysFrom(vPhases,vApprovals,false);
-  _vacMemo={vp:vPhases,va:vApprovals,map:map};
+  if(_vacMemo.map&&_vacMemo.vp===vPhases) return _vacMemo.map;
+  const map=vacationDaysFrom(vPhases,null,true);
+  _vacMemo={vp:vPhases,map:map};
   return map;
 }
-// [134 · RA-6 B-4] The auction's live approvals document is gated on the AUCTION's admin list,
-// which is deliberately independent of this site's. A Daily Schedule admin who is not on it is
-// refused, and a refused listener never retries. This says so where the admin is looking.
+// [134 · RA-6 B-4] A refused listener never retries and used to say so in the console only. This
+// says so where the admin is looking.
 const vacDeniedWhat={};
 function vacDenied(what,e){
   vacDeniedWhat[what]=(e&&e.code)||'error';
   const el=document.getElementById('vacDeniedBanner'); if(!el) return;
-  const both=vacDeniedWhat.phases;
-  el.textContent = both
-    ? 'Vacation data from the Vacation Auction couldn’t be read from this sign-in ('+vacDeniedWhat.phases+'). No approved vacation is shown anywhere on this site — the grid, the Engine and the reports are treating everyone as available. Reload; if it keeps happening, tell a Vacation Auction admin.'
-    : 'Live vacation approvals couldn’t be read from this sign-in ('+vacDeniedWhat.approvals+'). You are a Daily Schedule admin but not a Vacation Auction admin, so weeks decided in the auction’s CURRENT phase are not shown here — completed phases and decided Phase-4 rounds still are. Ask a Vacation Auction admin to add you there if you need the live picture.';
+  el.textContent = 'Vacation data from the Vacation Auction couldn’t be read from this sign-in ('+vacDeniedWhat[what]+'). No approved vacation is shown anywhere on this site — the grid, the Engine and the reports are treating everyone as available. Reload; if it keeps happening, tell a Vacation Auction admin.';
   el.style.display='block';
 }
 window.vacDeniedProbe=()=>({...vacDeniedWhat});
@@ -10373,7 +10372,7 @@ authReady.then(()=>{
   onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; loginEmailsLoaded=true; markDirty('users'); });
   onSnapshot(adminAccessRef,snap=>{ adminAccessEmails=snap.exists()?(snap.data().emails||[]).map(x=>String(x).toLowerCase()):[]; markDirty('adminAccess'); });
   onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); _enginePlanStale('Vacation changed since this preview'); }, e=>vacDenied('phases',e));   // [129 · E-7] [134 · B-4]
-  onSnapshot(vApprovalsRef,snap=>{ vApprovals=snap.exists()?snap.data():{}; renderAll(); _enginePlanStale('Vacation changed since this preview'); }, e=>vacDenied('approvals',e));   // [129 · E-7] [134 · B-4]
+  // [138 · §127] the live approvals document is NOT read: only announced results reach this site.
   onSnapshot(catalogRef,async snap=>{
     if(!snap.exists()||!snap.data().shifts||!Object.keys(snap.data().shifts).length){
       await setDoc(catalogRef,{shifts:DEFAULT_SHIFTS},{merge:true}); return; // seed once; listener refires
