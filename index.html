@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 48;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 49;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -209,6 +209,10 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 .panel.on{display:block}
 .day-flash{animation:dayFlash 1.6s ease-out}
 @keyframes dayFlash{0%,35%{background:#fef08a!important}100%{background:inherit}}
+/* [49 · RA-6 S-13] The controls that commit a schedule change — Accept, Decline, Withdraw, the
+   submits — measured 21–30px tall; the guideline for a fingertip is 44px. On a touch screen or a
+   narrow window every button grows to that; the inline paddings stay, min-height wins. */
+@media (max-width:700px), (pointer:coarse){ .btn{min-height:44px;min-width:44px} }
 @media (max-width:700px){
   .wrap{padding:12px 8px 60px} table.grid{font-size:9px}
   /* [132 · RA-6 V-2] `align-items:flex-start` is right for the desktop row (the nav must not
@@ -270,6 +274,8 @@ table.grid th.stick1{background:var(--s2);z-index:3}
     <a onclick="nav('changes',this)">🔔 Changes <span class="navbadge" id="chgNavBadge" style="display:none"></span></a>
   </nav>
   <div class="content"><div class="wrap">
+    <!-- [49 · RA-6 S-11] the one place a failed READ is reported; hidden until one fails -->
+    <div id="readErr" hidden style="background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;border-radius:10px;padding:8px 12px;font-size:12.5px;margin-bottom:10px"></div>
 
   <!-- HOME: quick view + my personal calendar -->
   <div class="panel on" id="panel-home">
@@ -294,8 +300,10 @@ table.grid th.stick1{background:var(--s2);z-index:3}
     <div class="card">
       <div class="card-title">My Schedule — <span id="myName"></span></div>
       <div class="legend">
-        <span><b class="cell-day">■</b> day shift</span>
-        <span><b class="cell-call">■</b> call</span>
+        <!-- [49 · RA-6 V-7] the swatches were saturated CSS colours while the chips are the pale
+             family tints the admin chose — matching a chip to the legend was guesswork. The legend
+             is drawn from the catalog's families in their own colours (renderLegendFams). -->
+        <span id="legendFams"><span><b style="color:#fef9c3">■</b> day shift</span> <span><b style="color:#ede9fe">■</b> call</span></span>
         <span><b class="cell-off">■</b> day off</span>
         <span><b class="cell-vac">■</b> vacation (from auction)</span>
         <span><span class="st st-none">·</span> nothing scheduled</span>
@@ -358,7 +366,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
         </select>
         <select class="sel" id="reqShift" style="display:none"></select>
         <input type="text" class="inp" id="reqNote" placeholder="Note (optional)" style="min-width:200px;flex:1">
-        <button class="btn btn-primary" onclick="submitRequest()">Submit request</button>
+        <button class="btn btn-primary" id="reqSubmit" onclick="submitRequest()">Submit request</button>
       </div>
       <div id="reqMsg" style="font-size:12px;margin-top:8px"></div>
       <div id="myReqList" style="margin-top:10px"></div>
@@ -389,7 +397,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
         <span style="font-size:12px;color:var(--t2)">with</span>
         <select class="sel" id="swapWith"></select>
         <input type="text" class="inp" id="swapNote" placeholder="Note (optional)" style="min-width:180px;flex:1">
-        <button class="btn btn-primary" onclick="submitSwap()">Request swap</button>
+        <button class="btn btn-primary" id="swapSubmit" onclick="submitSwap()">Request swap</button>
       </div>
       <div id="swapMsg" style="font-size:12px;margin-top:8px"></div>
     </div>
@@ -418,7 +426,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input type="text" class="inp" id="swap3Note" placeholder="Note (optional)" style="min-width:180px;flex:1">
-        <button class="btn btn-primary" onclick="submitSwap3()">Request 3-way swap</button>
+        <button class="btn btn-primary" id="swap3Submit" onclick="submitSwap3()">Request 3-way swap</button>
       </div>
       <div id="swap3Msg" style="font-size:12px;margin-top:8px"></div>
     </div>
@@ -533,6 +541,7 @@ const openRef     = doc(db,"dailysched","openShifts"); // LEGACY — admin-poste
 const reqItemsCol  = collection(db,"dailysched","requests","items");
 const changesCol   = collection(db,"dailysched","changes","items");   // [39 · §6] read only my own
 const requestTypesRef = doc(db,"dailysched","requestTypes");           // [40 · §41] what can be requested — the admin's list
+const tagsRef         = doc(db,"dailysched","tags");                   // [49 · R-8] which shifts a request type's tag names
 const swapItemsCol = collection(db,"dailysched","swaps","items");
 const openItemsCol = collection(db,"dailysched","openShifts","items");
 // [59 · §47] A month is now one document PER DAY: dailysched/sched_YYYY-MM/days/{DD}.
@@ -579,7 +588,7 @@ function watchMonth(ym, cb){
   return ()=>{ try{a();}catch(_){} try{b();}catch(_){} };
 }
 window.watchMonth=watchMonth;   // reachable by the suite that drives the three states
-const auditRef    = doc(db,"dailysched","auditLog"); // shared with admin's Audit Log page — write-only from here
+const auditColRef = collection(db,"dailysched","auditLog","entries"); // [49 · S-14] the admin's Audit Log page reads this — write-only from here
 
 // vacations — READ-ONLY: shared roster + approved vacation weeks
 const userListRef  = doc(db,"vacations","userList");
@@ -596,7 +605,6 @@ const usernamesRef = doc(db,"vacations","usernames");
 // TODO FB-5, because no pre-sign-in code reads it any more.
 // NOT touched: the ADMIN page still uses this document (clear one password, clear all,
 // Reset Auction) and adminSettings.passcodesEnabled stays as a stored field.
-const vAdminRef    = doc(db,"vacations","adminSettings");
 const vPhasesRef   = doc(db,"vacations","phases");
 // [C-2] vacations/approvals holds LIVE mid-phase decisions — never read here. The
 // auction's Critical invariant is that users must not see decisions before results
@@ -609,7 +617,7 @@ const _portalBypass = /[?&]portal=1(?:&|$)/.test(location.search);
 
 const MS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-let names=[], usernamesData={}, vAdmin={}, vPhases={};
+let names=[], usernamesData={}, vPhases={};   // [49 · B-14] vAdmin retired — never read
 let loginEmailsData={}; // {INITIALS: "their-google-email"} — shared doc mapping Google accounts to accounts
 let catalog={shifts:{}}, groupMembers={}, categories={}, requests={list:[]}, swaps={list:[]}, openShifts={list:[]}, monthData={days:{}};
 let me=null, curYM=null, unsubMonth=null;
@@ -644,25 +652,21 @@ const dKey=d=>ymKey(d)+'-'+pad(d.getDate());
 function displayName(u){ return usernamesData[u]||u; }
 function shiftList(kind){ return Object.entries(catalog.shifts||{}).filter(([,s])=>!kind||s.kind===kind).sort((a,b)=>(a[1].order??99)-(b[1].order??99)); }
 function shiftLabel(id){ return catalog.shifts?.[id]?.label||id; }
-// Logs to the SAME audit doc the admin site reads on its Audit Log page, so
-// a user accepting/declining a swap shows up there too — same shape as the
-// admin's own auditLog() (id/ts/admin/action/detail), just with the current
-// user's initials in the "admin" field instead of an admin email. Trimming
-// the log when it gets large is the admin side's job (it already does that
-// on every one of its own writes); this fire-and-forget helper only needs
-// to append. Never awaited by callers — logging must never block the action.
+// [49 · RA-6 S-14 / B-10] Logs to the SAME per-entry collection the admin has written since
+// build 63 (dailysched/auditLog/entries/{id}), so the Audit Log page shows a user accepting a
+// swap beside the admin's own actions — same shape (id/ts/admin/action/detail), the current
+// user's initials in the "admin" field. It used to append to the pre-63 ARRAY on the parent
+// document, whose comment said the admin trimmed it "on every one of its own writes": build 63
+// removed that trim, so this page was the array's only writer and nothing bounded it — at the
+// 1 MB document ceiling every staff action would have failed to log, silently, for ever. One
+// document per entry has no ceiling. The id is the admin's own scheme (zero-padded ts + random),
+// so the page's newest-first sort and de-duplication work unchanged. Never awaited by callers.
 function logUserAction(action,detail){
-  const entry={id:Math.random().toString(36).slice(2),ts:Date.now(),admin:displayName(me),action,detail};
+  const ts=Date.now();
+  const entry={id:String(ts).padStart(14,'0')+'_'+Math.random().toString(36).slice(2,8),ts:ts,admin:displayName(me),action,detail};
   (async()=>{
-    try{ await updateDoc(auditRef,{log:arrayUnion(entry)}); }
-    catch(e){
-      // Only create-and-seed when the doc genuinely doesn't exist yet. On any
-      // other transient failure (unavailable / deadline-exceeded / size limit),
-      // a setDoc-merge would REPLACE the whole log array with one entry and wipe
-      // the history — so in that case just warn and leave the log intact. [M-17]
-      if(e && e.code==='not-found'){ await setDoc(auditRef,{log:[entry]},{merge:true}).catch(()=>{}); }
-      else { console.warn('audit append failed',e); }
-    }
+    try{ await setDoc(doc(auditColRef,entry.id),entry); }
+    catch(e){ console.warn('audit append failed',e); }
   })();
 }
 async function sha256(t){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
@@ -880,6 +884,16 @@ function shiftsOf(cell){ return shiftEntries(cell).map(x=>x.s); }
 window.shiftsOf=shiftsOf;   // module scope is invisible to inline handlers and to tests
 
 // Colored chip per assignment — colors come from the shift catalog (QGenda-style).
+// [49 · RA-6 V-7] The legend names each family in the colour its chips are painted — the colour
+// the admin set on the Families page, which is also what chip() uses (per-shift `color` is the
+// family colour copied onto the shift). Families with no shift in the catalog are not listed.
+function renderLegendFams(){
+  const el=document.getElementById('legendFams'); if(!el) return;
+  const fams=catalog.families||{}; const used=new Map();
+  for(const s of Object.values(catalog.shifts||{})){ const k=s&&s.family; if(k&&fams[k]&&!used.has(k)) used.set(k,fams[k]); }
+  if(!used.size) return;   // keep the generic two until the catalog names families
+  el.innerHTML=[...used.entries()].map(([k,f])=>'<span><b style="color:'+esc(f.color||'#e2e8f0')+'">■</b> '+esc(f.label||k)+'</span>').join(' ');
+}
 function chip(id){
   const s=catalog.shifts?.[id]||{}; const bg=s.color||(s.kind==='call'?'#ede9fe':'#fef9c3');
   return '<span style="display:inline-block;background:'+esc(bg)+';color:#1e293b;border-radius:4px;padding:0 4px;font-weight:700">'+esc(s.label||id)+'</span>';
@@ -953,7 +967,7 @@ function renderAll(){
   g.innerHTML=head+rows;
   allGridFadeSync();
 
-  renderMyRequests(); renderMySwaps(); fillSwapWith(); fillReqShift(); renderQuickView(vac); renderOpenShifts();
+  renderMyRequests(); renderMySwaps(); fillSwapWith(); fillReqShift(); fillReqTypes(); renderChanges(); renderLegendFams(); renderQuickView(vac); renderOpenShifts();   // [49 · R-8 / D-14] both read the catalog: which types are offered, and what a feed entry is called
 }
 
 // [132 · RA-6 V-14] A fade at the right edge while there are still days off-screen, off the
@@ -1058,6 +1072,7 @@ window.withdrawRequest=async function(id){
     return {...item,status:'withdrawn',withdrawnTs:Date.now()};
   });
   if(did) logUserAction('request.withdraw',displayName(me)+' withdrew '+what);   // [46 · N-14]
+  else schedToast('That request was already decided — the decision stands. Nothing changed.','err');   // [49 · S-11]
 };
 // [37 · defect 15] The swap twin. Only the INITIATOR, and only before anyone else has agreed —
 // once it is pending_admin the other side has accepted and retracting it unilaterally would
@@ -1073,6 +1088,7 @@ window.withdrawSwap=async function(id){
     return {...item,status:'withdrawn',withdrawnTs:Date.now()};
   });
   if(did) logUserAction('swap.withdraw',displayName(me)+' withdrew '+what);   // [46 · N-14]
+  else schedToast('That swap can no longer be withdrawn — the other side has already answered, or it was decided. Nothing changed.','err');   // [49 · S-11]
 };
 
 function renderMyRequests(){
@@ -1246,9 +1262,20 @@ window.onReqType=function(){
 // is always there. While the list is empty the four built-in choices stand, so nothing is lost
 // the day this ships. A type that is not offered, or a work/avoid type with no shift list, is
 // not shown — that decision is the admin's, on the Request Types page.
-let rtData={};
+let rtData={}, tagsData={};
+// [49 · RA-6 R-8] The admin's tagShiftSet, ported: the overnight-call tag falls back to the same
+// seed the admin uses until it is saved, any other tag is its stored list.
+const OVERNIGHT_SEED=['CALL16','CALL24','OBPM'];
+function tagShiftSet(k){
+  if(k==='overnightCall') return new Set((tagsData&&tagsData.overnightCall&&Array.isArray(tagsData.overnightCall.shifts))?tagsData.overnightCall.shifts:OVERNIGHT_SEED);
+  const t=(tagsData||{})[k]; return new Set(Array.isArray(t&&t.shifts)?t.shifts:[]);
+}
+window.tagShiftSetProbe=tagShiftSet;
 const RT_GROUPS=[['work','Work something'],['avoid','Avoid something'],['off','Time off'],['absence','Absence'],['available','Availability']];
-function rtOffered(){ return Object.entries(rtData||{}).filter(([,t])=>t&&t.label&&t.active!==false&&((t.kind!=='work'&&t.kind!=='avoid')||t.tag)).sort((a,b)=>((a[1].order??99)-(b[1].order??99))||String(a[1].label).localeCompare(String(b[1].label))); }
+// [49 · RA-6 R-8] The admin's rtReady test, not a weaker one: a work/avoid type is offered only
+// when its tag names at least one shift that exists — an empty list made a request the admin
+// could never approve ("not offered yet"), pending for ever.
+function rtOffered(){ return Object.entries(rtData||{}).filter(([,t])=>t&&t.label&&t.active!==false&&((t.kind!=='work'&&t.kind!=='avoid')||(t.tag&&[...tagShiftSet(t.tag)].some(id=>(catalog.shifts||{})[id])))).sort((a,b)=>((a[1].order??99)-(b[1].order??99))||String(a[1].label).localeCompare(String(b[1].label))); }
 function rtLabel(t){ return (t.label||'')+(t.strength?' ['+String(t.strength).toUpperCase()+']':''); }
 function fillReqTypes(){
   const sel=document.getElementById('reqType'); if(!sel) return;
@@ -1265,6 +1292,14 @@ function fillReqTypes(){
 // [47 · Stage 5] the requestTypes listener moved into subscribeSchedule() — see the boot block.
 
 // ── Actions ──
+// [49 · RA-6 R-13 / S-15] ONE write in flight per submit button. The button is disabled by id
+// while its write runs and released in `finally`, so a double-tap (or a slow network and an
+// impatient second press) creates one document, not two. Open-shift claims were already
+// protected by a structural id inside a transaction; these three were not.
+const _inFlight=new Set();
+function inFlight(k){ if(_inFlight.has(k)) return false; _inFlight.add(k); const b=document.getElementById(k); if(b) b.disabled=true; return true; }
+function inFlightDone(k){ _inFlight.delete(k); const b=document.getElementById(k); if(b) b.disabled=false; }
+window.inFlightProbe=()=>[..._inFlight];
 window.submitRequest=async function(){
   const msg=document.getElementById('reqMsg'); msg.textContent='';
   const date=document.getElementById('reqDate').value;
@@ -1281,10 +1316,20 @@ window.submitRequest=async function(){
   if(type==='shift'&&(!shiftId||!canRequestShift(shiftId))){
     msg.textContent='You\'re not marked as eligible for that shift, so it can\'t be requested. If you think that\'s wrong, ask an admin to update your eligibility.';
     msg.style.color='var(--red)'; return; }
+  // [49 · RA-6 R-7] The same block for a TYPED work request (§55 was written before request
+  // types existed): asking to work a list of shifts you may do none of is refused here, before
+  // the write, as a single-shift request always was. Eligible for one of them is enough.
+  if(rt&&rt.kind==='work'){
+    const ids=[...tagShiftSet(rt.tag||'')].filter(id=>(catalog.shifts||{})[id]);
+    if(ids.length&&!ids.some(id=>canRequestShift(id))){
+      msg.textContent='You\'re not marked as eligible for any of the shifts this request covers ('+ids.map(shiftLabel).join(', ')+'), so it can\'t be requested. If you think that\'s wrong, ask an admin to update your eligibility.';
+      msg.style.color='var(--red)'; return; }
+  }
   if(type==='other'&&!note){ msg.textContent='Describe what you\'re requesting in the note.'; msg.style.color='var(--red)'; return; }
   const req={id:'r'+Date.now()+Math.floor(Math.random()*1e4),user:me,date:date||null,type,shiftId,note,status:'pending',ts:Date.now()};
   if(rt){ req.rtId=picked.slice(3); req.kind=rt.kind; req.tag=rt.tag||''; req.strength=rt.strength||''; req.span=rt.span||'day'; req.label=rt.label||''; }   // [40 · §41] the request carries its meaning
-  await itemCreate(reqItemsCol,req);
+  if(!inFlight('reqSubmit')) return;   // [49 · R-13 / S-15] a double-tap made two identical requests
+  try{ await itemCreate(reqItemsCol,req); } finally{ inFlightDone('reqSubmit'); }
   logUserAction('request.submit',displayName(me)+' requested '+reqWords(req)+(date?' for '+date:'')+(note?' — “'+note+'”':''));   // [46 · N-14]
   document.getElementById('reqNote').value='';
   msg.textContent='Request submitted — admin will review it.'; msg.style.color='var(--green)';
@@ -1300,7 +1345,8 @@ window.submitSwap=async function(){
   // Starts as pending_target — the OTHER user has to accept before this
   // ever reaches admin. See renderMySwaps()/acceptSwap()/declineSwap().
   const s={id:'s'+Date.now()+Math.floor(Math.random()*1e4),type:'2way',from:me,to,date,part,note,status:'pending_target',ts:Date.now()};
-  await itemCreate(swapItemsCol,s);
+  if(!inFlight('swapSubmit')) return;   // [49 · R-13 / S-15]
+  try{ await itemCreate(swapItemsCol,s); } finally{ inFlightDone('swapSubmit'); }
   logUserAction('swap.request',displayName(me)+' proposed a swap with '+displayName(to)+' on '+date+' ('+(part==='call'?'call':'day shift')+')');
   document.getElementById('swapNote').value='';
   msg.textContent='Swap requested — '+displayName(to)+' needs to accept it first.'; msg.style.color='var(--green)';
@@ -1320,6 +1366,7 @@ window.acceptSwap=async function(id){
     return {...s,status:'pending_admin',targetDecidedTs:Date.now()};
   });
   if(acted) logUserAction('swap.accept',displayName(me)+' accepted a swap with '+displayName(sFrom)+' on '+sDate+' — now awaiting admin approval');
+  else schedToast('That swap is no longer waiting on you — it was decided or withdrawn. Nothing changed.','err');   // [49 · S-11] the silent no-op speaks
 };
 window.declineSwap=async function(id){
   let acted=false, sFrom=null, sDate=null;
@@ -1330,6 +1377,7 @@ window.declineSwap=async function(id){
     return {...s,status:'declined_by_target',targetDecidedTs:Date.now()};
   });
   if(acted) logUserAction('swap.decline',displayName(me)+' declined a swap with '+displayName(sFrom)+' on '+sDate);
+  else schedToast('That swap is no longer waiting on you — it was decided or withdrawn. Nothing changed.','err');   // [49 · S-11]
 };
 // 3-way rotation: participants=[you,B,C]; legs[0]=your giveaway (→B),
 // legs[1]=B's giveaway (→C), legs[2]=C's giveaway (→ back to you). You
@@ -1352,7 +1400,8 @@ window.submitSwap3=async function(){
     participants:[me,b,c], legs:[{date:d1,part:p1},{date:d2,part:p2},{date:d3,part:p3}],
     note, status:'pending_target', acceptances:{}, ts:Date.now()
   };
-  await itemCreate(swapItemsCol,s3);
+  if(!inFlight('swap3Submit')) return;   // [49 · R-13 / S-15]
+  try{ await itemCreate(swapItemsCol,s3); } finally{ inFlightDone('swap3Submit'); }
   logUserAction('swap3.request',displayName(me)+' proposed a 3-way swap: '+displayName(me)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(me));
   document.getElementById('swap3Note').value='';
   msg.textContent='3-way swap requested — '+displayName(b)+' and '+displayName(c)+' both need to accept.'; msg.style.color='var(--green)';
@@ -1386,6 +1435,7 @@ window.declineSwap3=async function(id){
     return {...s,status:'declined_by_target',declinedBy:me};
   });
   if(acted){ const [a,b,c]=parts; logUserAction('swap3.decline',displayName(me)+' declined their leg of a 3-way swap ('+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)+')'); }
+  else schedToast('That 3-way swap is no longer waiting on you — it was decided, withdrawn, or you already answered. Nothing changed.','err');   // [49 · S-11]
 };
 
 // ── Sign-in (same roster + usernames + passcodes as the Vacation Auction —
@@ -1420,29 +1470,52 @@ window.onSignUserInput=function(){};
 let myChanges=[], _unsubChanges=null;
 function chgSeenKey(){ return 'schedChangesSeen.'+me; }
 function chgSeenAt(){ try{ return Number(localStorage.getItem(chgSeenKey())||0); }catch(_){ return 0; } }
-window.markChangesSeen=function(){ try{ localStorage.setItem(chgSeenKey(),String(Date.now())); }catch(_){} renderChanges(); };
+// [49 · RA-6 D-13] WHEN an entry happened, by the server's clock when the admin's build wrote one
+// (`atServer`, admin 143+), else the admin's clock. "Seen" is the newest entry's own time, not
+// this device's clock — so no two clocks are ever compared to decide what is unread.
+function chgAt(c){ const t=c&&c.atServer; if(t){ if(typeof t.toMillis==='function') return t.toMillis(); if(typeof t.seconds==='number') return t.seconds*1000; } return Number(c&&c.at)||0; }
+window.chgAtProbe=chgAt;
+window.markChangesSeen=function(){ const newest=myChanges.reduce((m,c)=>Math.max(m,chgAt(c)),0); try{ localStorage.setItem(chgSeenKey(),String(newest||Date.now())); }catch(_){} renderChanges(); };
+// [49 · RA-6 D-14] The admin froze each entry's words at write time, so a shift renamed later —
+// advertised as safe — showed its old name in the feed for ever. The facts (added / removed /
+// off / the month) are stored beside the words; the words are rebuilt from them here, and the
+// frozen text is only the fallback for an entry that carries no facts.
+function changeText(c){
+  const lbl=id=>shiftLabel(id);
+  const bits=[];
+  if(c.published){ const sh=c.count||0, off=c.offDays||0;
+    return (c.monthName||c.dk)+' was published — you have '+sh+' shift'+(sh===1?'':'s')+(off?' and '+off+' day'+(off===1?'':'s')+' off':'')+' in it.'; }
+  if(c.unpublished) return (c.monthName||c.dk)+' was returned to draft — it may change before it is published again.';
+  if(c.cleared) return 'Every shift you held in '+(c.monthName||c.dk)+' was removed.';
+  if((c.added||[]).length) bits.push('added '+c.added.map(lbl).join(' + '));
+  if((c.removed||[]).length) bits.push('removed '+c.removed.map(lbl).join(' + '));
+  if(c.off===true) bits.push('marked off'); else if(c.off===false) bits.push('no longer marked off');
+  if(!bits.length) return c.text||'changed on '+c.dk;
+  return bits.join(', ')+' on '+c.dk;
+}
+window.changeTextProbe=changeText;
 function watchChanges(){
   if(_unsubChanges){ try{_unsubChanges();}catch(_){} _unsubChanges=null; }
   myChanges=[];
   if(!me) return;
   _unsubChanges=onSnapshot(query(changesCol,where('u','==',me)),qs=>{
-    myChanges=qs.docs.map(d=>d.data()).filter(c=>c&&c.u===me).sort((a,b)=>(b.at||0)-(a.at||0));
+    myChanges=qs.docs.map(d=>d.data()).filter(c=>c&&c.u===me).sort((a,b)=>chgAt(b)-chgAt(a));
     renderChanges();
   });
 }
 function renderChanges(){
   const el=document.getElementById('chgList'), badge=document.getElementById('chgNavBadge');
   const seen=chgSeenAt();
-  const unread=myChanges.filter(c=>(c.at||0)>seen).length;
+  const unread=myChanges.filter(c=>chgAt(c)>seen).length;
   if(badge){ badge.textContent=unread?String(unread):''; badge.style.display=unread?'':'none'; }
   if(!el) return;
   if(!myChanges.length){ el.innerHTML='<div style="font-size:12px;color:var(--t3)">Nothing has changed for you yet.</div>'; return; }
   el.innerHTML=myChanges.slice(0,100).map(c=>{
-    const when=c.at?new Date(c.at).toLocaleString():'';
-    const fresh=(c.at||0)>seen;
+    const when=chgAt(c)?new Date(chgAt(c)).toLocaleString():'';
+    const fresh=chgAt(c)>seen;
     return '<div class="rowline" style="'+(fresh?'background:#fffbeb;':'')+'padding:6px 8px;border-radius:6px">'
       +(fresh?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;margin-right:6px" title="New since you last looked"></span>':'')
-      +'<span style="font-size:12.5px">'+esc(c.text||'changed')+'</span>'
+      +'<span style="font-size:12.5px">'+esc(changeText(c))+'</span>'
       +'<span class="mono" style="margin-left:auto;font-size:11px;color:var(--t3)">'+esc(when)+'</span></div>';
   }).join('')+(myChanges.length>100?'<div style="font-size:11px;color:var(--t3);margin-top:6px">Showing the newest 100.</div>':'');
 }
@@ -1637,7 +1710,7 @@ window.switchUser=function(){
 // console. Re-derive this number against measured timings if App Check is ever removed.
 setTimeout(()=>{
   if(!_schedSignInDataReady()){
-    console.warn('[Sign-in] Firestore did not respond in 3s — unlocking. Missing:',{names:!_namesReadySched,usernames:!_usernamesReadySched,adminSettings:!_adminReadySched});
+    console.warn('[Sign-in] Firestore did not respond in 3s — unlocking. Missing:',{names:!_namesReadySched,usernames:!_usernamesReadySched});
     _namesReadySched=_usernamesReadySched=_adminReadySched=true;
     initSchedSigninScreen();
   }
@@ -1658,8 +1731,13 @@ onSnapshot(userListRef,snap=>{
   initSchedSigninScreen();
 });
 onSnapshot(usernamesRef,snap=>{ usernamesData=snap.exists()?snap.data():{}; _usernamesReadySched=true; renderAll(); initSchedSigninScreen(); });
-onSnapshot(vAdminRef,snap=>{ vAdmin=snap.exists()?snap.data():{}; _adminReadySched=true; initSchedSigninScreen(); });
-onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; });
+// [49 · RA-6 B-14] The auction's adminSettings document was subscribed here and never read —
+// the listener existed only to flip a readiness flag, and every auction-admin toggle was
+// delivered to every schedule session for nothing. The flag flips on its own.
+// [49 · RA-6 S-5 / B-13] The pre-sign-in loginEmails listener is gone too: the rules deny it to
+// an anonymous session, and finishSignIn reads (then subscribes to) the map with the signed-in
+// account's own credentials — so once signed in there were TWO live listeners on one document.
+_adminReadySched=true;
 onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
 // [C-2] Removed onSnapshot(vApprovalsRef,…) — the schedule site no longer reads live
 // auction approvals (privacy leak + H-4 rules now deny this read anyway).
@@ -1685,14 +1763,28 @@ const _reMergeOpen=()=>{ openShifts={list:mergeItems(_openLegacy,_openItems)}; r
 // retried — which is the shape §-invariant "auth gate" exists to prevent on the auction site.
 // Idempotent, and undone on sign-out so a second account on the same tab re-attaches cleanly.
 let _schedUnsubs=[];
+// [49 · RA-6 S-11] Every READ failure on this page was silent — a rules denial, a dropped
+// network, an offline phone all rendered as empty or frozen data. The month reader learned to
+// say "couldn't load" in 44; the other listeners now report to one banner that names what did
+// not arrive and offers a reload. It never hides on its own: a listener that was refused once is
+// never retried by the SDK, so the honest state is "reload".
+const _readFailed=new Set();
+function readFailed(label,err){
+  _readFailed.add(label+(err&&err.code?' ('+err.code+')':''));
+  const b=document.getElementById('readErr'); if(!b) return;
+  b.hidden=false;
+  b.innerHTML='<b>Some of your data could not load</b> — '+esc([..._readFailed].join(', '))+'. What is on screen may be incomplete. <a href="#" onclick="location.reload();return false">Reload</a>';
+}
+window.readFailedProbe=()=>[..._readFailed];
 function subscribeSchedule(){
   if(_schedUnsubs.length) return;
-  const on=(...a)=>{ _schedUnsubs.push(onSnapshot(...a)); };
-  on(requestTypesRef,snap=>{ rtData=snap.exists()?snap.data():{}; fillReqTypes(); renderMyRequests(); });
-  on(catalogRef,snap=>{ catalog=snap.exists()?snap.data():{shifts:{}}; if(!catalog.shifts)catalog.shifts={}; renderAll(); });
-  on(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; fillReqShift(); });   // [46 · S-1] the two documents the checker needs
-  on(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; fillReqShift(); });
-  on(requestsRef,snap=>{ const d=snap.exists()?snap.data():{}; _reqLegacy=Array.isArray(d.list)?d.list:[]; _reMergeReq(); });
+  const on=(r,cb,onErr,label)=>{ _schedUnsubs.push(onSnapshot(r,cb,e=>{ readFailed(label||'part of the schedule',e); if(onErr){ try{ onErr(e); }catch(_){} } })); };
+  on(requestTypesRef,snap=>{ rtData=snap.exists()?snap.data():{}; fillReqTypes(); renderMyRequests(); },null,'request types');
+  on(tagsRef,snap=>{ tagsData=snap.exists()?snap.data():{}; fillReqTypes(); },null,'shift tags');   // [49 · R-8]
+  on(catalogRef,snap=>{ catalog=snap.exists()?snap.data():{shifts:{}}; if(!catalog.shifts)catalog.shifts={}; renderAll(); },null,'the shift catalog');
+  on(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; fillReqShift(); },null,'groups');   // [46 · S-1] the two documents the checker needs
+  on(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; fillReqShift(); },null,'categories');
+  on(requestsRef,snap=>{ const d=snap.exists()?snap.data():{}; _reqLegacy=Array.isArray(d.list)?d.list:[]; _reMergeReq(); },null,'older requests');
   // [48 · RA-6 S-3, the client half] This page uses exactly two slices of these collections — MY
   // requests (user===me) and swaps I am PARTY to (from/to me, or a 3-way I am in) — and every
   // renderer filters to them. It used to subscribe to the WHOLE of both, so every physician's
@@ -1701,20 +1793,21 @@ function subscribeSchedule(){
   // (Stage 5) still gate the read to a signed-in account, and this is the second half. Three
   // swap queries feed one map, because Firestore has no OR: from me, to me, and the 3-ways
   // that list me. Legacy arrays (nothing has written them since 30) are unchanged.
-  on(query(reqItemsCol,where('user','==',me)),qs=>{ _reqItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeReq(); });
-  on(swapsRef,snap=>{ const d=snap.exists()?snap.data():{}; _swapLegacy=Array.isArray(d.list)?d.list:[]; _reMergeSwap(); });
+  on(query(reqItemsCol,where('user','==',me)),qs=>{ _reqItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeReq(); },null,'your requests');
+  on(swapsRef,snap=>{ const d=snap.exists()?snap.data():{}; _swapLegacy=Array.isArray(d.list)?d.list:[]; _reMergeSwap(); },null,'older swaps');
   const _swapQ={};
-  const swapSlice=(k,q)=>on(q,qs=>{ _swapQ[k]=new Map(qs.docs.map(d=>[d.id,d.data()])); _swapItems=new Map([...(_swapQ.from||[]),...(_swapQ.to||[]),...(_swapQ.part||[])]); _reMergeSwap(); });
+  const swapSlice=(k,q)=>on(q,qs=>{ _swapQ[k]=new Map(qs.docs.map(d=>[d.id,d.data()])); _swapItems=new Map([...(_swapQ.from||[]),...(_swapQ.to||[]),...(_swapQ.part||[])]); _reMergeSwap(); },null,'your swaps');
   swapSlice('from',query(swapItemsCol,where('from','==',me)));
   swapSlice('to',query(swapItemsCol,where('to','==',me)));
   swapSlice('part',query(swapItemsCol,where('participants','array-contains',me)));
-  on(openRef,snap=>{ const d=snap.exists()?snap.data():{}; _openLegacy=Array.isArray(d.list)?d.list:[]; _reMergeOpen(); });
-  on(openItemsCol,qs=>{ _openItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeOpen(); });
+  on(openRef,snap=>{ const d=snap.exists()?snap.data():{}; _openLegacy=Array.isArray(d.list)?d.list:[]; _reMergeOpen(); },null,'older open shifts');
+  on(openItemsCol,qs=>{ _openItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeOpen(); },null,'open shifts');
 }
 window.schedSubsCountForTest=()=>_schedUnsubs.length;   // module scope is invisible to page.evaluate
 window.itemsHeldForTest=()=>({ req:[..._reqItems.keys()], swap:[..._swapItems.keys()] });   // [48] what this browser actually holds
 function unsubscribeSchedule(){
   _schedUnsubs.forEach(u=>{ try{u();}catch(_){} }); _schedUnsubs=[];
+  if(_unsubChanges){ try{_unsubChanges();}catch(_){} _unsubChanges=null; myChanges=[]; renderChanges(); }   // [49 · RA-6 D-12] the previous person's feed used to keep firing behind the sign-in screen
   if(unsubMonth){ try{unsubMonth();}catch(_){} unsubMonth=null; }
   qvUnsubs.forEach(u=>{ try{u();}catch(e){} }); qvUnsubs=[]; qvData={}; qvKeys='';
 }

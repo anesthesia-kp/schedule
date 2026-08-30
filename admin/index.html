@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 141;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 146;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -181,7 +181,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 .lockbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-radius:10px;
   padding:9px 13px;margin-bottom:12px;font-size:13px;font-weight:700}
 .lockbar.locked{background:#f1f5f9;border:1px solid var(--b2);color:var(--t2)}
-.lockbar.open{background:#fffbeb;border:1px solid #fcd34d;color:#92400e}
+.lockbar.open{background:var(--s2);border:1px solid var(--b2);color:var(--t2)}   /* [145 · V-12] a status line, not an alarm — it used to be the loudest thing on two pages */
 .lockbar .who{font-weight:600;font-size:11.5px;opacity:.85}
 .pagelocked{opacity:.55;pointer-events:none}
 
@@ -260,7 +260,7 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
   align-items:center;justify-content:center;font-size:10px;font-weight:900;color:#0f172a}
 .eg-empty{padding:26px;text-align:center;color:var(--t3);font-size:13px;font-weight:600}
 .rowline{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px dashed var(--b1);font-size:13px;flex-wrap:wrap}
-.status-pending{color:var(--yellow)} .status-approved{color:var(--green)} .status-denied{color:var(--red)}
+.status-pending{color:var(--yellow)} .status-approved{color:var(--green)} .status-denied{color:var(--red)} .status-withdrawn{color:var(--t3)}   /* [143 · R-9] */
 .mono{font-family:var(--mono)}
 .modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:150;padding:16px}
 .modal.on{display:flex}
@@ -324,6 +324,9 @@ th.eg-lab.colhi .eg-labtxt{color:var(--blue)}
 
 /* [67 · S3] Sticky + markers — the quick-wins batch (UX-PLAN §2/§7 item 3). */
 .gridwrap{overflow:visible;border:1px solid var(--b1);border-radius:10px;background:var(--s1)}
+.tbgroup{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}   /* [144 · V-6] a toolbar switch wraps as one */
+.fitcard{display:inline-block;max-width:100%;min-width:min(100%,480px);box-sizing:border-box}   /* [144 · V-10] a card no wider than its table */
+.mcard{position:relative}   /* [144 · V-5] anchors the ✕ */
 /* [132 · RA-6 V-1 / V-14] THE SCHEDULE GRID SCROLLS INSIDE ITS OWN BOX.
    `.gridwrap` was overflow:visible, so a 31-day month pushed the DOCUMENT sideways — the
    sidebar, the page title and the month toolbar scrolled away with it and the header read
@@ -370,7 +373,9 @@ table.grid th.cov-bad{background:#fee2e2!important;color:#991b1b}
 table.grid th.cov-none{background:var(--s2)!important;color:var(--t3)}
 /* [69 - S5a] COMPACT DENSITY. A family-coloured block per shift instead of a text chip;
    80 rows survive this where the chip list does not. */
-.mini{display:inline-block;width:9px;height:9px;border-radius:2px;margin:1px;vertical-align:middle}
+.mini{display:inline-block;width:12px;height:12px;border-radius:3px;margin:1px;vertical-align:middle;border:1px solid rgba(0,0,0,.12)}   /* [145 · V-20] 9px pale squares were unreadable; a hairline edge separates two pale tints */
+.gridlegend{display:none;flex-wrap:wrap;gap:4px 12px;align-items:center;font-size:11px;color:var(--t2);margin:6px 0 4px}
+.gridlegend .mini{width:12px;height:12px}
 .minict{font-size:9px;font-weight:800;color:var(--t2);margin-left:1px;vertical-align:middle}
 /* [70 - S5b] SHIFTS-AS-ROWS. Shortfall is marked with an inset ring rather than a
    background, so it stacks with the weekend and today tints instead of fighting them. */
@@ -455,29 +460,38 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
 <body>
 <nav>
   <div class="brand">SCHEDULER ADMIN</div>
+  <!-- [146 · RA-6 §7b "cut the top-level list"] Five groups in the order the month is worked — the
+       schedule itself, what people asked for, what came of it, the set-once pages, the records.
+       Plain nouns for headings (owner, 30 Aug: "less goofy titles" — §133). Twenty entries in five groups where two were "everything else" (Stats
+       and Coverage READ the schedule but sat under Setup beside Shift Families; Engine and Reports
+       sat under Admin beside the Audit Log) was a list, not a structure. Every panel id, handler
+       and page is unchanged — only the sidebar's order and headings moved. The Engine keeps its
+       own entry (§123 ②). -->
+  <div class="nav-section">Schedule</div>
   <a onclick="nav('dash',this)" class="on">📋 Today</a>
   <a onclick="nav('grid',this)">📅 Schedule Grid</a>
+  <a onclick="nav('engine',this)">⚙️ Engine</a>
   <a onclick="nav('print',this)">🖨️ Print</a>
+  <div class="nav-section">Approvals</div>
   <a onclick="nav('requests',this)">📥 Requests <span id="reqBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
   <a onclick="nav('swaps',this)">🔁 Swaps <span id="swapBadge" class="mono" style="font-size:10px;color:var(--red)"></span></a>
   <a onclick="nav('open',this)">📢 Open Shifts</a>
-  <div class="nav-section">People</div>
-  <a onclick="nav('users',this)">👤 Users</a>
-  <a onclick="nav('groups',this)">🧩 Groups</a>
-  <div class="nav-section">Admin</div>
-  <a onclick="nav('engine',this)">⚙️ Engine</a>
+  <div class="nav-section">Reporting</div>
   <a onclick="nav('reports',this)">📈 Reports</a>
-  <a onclick="nav('feeds',this)">📆 Calendar Feeds</a>
-  <a onclick="nav('audit',this)">🧾 Audit Log</a>
+  <a onclick="nav('stats',this)">📊 Stats</a>
+  <a onclick="nav('coverage',this)">🩺 Coverage</a>
   <div class="nav-section">Setup</div>
-  <a onclick="nav('elig',this)">🎯 Shift Eligibility</a>
   <a onclick="nav('catalog',this)">🧰 Shift Catalog</a>
   <a onclick="nav('families',this)">🎨 Shift Families</a>
+  <a onclick="nav('elig',this)">🎯 Shift Eligibility</a>
   <a onclick="nav('quotas',this)">🧮 Quotas</a>
   <a onclick="nav('rules',this)">📐 Rules</a>
   <a onclick="nav('reqtypes',this)">📝 Request Types</a>
-  <a onclick="nav('stats',this)">📊 Stats</a>
-  <a onclick="nav('coverage',this)">🩺 Coverage</a>
+  <a onclick="nav('groups',this)">🧩 Groups</a>
+  <a onclick="nav('users',this)">👤 Users</a>
+  <div class="nav-section">Records</div>
+  <a onclick="nav('audit',this)">🧾 Audit Log</a>
+  <a onclick="nav('feeds',this)">📆 Calendar Feeds</a>
   <div class="nav-section">Other Systems</div>
   <a href="https://anesthesia-kp.github.io/vacation/admin/" target="_blank" rel="noopener">🏖️ Vacation Auction Admin →</a>
 </nav>
@@ -522,7 +536,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       <button class="bd-stat" onclick="bdToggle('cov',this)">coverage <b id="dashCoveragePct">—</b></button>
       <button class="bd-stat" onclick="bdToggle('vac',this)"><b id="bdVacCount">0</b> on vacation today</button>
       <button class="bd-stat" onclick="bdToggle('users',this)"><b id="dashUserCount">0</b> people</button>
-      <button class="bd-stat" onclick="bdToggle('audit',this)">latest change</button>
+      <button class="bd-stat" onclick="bdToggle('audit',this)">latest change <b id="dashAuditWhen">—</b></button>   <!-- [144 · V-18] -->
     </div>
     <div class="bd-drawer" id="bdDrawer-req" hidden>
       <div class="dash-sub" id="dashReqSub">Nothing waiting.</div>
@@ -569,16 +583,17 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       </label>
       <!-- [70 - S5b] View switch. People is the original grid; Shifts flips it so each
            row is a shift and the cells name who is on it. Owner asked for both. -->
-      <span style="font-size:11px;color:var(--t2)">View</span>
+      <!-- [144 · V-6] each switch is ONE flex item, so a narrow toolbar wraps a whole switch, never
+           its second button alone onto the next row beside the name filter. -->
+      <span class="tbgroup"><span style="font-size:11px;color:var(--t2)">View</span>
       <button class="btn" id="viewPeople" style="font-size:11.5px" onclick="setGridView('people')">People</button>
-      <button class="btn btn-ghost" id="viewShifts" style="font-size:11.5px" onclick="setGridView('shifts')">Shifts</button>
+      <button class="btn btn-ghost" id="viewShifts" style="font-size:11.5px" onclick="setGridView('shifts')">Shifts</button></span>
       <span style="width:1px;height:18px;background:var(--b1)"></span>
       <!-- [69 - S5a] Density switch. Detail keeps the text chips; Compact swaps them for
            family-coloured blocks so 80 rows stay readable. The choice is remembered. -->
-      <span style="width:1px;height:18px;background:var(--b1)"></span>
-      <span style="font-size:11px;color:var(--t2)">Density</span>
+      <span class="tbgroup"><span style="font-size:11px;color:var(--t2)">Density</span>
       <button class="btn" id="densDetail" style="font-size:11.5px" onclick="setGridDensity('detail')">Detail</button>
-      <button class="btn btn-ghost" id="densCompact" style="font-size:11.5px" onclick="setGridDensity('compact')">Compact</button>
+      <button class="btn btn-ghost" id="densCompact" style="font-size:11.5px" onclick="setGridDensity('compact')">Compact</button></span>
       <span style="width:1px;height:18px;background:var(--b1)"></span>
       <!-- [84 · S5c] THE FILTER BAR. Name/text only, plus coverage — a person carries NO role
            and NO site on this site (only a display name and an FTE), so filtering by those is
@@ -611,6 +626,8 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       <a onclick="nav('engine',document.querySelector('nav a[onclick*=engine]'))"
          style="font-size:11.5px;color:var(--t2);cursor:pointer;text-decoration:underline">⚙️ Fill or clear this month on the Engine page →</a>
     </div>
+    <!-- [145 · RA-6 V-20] the Compact legend — drawn from the families in the catalog, shown only at Compact density -->
+    <div class="gridlegend" id="gridLegend"></div>
     <!-- [59 · §47] Shown ONLY while the month on screen is still stored the old way.
          It is a lock, not a nag: everything below is read-only until Convert is pressed. -->
     <!-- [84 · S5c] Shown ONLY while a filter is on. A grid with rows or days hidden looks
@@ -643,12 +660,15 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     </div>
     <div class="card" style="padding:10px 14px;margin-bottom:10px">
       <div style="font-size:12px;color:var(--t2)"><b>Call fairness:</b> fairness is measured on a <b>rolling 12-month average</b> — the last 12 months of the actual saved schedule, plus each person's starting baseline below. This feeds the <b>fairness view</b> on the Reports page and the engine's choice of who has done a shift least. The baseline stays here because it is real fairness data.</div>
-      <details style="margin-top:8px">
-        <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--t1)">⚙️ Set starting baseline — prior call not yet in the system</summary>
+      <!-- [145 · §7b "one collapse control"] was a <details>; now the site's own bar -->
+      <div style="margin-top:8px">
+        <div class="card-title secth" style="font-size:12px" onclick="toggleSect('baseline')" title="Click to open or close this section"><span class="secta" id="secta_baseline">▸</span>⚙️ Set starting baseline — prior call not yet in the system</div>
+        <div id="sect_baseline" style="display:none">
         <div style="font-size:11px;color:var(--t2);margin:6px 0 8px">Enter how many of each call shift each person has already done in the past ~12 months. These seed the rolling window so fairness starts from the right place. As the system builds a full 12-month history, lower these toward 0.</div>
         <div style="overflow-x:auto"><table class="grid" id="baselineGrid" style="width:auto"></table></div>
         <button class="btn btn-primary" style="font-size:12px;margin-top:8px" onclick="saveBaseline()">💾 Save baseline</button>
-      </details>
+        </div>
+      </div>
     </div>
     <div class="card" style="padding:10px 12px">
       <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Click any cell to assign a day shift, call, or day off. <b>VAC</b> comes from the auction automatically and cannot be edited here. Users see every change immediately.</div>
@@ -719,7 +739,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <input type="number" class="inp" autocomplete="off" id="uFteNew" style="width:78px" placeholder="FTE" step="0.1" min="0" max="1">
         <button class="btn btn-primary" onclick="addSchedUser()">Add</button>
       </div>
-      <div class="page-sub" style="margin-top:6px">Only <strong>initials</strong> are required. Full name, login e-mail and KP e-mail are shared with the Vacation Auction; FTE here is this site's own.</div>
+      <div class="page-sub" style="margin-top:6px">Only <strong>initials</strong> are required. Full name, login e-mail and KP e-mail are shared with the Vacation Auction; FTE here is this site's own. <span id="uAddCoupling">The Vacation Auction still needs its <b>own</b> FTE for this person before its next phase can begin — set it on the auction's admin site.</span></div>
       <div id="uMsg" style="font-size:12px;margin-top:8px"></div>
       </div>
     </div>
@@ -766,6 +786,10 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <b>Nothing in this app is ever hard-blocked.</b> Severity decides where a conflict sits in the report and how loud the confirmation is — <b>Serious</b> asks for a deliberate yes, <b>Warn</b> is named in the ordinary confirmation, <b>Note</b> is listed and never raised. None of the three refuses a change.
       </div>
     </div>
+    <!-- [145 · §7b "one place for holidays"] Holidays are a scheduling input a staffing rule reads
+         ("when: holidays"), so they are findable from here — but they STAY on the Shift Catalog page
+         beside the staffing rules that read them, where the owner built them (§102/§104). -->
+    <div class="page-sub" style="margin:-4px 0 12px">Which days count as <b>holidays</b> — read by any staffing rule that says “holidays” — is set on the Shift Catalog page: <a href="#" onclick="gotoHolidays();return false" style="color:#1d4ed8">open the Holidays list →</a></div>
     <div class="card">
       <div class="card-title secth" onclick="toggleSect('addrule')" title="Click to open or close this section"><span class="secta" id="secta_addrule">▸</span>Add a rule</div>
       <div id="sect_addrule" style="display:none">
@@ -889,6 +913,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <button class="btn" style="font-size:12px;padding:4px 10px" onclick="resetEligFilters()">Reset filters</button>
       </div>
       </div>
+      <div id="eligCount" class="page-sub" style="margin:6px 0 4px"></div>   <!-- [144 · V-8] always visible, filters or not -->
       <div id="eligBoard"></div>
       <div class="eg-legend" id="eligLegend" style="display:none">
         <span class="k"><span class="box" style="background:#dbeafe"> </span> a group, or one side of it</span>
@@ -1103,10 +1128,12 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <button class="btn" id="statsViewAllBtn" style="font-size:12px;border-radius:0" onclick="setStatsView('all')" title="Every shift as its own column — the full matrix">Every shift</button>
       </div>
     </div>
-    <div class="card" style="padding:10px 12px">
+    <div class="card fitcard" style="padding:10px 12px">
       <div id="statsHint" style="font-size:11px;color:var(--t2);margin-bottom:8px">Assignments per user for the month shown above — use the controls to jump to any month or year. Call columns highlighted — watch these for even distribution.</div>
       <div id="statsLoading" style="display:none;font-size:12px;color:var(--t2);padding:8px 0">Adding up all 12 months…</div>
-      <div class="gridwrap" style="max-height:70vh"><table class="grid" id="statsGrid"></table></div>
+      <!-- [144 · V-10] the box scrolls (the total row used to paint OUTSIDE it past 70vh), and the
+           card shrinks to its table instead of leaving a field of white beside the last column -->
+      <div class="gridwrap" style="max-height:70vh;overflow:auto"><table class="grid" id="statsGrid"></table></div>
     </div>
   </div>
 
@@ -1124,7 +1151,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       </label>
     </div>
     <div id="covSummary" class="card" style="padding:11px 14px"></div>
-    <div class="card" style="padding:10px 12px">
+    <div class="card fitcard" style="padding:10px 12px">   <!-- [144 · V-10] -->
       <div style="overflow-x:auto"><table class="grid" id="covGrid"></table></div>
     </div>
   </div>
@@ -1234,8 +1261,11 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     <!-- [67 · S3] The run cards come FIRST — running a report is the everyday job.
          The two configuration lists (set once, revisited rarely) moved below them,
          under the ⚙️ Settings fold at the bottom of this panel. -->
-    <details open id="reportsSettings" style="margin-top:2px">
-      <summary style="cursor:pointer;font-size:12.5px;font-weight:800;color:var(--t2);padding:7px 2px">⚙️ Settings — what counts as overnight call · who's in the comparison</summary>
+    <!-- [145 · RA-6 V-12 + §7b "one collapse control"] this was a <details open> — the one fold on the
+         site that was not the vacation admin's ▸ Show / ▾ Hide bar, and it opened EXPANDED against §104 -->
+    <div class="card" style="margin-top:2px">
+      <div class="card-title secth" onclick="toggleSect('reportsettings')" title="Click to open or close this section"><span class="secta" id="secta_reportsettings">▸</span>⚙️ Settings — what counts as overnight call · who's in the comparison</div>
+      <div id="sect_reportsettings" style="display:none">
     <div class="lockbar" id="reportsLockBar"></div>
 
     <div id="reportsLockable">
@@ -1243,12 +1273,12 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <div class="card-title">Which shifts count as overnight call?</div>
         <div class="tagpick" id="ocTagPick"></div>
         <div id="ocTagState" style="font-size:11.5px;margin-top:8px"></div>
-        <div style="font-size:11.5px;color:var(--t2);margin-top:6px;line-height:1.5">
-          <b>You set this — nothing is worked out automatically.</b> It cannot be: shifts that cross midnight would sweep in <b>RCH-ICU B</b>, a night ICU shift, and everything in the call family would sweep in <b>Eye Call</b> (07:30–15:30) and <b>Call 12 AM</b> (07:30–19:30), which are daytime. Anything left unticked is simply not overnight call, whatever its name or hours suggest.
-        </div>
+        <!-- [145 · RA-6 V-13] written by renderReports from THIS catalog — the sentence used to name
+             three shifts from a sample dataset as if they were facts about this group -->
+        <div id="ocWhy" style="font-size:11.5px;color:var(--t2);margin-top:6px;line-height:1.5"></div>
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-primary" style="font-size:12px" onclick="saveOvernightTag()">Save overnight-call list</button>
-          <button class="btn btn-ghost" style="font-size:12px" onclick="resetOvernightTag()">Back to Call 16 · Call 24 · OB PM</button>
+          <button class="btn btn-ghost" style="font-size:12px" id="ocResetBtn" onclick="resetOvernightTag()">Back to the starting list</button>
         </div>
       </div>
 
@@ -1265,7 +1295,8 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <div style="margin-top:10px"><button class="btn btn-primary" style="font-size:12px" onclick="saveCompPool()">Save who counts</button></div>
       </div>
     </div>
-    </details>
+      </div>
+    </div>
   </div>
 
   <!-- AUDIT LOG -->
@@ -1312,7 +1343,11 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
 <!-- Cell assignment modal -->
 <div class="modal" id="cellModal">
   <div class="mcard">
-    <div style="font-weight:800;margin-bottom:2px" id="cmTitle"></div>
+    <!-- [144 · V-5] A way out that sounds like one. Each action in this editor applies on its own,
+         so there is nothing to "cancel" — but the only exits were Done and Remove everything, both
+         of which sound like commits. ✕ and Escape close it, changing nothing. -->
+    <button class="btn btn-ghost" style="position:absolute;top:10px;right:12px;font-size:14px;padding:2px 8px" title="Close (Esc) — nothing changes" aria-label="Close" onclick="closeCellModal()">✕</button>
+    <div style="font-weight:800;margin-bottom:2px;padding-right:36px" id="cmTitle"></div>
     <div style="font-size:12px;color:var(--t2);margin-bottom:12px" id="cmSub"></div>
     <!-- [52] A LIST, not two slots. Adding never removes; removing takes the one shift you
          named and nothing else. Each action applies on its own and confirms by name (§3),
@@ -1391,7 +1426,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, collection, query, orderBy, limit, setDoc, updateDoc, deleteDoc, deleteField, getDoc, getDocs, writeBatch, arrayUnion, arrayRemove, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, collection, query, orderBy, limit, setDoc, updateDoc, deleteDoc, deleteField, getDoc, getDocs, writeBatch, arrayUnion, arrayRemove, runTransaction, serverTimestamp, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 
@@ -1640,18 +1675,34 @@ const changesCol   = collection(db,"dailysched","changes","items");
 function changeText(c){
   const lbl=id=>shiftLabel(id);
   const bits=[];
-  if(c.published) return (c.monthName||c.dk)+' was published — you have '+c.count+' shift'+(c.count===1?'':'s')+' in it.';
+  if(c.published){ const sh=c.count||0, off=c.offDays||0;   // [143 · D-10] days off are named too
+    return (c.monthName||c.dk)+' was published — you have '+sh+' shift'+(sh===1?'':'s')+(off?' and '+off+' day'+(off===1?'':'s')+' off':'')+' in it.'; }
+  if(c.unpublished) return (c.monthName||c.dk)+' was returned to draft — it may change before it is published again.';   // [143 · D-9]
   if(c.cleared) return 'Every shift you held in '+(c.monthName||c.dk)+' was removed.';
   if((c.added||[]).length) bits.push('added '+c.added.map(lbl).join(' + '));
   if((c.removed||[]).length) bits.push('removed '+c.removed.map(lbl).join(' + '));
   if(c.off===true) bits.push('marked off'); else if(c.off===false) bits.push('no longer marked off');
   return (bits.length?bits.join(', '):'changed')+' on '+c.dk;
 }
+// [143 · D-10] Who holds ANYTHING in a month — shifts or a day-off mark — and how much of each.
+function monthPeople(days){
+  const who={};
+  for(const dd in (days||{})) for(const u in days[dd]){
+    const c=days[dd][u]||{}; const n=shiftsOf(c).length; const off=c.off?1:0;
+    if(!n&&!off) continue;
+    who[u]=who[u]||{shifts:0,off:0}; who[u].shifts+=n; who[u].off+=off;
+  }
+  return who;
+}
+window.monthPeopleProbe=monthPeople;
 async function emitChanges(list){
   // Never throws — a feed entry must not break the write it describes (same rule as auditLog).
   for(const c of (list||[])){
     if(!c||!c.u) continue;
-    const entry=Object.assign({at:Date.now(),by:_currentAdminEmail||'unknown'},c);
+    // [143 · D-13] `at` is this browser's clock, kept for display and for older readers;
+    // `atServer` is Firestore's own clock, so "unread" on the staff page never compares an
+    // admin's clock with a doctor's. Written as the sentinel; the server fills it in.
+    const entry=Object.assign({at:Date.now(),atServer:serverTimestamp(),by:_currentAdminEmail||'unknown'},c);
     entry.text=changeText(entry);
     try{ await setDoc(doc(changesCol),entry); }catch(e){ console.warn('change feed append failed',e); }
   }
@@ -1817,11 +1868,10 @@ async function txUpdateItem(colRef, legacyRef, id, mutate){
 }
 
 // Admin action audit log — who changed what, when. Fire-and-forget (not
-// awaited by callers) so logging never slows down the actual action. Appends
-// via arrayUnion (each entry has a random id so identical-looking entries
-// never collide/dedupe); falls back to setDoc if the log doc doesn't exist
-// yet. Once the log gets large it switches to a plain rewrite that trims to
-// the most recent 300 entries, so this can't grow forever.
+// awaited by callers) so logging never slows down the actual action. Since
+// build 63 every entry is its OWN document under dailysched/auditLog/entries
+// and nothing trims: an audit log that forgets is not an audit log. [142 · N-16:
+// the old text here still described the pre-63 array with a 300-entry trim.]
 function auditLog(action,detail){
   const ts=Date.now();
   const entry={id:auditId(ts),ts,admin:_currentAdminEmail||'unknown',action,detail};
@@ -2644,15 +2694,26 @@ function gridViolIndex(){
   const idx={}; let n=0;
   try{
     const res=checkMonth(curYM,(monthData&&monthData.days)||{});
-    for(const v of (res.all||[])){ (idx[v.u+'|'+v.dd]=idx[v.u+'|'+v.dd]||[]).push({sev:v.sev,label:v.label,what:v.what}); n++; }
+    for(const v of (res.all||[])){ n++; if(v.pool) continue;   // [142 · E-12] counted in the chip, never drawn on a cell
+      (idx[v.u+'|'+v.dd]=idx[v.u+'|'+v.dd]||[]).push({sev:v.sev,label:v.label,what:v.what}); }
   }catch(e){ console.warn('grid violations',e); }
   return {idx:idx,n:n};
 }
+// [145 · RA-6 V-20] What the Compact squares mean: one swatch per family that has a shift, plus
+// vacation and day off — the colours cellBlocksHtml paints, from the same source.
+function renderGridLegend(){
+  const el=document.getElementById('gridLegend'); if(!el) return;
+  if(gridDensity!=='compact'){ el.style.display='none'; return; }
+  const fams=eligFamilyOrder().map(k=>'<span><span class="mini" style="background:'+esc(eligFamColorOf(k))+'"></span> '+esc(eligFamLabelOf(k))+'</span>');
+  el.innerHTML='<b style="color:var(--t3)">Squares:</b> '+fams.join('')+'<span><span class="mini" style="background:#bbf7d0"></span> vacation</span><span><span class="mini" style="background:#e2e8f0"></span> day off</span>';
+  el.style.display='flex';
+}
 function renderGrid(){
   const g=document.getElementById('schedGrid'); if(!g||!curYM) return;
+  renderGridLegend();   // [145 · V-20]
   { const gv=gridViolIndex(); _gridViol=gv.idx;   // [124]
     const el=document.getElementById('gridViolCount'); if(el){ el.style.display=gv.n?'':'none';
-      el.innerHTML='⚠ '+gv.n+' rule conflict'+(gv.n===1?'':'s')+' this month'; } }
+      el.innerHTML='⚠ '+gv.n+' rule conflict'+(gv.n===1?'':'s')+' this month'+(gridView==='shifts'?' — marked on the People view':''); } }   // [142 · E-13]
   const [y,m]=curYM.split('-').map(Number);
   document.getElementById('monthLabel').textContent=MS[m-1]+' '+y;
   { const st=document.getElementById('monthState'); if(st){ const pub=monthIsPublished();   // [121 · §5]
@@ -2846,6 +2907,7 @@ function renderCellModal(){
   updateCmWarning();
 }
 window.closeCellModal=function(){ document.getElementById('cellModal').classList.remove('on'); cellSel=null; };
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.getElementById('cellModal').classList.contains('on')) closeCellModal(); });   // [144 · V-5]
 // Live conflict check shown inside the modal, re-run on every field change —
 // this is the "flag it before Save" warning: on approved vacation, or a
 // contradictory Day off + shift combo. It doesn't block anything by itself;
@@ -2891,7 +2953,7 @@ function assignmentWarnings(ym,dd,u,addId,cells){
     if(held.indexOf(addId)>=0) msgs.push(displayName(u)+' already holds '+lbl+' that day — approving adds nothing.');
     // [61] ELIGIBILITY, checked on EVERY path — including hand-editing, which never checked
     // it at all. Owner ruling §51: one rule for "can this person do this shift".
-    if(!allowed(u,addId)) msgs.push(displayName(u)+' is not ticked as eligible for '+lbl+' in the Shift Eligibility grid.');
+    if(!allowed(u,addId)) msgs.push(displayName(u)+' is not eligible for '+lbl+' on the Shift Eligibility page.');
     if(s){
       // [135 · RA-6 E-4 / N-4] The ceiling for THIS day — built from the arguments. It used to
       // read the cell editor's global, which is null on the request, swap and Assign-by-hand
@@ -2945,7 +3007,7 @@ function ruleDiff(ym,dd,u,addId,days,opts){
   if(!entries.some(x=>x.s===addId)) entries.push({s:addId});
   after[dd]=Object.assign({},before[dd]||{},{[u]:Object.assign({},cur,{a:entries})});
   delete after[dd][u].day; delete after[dd][u].call;   // the legacy pair — `a` is the truth
-  const tally=(res)=>{ const m={}; for(const v of (res.violations||[])) m[v.dd+'|'+String(v.what)]=v; return m; };
+  const tally=(res)=>{ const m={}; for(const v of (res.violations||[])) m[v.dd+'|'+String(v.key||v.what)]=v; return m; };   // [142 · E-9] a stable key when the rule gives one
   for(const [key,r] of rl){
     const t=RULE_TYPES[r.type];
     const people=t.pool?ruleTargetNames(r):[u];   // [137 · E-6]
@@ -2954,7 +3016,7 @@ function ruleDiff(ym,dd,u,addId,days,opts){
     const sv=sevOf(r);
     for(const v of (a.violations||[])){
       if(t.pool&&v.u&&v.u!==u) continue;          // [137 · E-6] somebody else's balance is not this warning
-      if(b[v.dd+'|'+String(v.what)]) continue;
+      if(b[v.dd+'|'+String(v.key||v.what)]) continue;
       out.push({rank:sv.rank,sev:sv.k,key:key,label:r.label||key,type:r.type,dd:v.dd,what:v.what});
     }
   }
@@ -2971,7 +3033,7 @@ function ruleWarnings(ym,dd,u,addId,cells){
   const diff=ruleDiff(ym,dd,u,addId,days);
   const msgs=diff.map(x=>(x.sev==='serious'?'⛔ SERIOUS — ':(x.sev==='note'?'Note — ':''))+'“'+x.label+'”'+((x.dd===dd)?'':(' (on the '+Number(x.dd)+')'))+': '+x.what);
   const spans=[];
-  if(!open) for(const [key,r] of ruleList()) if(ruleEnabled(r)&&ruleTargets(r,u)&&/minRest|maxPerPeriod|cooldown/.test(r.type)) spans.push(r.label||key);
+  if(!open) for(const [key,r] of ruleList()) if(ruleEnabled(r)&&ruleTargets(r,u)&&/minRest|maxPerPeriod|cooldown|postCall/.test(r.type)) spans.push(r.label||key);   // [142 · E-5] the post-call check spans days too
   if(spans.length) msgs.push('“'+spans.join('”, “')+'” '+(spans.length===1?'was':'were')+' checked against this day only — '+ym+' is not the month on screen, so the rest of it was not in view.');
   return msgs;
 }
@@ -3360,8 +3422,9 @@ function fillDay(days,dd,dt,dk,o){
       const room=ids.map(id=>({id:id,room:shiftCeilingOn((catalog.shifts||{})[id],dt)-have(id),tips:tips(id)})).filter(x=>x.room>0)
         .sort((a,b)=>(a.tips-b.tips)||(b.room-a.room));
       let done=false;
+      const declinedBefore=out.declined.length;   // [142 · E-10] pass 1's guard, copied: a slot a rule stopped is listed ONCE
       for(const x of room){ if(place(x.id,'auto')){ done=true; break; } }
-      if(!done){ out.unfillable.push(dk+' '+(q.label||qk)+' quota ('+(want-p)+' more needed'+(room.length?'':', every member shift at its ceiling')+')'); break; }
+      if(!done){ if(out.declined.length===declinedBefore) out.unfillable.push(dk+' '+(q.label||qk)+' quota ('+(want-p)+' more needed'+(room.length?'':', every member shift at its ceiling')+')'); break; }
       out.quotaFilled++; p++;
     }
   }
@@ -3631,9 +3694,10 @@ window.publishMonth=async function(){
   await mergeFields(monthRef(curYM),{published:true,publishedAt:Date.now(),publishedBy:_currentAdminEmail||'unknown'});
   auditLog('month.publish','Published '+nm+(standing?' with '+standing+' rule violation'+(standing===1?'':'s')+' standing':''));
   { // [122 · §6] "reaches people at publish" — one entry per person who holds anything in the month
-    const counts={}; const days=(monthData&&monthData.days)||{};
-    for(const dd in days) for(const u in days[dd]) counts[u]=(counts[u]||0)+shiftsOf(days[dd][u]).length;
-    emitChanges(Object.keys(counts).filter(u=>counts[u]>0).map(u=>({u:u,dk:curYM,monthName:nm,published:true,count:counts[u]})));
+    // [143 · D-10] …and "anything" includes an approved absence: somebody whose whole month is
+    // days off held zero shifts and was told nothing, so never got the prompt to check their leave landed.
+    const who=monthPeople((monthData&&monthData.days)||{});
+    emitChanges(Object.keys(who).map(u=>({u:u,dk:curYM,monthName:nm,published:true,count:who[u].shifts,offDays:who[u].off})));
   }
   schedToast(nm+' is published.','ok');
 };
@@ -3643,6 +3707,10 @@ window.unpublishMonth=async function(){
   if(!confirm('Return '+nm+' to DRAFT?\n\nStaff will stop seeing this month until you publish it again. Nothing on it is removed.')) return;
   await mergeFields(monthRef(curYM),{published:false});
   auditLog('month.unpublish','Returned '+nm+' to draft');
+  { // [143 · D-9] the mirror of publish: everyone who holds anything in it is told it went back to draft
+    const who=monthPeople((monthData&&monthData.days)||{});
+    emitChanges(Object.keys(who).map(u=>({u:u,dk:curYM,monthName:nm,unpublished:true})));
+  }
   schedToast(nm+' is a draft again — staff cannot see it.','ok');
 };
 function renderPublishCard(){
@@ -4044,6 +4112,17 @@ window.decideReq=async function(id,status){
   let overrode='', rtShift='';
   if(status==='approved'){
     const pre=(requests.list||[]).find(x=>x.id===id && x.status==='pending');
+    // [143 · R-6] The swap path asks this first; the request path did not, so approving a
+    // day-off in an unconverted month flipped the request to approved, mutateCell refused,
+    // and the audit recorded "marked them off" — a change that never happened.
+    if(pre && pre.date){
+      const yms=(pre.type==='rt'&&(pre.kind==='off'||pre.kind==='absence'))?rtDates(pre).map(d=>String(d).slice(0,7)):[String(pre.date).slice(0,7)];
+      const bad=await legacyAmong(yms.filter(Boolean));
+      if(bad.length){
+        schedToast('Cannot approve this request: '+bad.join(', ')+(bad.length>1?' are':' is')+' still in the old storage format. Convert '+(bad.length>1?'them':'it')+' first — Schedule → the banner above the grid. Nothing was approved.','err');
+        return;
+      }
+    }
     // [125] A typed "work" request resolves to ONE shift here: the row's picker, or the list's only shift.
     if(pre && pre.type==='rt' && pre.kind==='work'){
       const ids=[...tagShiftSet(pre.tag||'')];
@@ -4268,8 +4347,12 @@ function renderSwaps(){
     </div>`;
   };
   const row=s=>s.type==='3way'?row3:row2;
+  // [143 · R-10] The same inline, optional reason the requests queue has had since build 80 —
+  // the staff page already displays a swap's reason; nothing wrote one. Held in module state
+  // keyed by id, so an unrelated snapshot rebuilding this list does not wipe what was typed.
   document.getElementById('swapPending').innerHTML=pend.length?(swapsReadable(pend).map(s=>row(s)(s,
-    `<button class="btn btn-success" style="font-size:12px" onclick="decideSwap(${jsArg(s.id)},'approved')">✓ Approve &amp; swap</button>
+    `<input id="swapWhy_${esc(s.id)}" class="inp" style="font-size:11px;width:150px;padding:3px 6px;margin-right:6px" placeholder="reason (optional)" maxlength="140" value="${esc(_swapWhy[String(s.id)]||'')}" oninput="swapWhySet(${jsArg(s.id)},this.value)">
+     <button class="btn btn-success" style="font-size:12px" onclick="decideSwap(${jsArg(s.id)},'approved')">✓ Approve &amp; swap</button>
      <button class="btn btn-danger" style="font-size:12px" onclick="decideSwap(${jsArg(s.id)},'denied')">✗ Deny</button>`)).join('')
     +swapsUnreadable(pend).map(swapUnreadableRow).join(''))
     :'<div style="font-size:12px;color:var(--t3)">Nothing waiting on you right now.</div>';
@@ -4285,7 +4368,8 @@ function renderSwaps(){
   document.getElementById('swapDecided').innerHTML=done.length?(swapsReadable(done).map(s=>{
     const decidedLabel=s.status==='declined_by_target'
       ?`<span class="status-denied">❌ ${esc(displayName(s.type==='3way'?s.declinedBy:s.to))} declined</span>`
-      :`<span class="status-${s.status}">${s.status==='approved'?'✅ approved':'❌ denied'}</span>`;
+      :s.status==='withdrawn'?`<span class="status-withdrawn">↩︎ withdrawn by ${esc(displayName(s.from||(s.participants||[])[0]||''))}</span>`   // [143 · R-9] it was labelled "denied"
+      :`<span class="status-${s.status}">${s.status==='approved'?'✅ approved':'❌ denied'+(s.reason?' — '+esc(s.reason):'')}</span>`;   // [143 · R-10] a denial may carry a reason
     return row(s)(s,decidedLabel);
   }).join('')+swapsUnreadable(done).map(swapUnreadableRow).join(''))
     :'<div style="font-size:12px;color:var(--t3)">No decisions yet.</div>';
@@ -4297,7 +4381,10 @@ function renderSwaps(){
 // Only ever acts on a swap that's already been accepted by everyone whose
 // turn came before admin's (status==='pending_admin') — admin is always
 // the last step, never the first.
-async function decideSwapTx(id,status){
+const _swapWhy=Object.create(null);   // [143 · R-10] swap id -> the deny reason typed so far
+window.swapWhySet=function(id,v){ const k=String(id); const s=String(v==null?'':v); if(s) _swapWhy[k]=s; else delete _swapWhy[k]; };
+function swapWhyOf(id){ const el=document.getElementById('swapWhy_'+id); const live=el?String(el.value||'').trim():''; return live||_swapWhy[String(id)]||''; }
+async function decideSwapTx(id,status,why){
   let s=null, blocked=null, refused=null, changes=[];
   await runTransaction(db, async (tx)=>{
     s=null; blocked=null; refused=null; changes=[]; // reset per attempt — this closure re-runs on conflict
@@ -4342,7 +4429,7 @@ async function decideSwapTx(id,status){
       if(out.missing.length&&out.moved.length){ refused=swapMissingText(out.missing); s=item; return; }
     }
     // WRITES: the swap, then every changed cell — one commit.
-    tx.set(iRef,{...item,status,decidedTs:Date.now()});
+    tx.set(iRef,{...item,status,decidedTs:Date.now(),...((status==='denied'&&why)?{reason:String(why).slice(0,140)}:{})});   // [143 · R-10]
     for(const key in out.after){
       const [mk,dd]=key.split('|');
       for(const u in out.after[key]){
@@ -4414,9 +4501,14 @@ window.decideSwap=async function(id,status){
   // month documents and the day documents it touches, computes every changed cell in memory in
   // the same order as before (3-way: sequential handoffs), and commits the status and the cells
   // together. Either everything moves, or nothing does and the swap stays pending.
+  const why=status==='denied'?swapWhyOf(id):'';   // [143 · R-10] read BEFORE the flip re-renders the row
   let r;
-  try{ r=await decideSwapTx(id,status); }
+  try{ r=await decideSwapTx(id,status,why); }
   catch(e){ schedToast('Nothing was '+(status==='approved'?'approved':'decided')+' — the swap is still pending: '+((e&&e.message)||'the write failed'),'err'); console.warn('swap decide failed',e); return; }
+  // [143 · R-11] An unconverted month is found INSIDE the transaction, which returns before it
+  // reaches the item — so `r.s` was null and this line swallowed it: Approve did nothing and
+  // said nothing. The refusal is read first now, and it speaks.
+  if(r.blocked){ schedToast('Nothing was approved: '+r.blocked,'err'); return; }
   if(!r.s) return;                 // already decided / vanished — nothing written, nothing audited
   const s=r.s;
   // [130 · R-2] Someone no longer holds what they agreed to hand over. Nothing was written
@@ -4428,16 +4520,15 @@ window.decideSwap=async function(id,status){
       +(s.type==='3way'?'3-way swap '+(s.participants||[]).map(displayName).join(' → '):'swap between '+displayName(s.from)+' and '+displayName(s.to)+' on '+s.date));
     return;
   }
-  let applyErr=r.blocked?new Error(r.blocked):null;
-  if(applyErr){ schedToast('Nothing was approved: '+r.blocked,'err'); return; }
+  const applyErr=null;   // [143 · R-11] a blocked month returned above; nothing else can reach here half-done
   if(status==='approved'&&r.changes.length) emitChanges(r.changes);   // [122 · §6] on published months only
   if(s.type==='3way'){
     const [a,b,c]=s.participants;
     auditLog('swap.decide',(status==='approved'?(applyErr?'Approved (apply FAILED) ':'Approved '):'Denied ')+'3-way swap '+displayName(a)+' → '+displayName(b)+' → '+displayName(c)+' → '+displayName(a)
-      +(swapOverrode?'  ⚠️ APPROVED OVER WARNINGS: '+swapOverrode:''));
+      +(why?' — reason: '+why:'')+(swapOverrode?'  ⚠️ APPROVED OVER WARNINGS: '+swapOverrode:''));
   } else {
     auditLog('swap.decide',(status==='approved'?(applyErr?'Approved (apply FAILED)':'Approved'):'Denied')+' swap between '+displayName(s.from)+' and '+displayName(s.to)+' on '+s.date
-      +(swapOverrode?'  ⚠️ APPROVED OVER WARNINGS: '+swapOverrode:''));
+      +(why?' — reason: '+why:'')+(swapOverrode?'  ⚠️ APPROVED OVER WARNINGS: '+swapOverrode:''));
   }
 };
 
@@ -4511,7 +4602,7 @@ let _usersStale=false;
 function renderUsersGrid(){
   const g=document.getElementById('usersGrid'); if(!g) return;
   const stale=document.getElementById('uStale');
-  if(_usersEditing){ _usersStale=true; if(stale) stale.hidden=false; return; } // [64 · defect 12] mid-edit: leave the rows alone; rebuilt on focus-leave
+  if(_usersEditing){ _usersStale=true; if(stale) stale.hidden=false; return false; } // [64 · defect 12] mid-edit: leave the rows alone; rebuilt on focus-leave · [144 · N-20] false = still dirty
   _usersStale=false; if(stale) stale.hidden=true;
   const count=document.getElementById('uCount'); if(count) count.textContent=names.length;
   let head='<tr><th style="text-align:left">Initials</th><th style="text-align:left">Full Name</th><th style="text-align:left">Login e-mail (Google)</th><th style="text-align:left">KP e-mail</th><th style="text-align:left">FTE (schedule)</th><th></th></tr>';
@@ -4679,20 +4770,29 @@ window.addSchedUser=async function(){
   // AUCTION collection and are writable only by an AUCTION admin. A schedule-only admin
   // (in dailysched/adminAccess but not vacations/adminAccess) gets permission-denied —
   // surface that clearly instead of aborting silently with the fields still filled.
+  // [144 · B-9] Six writes in a row, the LIVE auction roster first. A failure at step two used
+  // to be reported as "the change did not save" while the person already sat on the roster with
+  // no name and no login. Each step that lands is remembered, and a failure names what landed
+  // and what did not, so the admin knows what to finish rather than what to retry.
+  const landed=[], pending=[];
+  const step=async(label,fn)=>{ pending.push(label); await fn(); pending.pop(); landed.push(label); };
   try{
-    try{ await updateDoc(userListRef,{users:arrayUnion(initials)}); }
-    catch(e2){ if(e2&&e2.code==='not-found') await setDoc(userListRef,{users:[initials]},{merge:true}); else throw e2; }
+    await step('roster',async()=>{ try{ await updateDoc(userListRef,{users:arrayUnion(initials)}); }
+      catch(e2){ if(e2&&e2.code==='not-found') await setDoc(userListRef,{users:[initials]},{merge:true}); else throw e2; } });
     // Shared with the Vacation Auction (port to the other site): full name, login
     // e-mail, secondary e-mail. FTE is this site's own and is NOT synced.
-    if(fullName) await setDoc(usernamesRef,{[initials]:fullName},{merge:true});
-    if(loginEmail){ await setDoc(loginEmailsRef,{[initials]:loginEmail},{merge:true}); await syncEmailToUserFromLogin(); }
-    if(email) await setDoc(emailsRef,{[initials]:email},{merge:true});   // [79] normalised
-    if(fteVal!==null) await mergeFields(schedFteRef,{[initials]:fteVal});
+    if(fullName) await step('full name',()=>setDoc(usernamesRef,{[initials]:fullName},{merge:true}));
+    if(loginEmail){ await step('login e-mail',()=>setDoc(loginEmailsRef,{[initials]:loginEmail},{merge:true})); await step('bid-security map',()=>syncEmailToUserFromLogin()); }
+    if(email) await step('KP e-mail',()=>setDoc(emailsRef,{[initials]:email},{merge:true}));   // [79] normalised
+    if(fteVal!==null) await step('FTE',()=>mergeFields(schedFteRef,{[initials]:fteVal}));
   }catch(e){
     msg.style.color='var(--red)';
-    msg.textContent=(e&&e.code==='permission-denied')
-      ? 'Could not add — the shared roster can only be changed by a Vacation Auction admin. Ask an auction admin to add this user there.'
-      : 'Could not add user — the change did not save. Please try again.';
+    const failedAt=pending[pending.length-1]||'the save';
+    const partial=landed.length?(' Saved so far: '+landed.join(', ')+'. NOT saved: '+failedAt+' — '+initials+' is on the roster; finish the rest on the Users page.'):'';
+    msg.textContent=((e&&e.code==='permission-denied')
+      ? 'Could not save the '+failedAt+' — the shared roster can only be changed by a Vacation Auction admin. Ask an auction admin to add this user there.'
+      : 'Could not save the '+failedAt+' — please try again.')+partial;
+    if(landed.length) auditLog('user.add','PARTIAL add of '+initials+' — saved: '+landed.join(', ')+'; failed at: '+failedAt);
     return;
   }
   ['uInitials','uFullName','uLoginEmail','uEmail','uFteNew'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
@@ -4897,13 +4997,19 @@ window.saveAllSchedUsers=async function(){
   // full name / login e-mail / secondary e-mail are shared with the Vacation Auction; FTE is this site's own.
   // [H-12] Do NOT swallow write errors — a permission-denied (schedule-only admin) or any
   // failure must be reported, not toasted as success.
+  // [144 · B-9] Same shape as addSchedUser: say what landed and what did not.
+  const landed=[], pending=[];
+  const step=async(label,fn)=>{ pending.push(label); await fn(); pending.pop(); landed.push(label); };
   try{
-    if(Object.keys(unameMap).length) await setDoc(usernamesRef,unameMap,{merge:true});
-    if(Object.keys(lemMap).length){ await setDoc(loginEmailsRef,lemMap,{merge:true}); await syncEmailToUserFromLogin(); }
-    if(Object.keys(emMap).length) await setDoc(emailsRef,emMap,{merge:true});
-    if(Object.keys(fteMap).length) await setDoc(schedFteRef,fteMap,{merge:true});
+    if(Object.keys(unameMap).length) await step('full names',()=>setDoc(usernamesRef,unameMap,{merge:true}));
+    if(Object.keys(lemMap).length){ await step('login e-mails',()=>setDoc(loginEmailsRef,lemMap,{merge:true})); await step('bid-security map',()=>syncEmailToUserFromLogin()); }
+    if(Object.keys(emMap).length) await step('KP e-mails',()=>setDoc(emailsRef,emMap,{merge:true}));
+    if(Object.keys(fteMap).length) await step('FTE',()=>setDoc(schedFteRef,fteMap,{merge:true}));
   }catch(e){
-    schedToast((e&&e.code==='permission-denied')?'Not saved — shared name/e-mail fields need a Vacation Auction admin':'Not saved — please try again','err');
+    const failedAt=pending[pending.length-1]||'the save';
+    schedToast(((e&&e.code==='permission-denied')?'Not saved: '+failedAt+' — shared name/e-mail fields need a Vacation Auction admin.':'Not saved: '+failedAt+' — please try again.')
+      +(landed.length?' Already saved: '+landed.join(', ')+'.':''),'err');
+    if(landed.length) auditLog('user.saveAll','PARTIAL batch save — saved: '+landed.join(', ')+'; failed at: '+failedAt);
     return;
   }
   auditLog('user.saveAll','Batch-saved '+nField+' changed field(s) for '+touched.size+' user(s): '+[...touched].join(', '));
@@ -5210,6 +5316,11 @@ function renderElig(){
   }
   const setUp=sh.filter(([,s2])=>eligReqKeys(s2).length||Object.keys(shiftElig(s2).allow||{}).length).length;
   if(showEl) showEl.textContent=sh.length+' shift'+(sh.length===1?'':'s')+' shown · '+setUp+' set up · '+(sh.length-setUp)+' not';
+  { // [144 · V-8] The page used to open silently filtered — 3 of 90 shifts, and nothing said so
+    // but a faint family name above a collapsed Filters bar. The count is on the board itself.
+    const total=shiftList().length; const el=document.getElementById('eligCount');
+    if(el) el.innerHTML=(total===0?'No shifts in the catalog yet.':(sh.length===total?'Showing all <b>'+total+'</b> shift'+(total===1?'':'s'):'Showing <b>'+sh.length+' of '+total+'</b> shifts — filters are on (open <b>Filters</b> above to change or reset them)'))+' · '+setUp+' set up, '+(sh.length-setUp)+' not';
+  }
 }
 window.setEligView=function(v){
   _eligView=(v==='people')?'people':'shifts';
@@ -5470,8 +5581,10 @@ function staffingOn(sh,dt){
 window.staffingOnProbe=staffingOn;   // module scope — HANDOFF trap 1
 // [103b · §108⑥] THE CEILING, AND IT ABSORBS `capacity`. Two fields meaning "the most this
 // shift can take" is the build-78 defect shape, so there is now ONE question and one answer:
-// if the shift has staffing rules, the rule that matches this day owns the ceiling; only a
-// shift with NO rules at all falls back to the per-shift `capacity` field. `capacity` keeps
+// if a staffing rule matches this day, that rule owns the ceiling; otherwise — no rules at
+// all, OR rules that simply do not match today — the per-shift `capacity` field is the ceiling,
+// because a day the shift is not asked for may still be filled by hand up to what it can take
+// ([142 · E-14] the comment used to claim only the no-rules case fell back). `capacity` keeps
 // its old job — the auto-populate fallback — and loses its second one.
 function shiftCeilingOn(sh,dt){
   const st=staffingOn(sh,dt);
@@ -6125,7 +6238,7 @@ let catOpenRow='', catCollapsedFams={}, catProblem='';
 const sectOpen={};
 // [99] Sections whose body is STATIC markup: no render function owns them, so a toggle changes
 // nothing but the display. Listed so toggleSect does not fall through to renderCatalog().
-const SECT_STATIC=['adminaccess','adduser','postopen','addfamily','addquota','addrule'];
+const SECT_STATIC=['adminaccess','adduser','postopen','addfamily','addquota','addrule','reportsettings','baseline'];   // [145] the two former <details>
 function sectApply(k){
   const body=document.getElementById('sect_'+k), arrow=document.getElementById('secta_'+k);
   if(!body) return;
@@ -6136,6 +6249,11 @@ function sectApply(k){
   arrow.classList.remove('bare');
   arrow.textContent = sectOpen[k] ? '▾ Hide' : '▸ Show';
 }
+window.gotoHolidays=function(){   // [145] Rules → the Holidays section of the catalog, opened
+  nav('catalog',document.querySelector('nav a[onclick*="catalog"]'));
+  if(!sectOpen.holidays){ sectOpen.holidays=true; sectApply('holidays'); if(typeof renderCatalog==='function') renderCatalog(); }
+  const el=document.getElementById('sect_holidays'); if(el&&el.scrollIntoView) el.scrollIntoView({block:'start'});
+};
 window.toggleSect=function(k){
   sectOpen[k]=!sectOpen[k];
   sectApply(k);
@@ -6606,22 +6724,36 @@ window.delShift=async function(id){
 };
 
 // ── Shift Families — legend + drag-and-drop grouping ──
-let pendingFamColor=PALETTE[0];
+let pendingFamColor=null;   // [145 · V-7] resolved to the first FREE colour once the catalog is known
 function renderFamilyNewColorPicker(){
   const el=document.getElementById('famNewColorPicker'); if(!el) return;
+  if(!pendingFamColor||famColorTaken(pendingFamColor).length&&pendingFamColor===PALETTE[0]) pendingFamColor=famFreeColor();   // [145 · V-7]
   el.innerHTML=paletteHtml(pendingFamColor,'pickNewFamColor',false);
 }
 window.pickNewFamColor=function(c){ pendingFamColor=c; renderFamilyNewColorPicker(); };
+// [145 · RA-6 V-7] The Families page is also the legend, and three families had ended up on the
+// same yellow — every new family defaulted to PALETTE[0]. A new family now takes the first colour
+// no family has; recolouring onto a colour another family holds asks first, naming it.
+function famColorTaken(color,exceptKey){
+  const c=String(color||'').toLowerCase();
+  return Object.entries(catalog.families||{}).filter(([k,f])=>k!==exceptKey&&String(f&&f.color||'').toLowerCase()===c).map(([,f])=>f.label||'?');
+}
+function famFreeColor(){ return PALETTE.find(c=>!famColorTaken(c).length)||PALETTE[0]; }
+window.famColorTakenProbe=famColorTaken; window.famFreeColorProbe=famFreeColor;
 window.addFamily=async function(){
   const label=document.getElementById('famLabel').value.trim();
   if(!label){ alert('Enter a family name.'); return; }
   const fkey=label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('fam'+Date.now());
   if(catalog.families?.[fkey]){ alert('A family with this name already exists.'); return; }
+  const taken=famColorTaken(pendingFamColor);
+  if(taken.length&&!confirm('That colour is already used by '+taken.join(' and ')+' — the two families will look the same everywhere.\n\nUse it anyway? (Cancel to pick another.)')) return;
   await mergeFields(catalogRef,{['families.'+fkey]:{label,color:pendingFamColor}});
   auditLog('family.add','Added family "'+label+'"');
-  document.getElementById('famLabel').value=''; pendingFamColor=PALETTE[0]; renderFamilyNewColorPicker();
+  document.getElementById('famLabel').value=''; pendingFamColor=famFreeColor(); renderFamilyNewColorPicker();
 };
 window.setFamilyColor=async function(fkey,color){
+  const taken=famColorTaken(color,fkey);
+  if(taken.length&&!confirm('That colour is already used by '+taken.join(' and ')+' — the two families will look the same everywhere.\n\nUse it anyway?')) return;
   await mergeFields(catalogRef,{['families.'+fkey+'.color']:color});
   auditLog('family.recolor','Recolored family "'+(catalog.families?.[fkey]?.label||fkey)+'"');
 };
@@ -6953,6 +7085,14 @@ window.renderCoverage=renderCoverage;
 // ═══════════════════════════════════════════════════════════════════════════
 // §S17 · DASHBOARD — read-only tiles; landing page until the S6 day board lands
 // ═══════════════════════════════════════════════════════════════════════════
+// [144 · V-18] "3 min ago" for the Today board's latest-change chip.
+function agoText(ts){
+  const d=Date.now()-Number(ts||0); if(!(d>=0)) return '—';
+  const m=Math.floor(d/60000); if(m<1) return 'just now'; if(m<60) return m+' min ago';
+  const h=Math.floor(m/60); if(h<24) return h+' h ago';
+  const dd=Math.floor(h/24); return dd+' day'+(dd===1?'':'s')+' ago';
+}
+window.agoTextProbe=agoText;
 function renderDash(){
   if(!document.getElementById('panel-dash')) return;
   const pendingReq=(requests.list||[]).filter(r=>r.status==='pending').sort((a,b)=>b.ts-a.ts);
@@ -6990,6 +7130,7 @@ function renderDash(){
   const log=[...(auditLogData.log||[])].sort((a,b)=>b.ts-a.ts);
   document.getElementById('dashAuditSub').textContent=log.length?('Last '+Math.min(5,log.length)+' of '+log.length+' logged actions.'):'No activity logged yet.';
   document.getElementById('dashAuditList').innerHTML=log.slice(0,5).map(e=>'<div class="rowline">'+esc(fmtTs(e.ts))+' — '+esc(e.detail||e.action)+'</div>').join('');
+  { const w=document.getElementById('dashAuditWhen'); if(w) w.textContent=log.length?agoText(log[0].ts):'none yet'; }   // [144 · V-18]
 
   document.getElementById('dashUserCount').textContent=names.length;
   const noFte=names.filter(u=>schedFte[u]===undefined).length;
@@ -8094,7 +8235,9 @@ const RULE_TYPES={
           for(let i=n;i<list.length;i++){
             const h=list[i];
             const where=(period==='week')?('in the week beginning '+b):'this month';
-            viol.push({u:u,dd:h.dd,dk:ctx.ym+'-'+h.dd,
+            // [142 · E-9] `key` is what the warn-at-change diff dedups on: the ordinal in `what`
+            // renumbers every later call when one is added before it, so one addition read as two.
+            viol.push({u:u,dd:h.dd,dk:ctx.ym+'-'+h.dd,key:tag+'|'+where,
               what:tagLabel(tag)+' number '+(i+1)+' '+where+' — the rule allows '+n});
           }
         }
@@ -8392,7 +8535,9 @@ const RULE_TYPES={
         const did=tagged(u), exp=rate*fteOf(u), diff=did-exp;
         if(Math.abs(diff)<=tol+1e-9) continue;
         const over=diff>0;
-        viol.push({u:u,dd:last[u]||'01',dk:ctx.ym+'-'+(last[u]||'01'),
+        // [142 · E-12] a pool violation is about the MONTH, not a day: `pool` keeps it off the
+        // grid's corner dots (a red dot on the 1st of a month with no shift there said nothing true).
+        viol.push({u:u,dd:last[u]||'01',dk:ctx.ym+'-'+(last[u]||'01'),pool:true,
           what:did+' × '+tagLabel(tag)+' this month against an FTE-adjusted share of '+exp.toFixed(1)+' ('+rate.toFixed(2)+' per 1.0 FTE across '+M.pool.length+' people, '+M.poolFTE.toFixed(1)+' FTE) — '+Math.abs(diff).toFixed(1)+' '+(over?'over':'under')+', tolerance '+tol});
       }
       notes.push('Measured per 1.0 FTE across the '+M.pool.length+' people in the pool ('+M.poolFTE.toFixed(1)+' FTE between them), as §29 rules — never a flat mean.');
@@ -8786,7 +8931,11 @@ window.setRtField=async function(id,f,val){
   if(f==='span'&&v!=='day'&&v!=='weekend') return;
   if(f==='active') v=!!val;
   if(f==='label'){ v=String(val||'').trim(); if(!v){ schedToast('A request type needs a label.','err'); renderReqTypes(); return; } }
-  await mergeFields(requestTypesRef,{[id+'.'+f]:v});
+  // [143 · R-12] The span editor is only drawn for off/absence, so a type changed to another
+  // kind kept a stale "weekend" nobody could see or edit — one day applied, two described.
+  const patch={[id+'.'+f]:v};
+  if(f==='kind'&&v!=='off'&&v!=='absence'&&t.span&&t.span!=='day') patch[id+'.span']='day';
+  await mergeFields(requestTypesRef,patch);
   auditLog('reqtype.edit','"'+rtLabel(t)+'": '+f+' → '+(f==='tag'?(tagLabel(v)||'none'):String(v)));
 };
 window.deleteReqType=async function(id){
@@ -9528,6 +9677,7 @@ function renderBadges(){
 let _dirty=new Set(), _flushQueued=false, _bootPainted=false;
 window.__flushCount=0; window.__lastFlush=[];
 function _currentPanelId(){ const p=document.querySelector('.panel.on'); return p?p.id.replace('panel-',''):'dash'; }
+window._dirtyProbe=()=>[..._dirty];   // [144 · N-20] the suite watches a refused render stay queued
 function markDirty(...keys){
   keys.forEach(k=>{ if(RENDER_FN[k]) _dirty.add(k); });
   if(_flushQueued) return; _flushQueued=true;
@@ -9540,7 +9690,10 @@ function _flushRender(){
   for(const k of [..._dirty]){
     if(!_bootPainted||ALWAYS_KEYS.has(k)||visible.has(k)){
       _dirty.delete(k);
-      try{ RENDER_FN[k](); ran.push(k); }catch(e){ console.warn('render '+k,e); }
+      // [144 · N-20] A renderer that REFUSES (returns false — mid-edit guards) keeps its key
+      // dirty, so the update is deferred to the next flush rather than discarded and left to
+      // a focus-out timer to notice.
+      try{ const r=RENDER_FN[k](); if(r===false) _dirty.add(k); else ran.push(k); }catch(e){ console.warn('render '+k,e); }
     }
   }
   // Boot mode ends only when the STRUCTURAL inputs have arrived (roster + catalog) —
@@ -9556,7 +9709,7 @@ function renderAll(){ markDirty(...ALL_KEYS); }
 // ── Call-fairness baseline table (users × call shifts) ──
 function renderBaseline(){
   const g=document.getElementById('baselineGrid'); if(!g) return;
-  if(_blEditing) return; // [64 · defect 12] mid-edit guard, mirrors [55]
+  if(_blEditing) return false; // [64 · defect 12] mid-edit guard, mirrors [55] · [144 · N-20] false = still dirty
   const callShifts=[...shiftList()].filter(([id,s])=>s.kind==='call');
   if(!names.length){ g.innerHTML='<tr><td style="font-size:11px;color:var(--t3)">No users yet.</td></tr>'; return; }
   if(!callShifts.length){ g.innerHTML='<tr><td style="font-size:11px;color:var(--t3)">No call shifts in the catalog yet.</td></tr>'; return; }
@@ -9669,10 +9822,17 @@ onAuthStateChanged(auth, async u=>{
     if(welcome) welcome.style.display='none';
     if(card) card.style.display='block';
     if(who) who.textContent=(u&&u.email)?('Signed in as '+u.email+' — this account is not authorized.'):'';
+    if(window._authBtnReset) window._authBtnReset();   // [144 · V-15] the button works again
   }
 });
 window.adminGoogleSignIn=async function(){
   const err=document.getElementById('authGateErr'); if(err) err.textContent='';
+  // [144 · V-15] The gate takes seconds and the button gave no sign the click landed, so it was
+  // pressed three times. It disables and says so until sign-in settles either way.
+  const btn=document.getElementById('authGateBtn'); const btnHtml=btn?btn.innerHTML:'';
+  const busy=on=>{ if(!btn) return; btn.disabled=on; if(on) btn.innerHTML='Signing in… (a Google window opens; then the site checks your access)'; else btn.innerHTML=btnHtml; };
+  window._authBtnReset=()=>busy(false);
+  busy(true);
   try{
     const remember=document.getElementById('authRememberMe');
     const doRemember = !remember || remember.checked;
@@ -9682,7 +9842,7 @@ window.adminGoogleSignIn=async function(){
     const provider=new GoogleAuthProvider();
     if(provider.setCustomParameters) provider.setCustomParameters({prompt:'select_account'});
     await signInWithPopup(auth, provider);
-  }catch(e){ _justSignedIn=false; if(err) err.textContent='Sign-in failed: '+((e&&e.message)||e); }
+  }catch(e){ _justSignedIn=false; if(err) err.textContent='Sign-in failed: '+((e&&e.message)||e); busy(false); }
 };
 window.adminSignOut=function(){ try{localStorage.removeItem('adminRemembered');}catch(_){}; signOut(auth).catch(()=>{}); };
 
@@ -9860,8 +10020,8 @@ window.saveOvernightTag=async function(){
 };
 window.resetOvernightTag=function(){
   if(reportsLockedRefuse()) return;
-  ocDraft=OVERNIGHT_SEED.slice(); renderReports();
-  schedToast('Set back to Call 16 · Call 24 · OB PM — press Save to store it','ok');
+  ocDraft=OVERNIGHT_SEED.filter(id=>(catalog.shifts||{})[id]); renderReports();
+  schedToast('Set back to '+(ocDraft.map(id=>shiftLabel(id)).join(' · ')||'an empty list')+' — press Save to store it','ok');   // [145 · V-13]
 };
 window.togCompPool=function(u){
   if(reportsLockedRefuse()) return;
@@ -10369,6 +10529,26 @@ function renderReports(){
       pick.innerHTML=h;
     }
   }
+  { // [145 · V-13] the explanation names shifts that EXIST here, found by the two rules of thumb it
+    // warns against; when the catalog has no such shift the sentence says so instead of inventing one.
+    const why=document.getElementById('ocWhy'), rb=document.getElementById('ocResetBtn');
+    const all=shiftList().map(([id,sh])=>Object.assign({id:id},sh));
+    const lbl=sh=>'<b>'+esc(sh.label||sh.id)+'</b>'+(sh.start&&sh.end?' ('+esc(sh.start)+'–'+esc(sh.end)+')':'');
+    const nightNotCall=all.filter(sh=>sh.start&&sh.end&&crossesMidnight(sh.start,sh.end)&&!on.has(sh.id)).slice(0,2);
+    const callButDay=all.filter(sh=>(sh.family==='call'||sh.kind==='call')&&sh.start&&sh.end&&!crossesMidnight(sh.start,sh.end)).slice(0,2);
+    if(why){
+      let t='<b>You set this — nothing is worked out automatically.</b> ';
+      const bits=[];
+      if(nightNotCall.length) bits.push('shifts that cross midnight would sweep in '+nightNotCall.map(lbl).join(' and ')+', which '+(nightNotCall.length===1?'is':'are')+' not overnight call');
+      if(callButDay.length) bits.push('everything in the call family would sweep in '+callButDay.map(lbl).join(' and ')+', which '+(callButDay.length===1?'runs':'run')+' in the daytime');
+      t+=bits.length?('It cannot be: '+bits.join('; ')+'. '):'No rule of thumb — "crosses midnight", "in the call family" — picks exactly the right shifts, so the list is yours. ';
+      t+='Anything left unticked is simply not overnight call, whatever its name or hours suggest.';
+      why.innerHTML=t;
+    }
+    if(rb){ const seedHere=OVERNIGHT_SEED.filter(id=>(catalog.shifts||{})[id]);
+      rb.style.display=seedHere.length?'':'none';
+      rb.textContent='Back to '+seedHere.map(id=>shiftLabel(id)).join(' · '); }
+  }
   const st=document.getElementById('ocTagState');
   if(st){
     const dirty=ocDraft!==null && JSON.stringify([...ocDraft].sort())!==JSON.stringify([...overnightIds()].sort());
@@ -10376,7 +10556,7 @@ function renderReports(){
       ? '<span style="color:#92400e;font-weight:700">Unsaved — press Save to store this.</span>'
       : (overnightSaved()
           ? '<span style="color:var(--t2)">Saved — '+on.size+' shift'+(on.size===1?'':'s')+' counted as overnight call.</span>'
-          : '<span style="color:#92400e;font-weight:700">Not saved yet.</span> <span style="color:var(--t2)">Reports are using your starting set — Call 16, Call 24, OB PM. Press Save to store it.</span>');
+          : '<span style="color:#92400e;font-weight:700">Not saved yet.</span> <span style="color:var(--t2)">Reports are using the starting set — '+esc(OVERNIGHT_SEED.filter(id=>(catalog.shifts||{})[id]).map(id=>shiftLabel(id)).join(', ')||'nothing that exists in this catalog')+'. Press Save to store it.</span>');
   }
   const cp=document.getElementById('compPoolList');
   if(cp){
