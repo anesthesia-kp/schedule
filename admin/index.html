@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 138;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 141;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -726,9 +726,11 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     <div class="card">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <div class="card-title" style="margin:0">All Users (<span id="uCount">0</span>)</div>
+        <span id="uStale" hidden style="font-size:11.5px;font-weight:700;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;padding:2px 9px;border-radius:8px">roster updated while you were editing — click outside the grid to refresh before saving</span>
         <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-primary" style="font-size:12px" onclick="saveAllSchedUsers()" title="Save every field for every user on this page at once">💾 Save all changes</button>
           <button class="btn btn-danger" style="font-size:12px" onclick="clearAllSchedFte()" title="Blanks out the FTE column below for every user on this site — does not touch the Vacation Auction's FTE">Clear all FTE (this site)</button>
+          <button class="btn" style="font-size:12px" onclick="cleanupDepartedSchedUsers()" title="Clears this site's own data (groups, category, overrides, FTE, feed link) for anyone no longer on the shared roster — never touches the Vacation Auction">🧹 Clean up departed users</button>
         </div>
       </div>
       <div class="page-sub" style="margin:8px 0 10px">FTE here is this site's own value — totally separate from the Vacation Auction's FTE, with no copying or syncing between them. The same person can have a different FTE on each site. New users start blank here until you set one.</div>
@@ -788,7 +790,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
       <div style="font-size:12.5px;color:#7f1d1d;line-height:1.6">
         <b>⛔ NOT FOR DOCTORS YET — two things must happen first, and neither is on this page.</b><br>
         <b>1 · The address below does not answer yet.</b> A calendar subscription needs something live to answer it, and GitHub Pages only serves files. The small hosted endpoint that returns these feeds is not deployed.<br>
-        <b>2 · The link list must be locked down first.</b> Until <code>dailysched/feedTokens</code> is admin-only in the security rules, any signed-in user can read it — and a readable link list means anyone can read anyone's calendar. Those rules live in the auction repo and are closed without your specific say-so.<br>
+        <b>2 · The Stage 5 security rules must be published.</b> Until then the link list, the calendars themselves and every other schedule document are readable with no sign-in at all, and a signed-in doctor can overwrite a colleague's calendar. The rules file is written and waits on your RA-2 run and console paste (DECISIONS §129).<br>
         <b>And the release gate itself is still shut</b> — your ruling: build it, but no doctor is told until the schedule is complete.
       </div>
     </div>
@@ -4500,10 +4502,18 @@ window.removeOpen=async function(id){
 // §S11 · USERS — ⛔ writes the LIVE auction roster via the six sanctioned handlers
 // (§1). Opens LOCKED (§50a). Owns: names/usernames/emails/loginEmails mirrors + fteMap.
 // ═══════════════════════════════════════════════════════════════════════════
+// [139 · RA-6 N-20/N-21] The mid-edit bail is still the right trade ([64]) — but it used to be
+// SILENT, and the header count was updated BEFORE it, so the one on-screen signal read "All Users
+// (38)" over 37 rows: pointing the wrong way. The count now moves with the rows, and a bail
+// leaves a visible notice plus `_usersStale`, which saveAllSchedUsers refuses on (B-2). The
+// focus-leave re-render ([64]) is what clears it — the deferred update is never lost.
+let _usersStale=false;
 function renderUsersGrid(){
   const g=document.getElementById('usersGrid'); if(!g) return;
+  const stale=document.getElementById('uStale');
+  if(_usersEditing){ _usersStale=true; if(stale) stale.hidden=false; return; } // [64 · defect 12] mid-edit: leave the rows alone; rebuilt on focus-leave
+  _usersStale=false; if(stale) stale.hidden=true;
   const count=document.getElementById('uCount'); if(count) count.textContent=names.length;
-  if(_usersEditing) return; // [64 · defect 12] mid-edit: leave the rows alone; rebuilt on focus-leave
   let head='<tr><th style="text-align:left">Initials</th><th style="text-align:left">Full Name</th><th style="text-align:left">Login e-mail (Google)</th><th style="text-align:left">KP e-mail</th><th style="text-align:left">FTE (schedule)</th><th></th></tr>';
   let rows='';
   for(const u of names){
@@ -4516,7 +4526,7 @@ function renderUsersGrid(){
       <td style="text-align:left;white-space:nowrap"><input type="email" class="inp" autocomplete="off" id="uem_${esc(u)}" style="width:180px" value="${esc(emailsData[u]||'')}" placeholder="KP e-mail">${sbtn}onclick="saveSchedField('${esc(u)}','em')">Save</button></td>
       <td style="text-align:left;white-space:nowrap"><input type="number" class="inp" autocomplete="off" id="ufte_${esc(u)}" style="width:70px" step="0.1" min="0" max="1" value="${fte!==undefined?esc(fte):''}" placeholder="not set">${sbtn}onclick="saveSchedField('${esc(u)}','fte')">Save</button></td>
       <td style="white-space:nowrap">
-        <button class="btn btn-danger" style="font-size:11px;padding:4px 10px" onclick="removeSchedUser('${esc(u)}')">🗑 Remove</button>
+        <button class="btn btn-danger" style="font-size:11px;padding:4px 10px" onclick="removeSchedUser('${esc(u)}')" title="Clears this person's Daily Schedule data only — roster removal is on the Vacation Auction admin site">🧹 Clear (this site)</button>
       </td>
     </tr>`;
   }
@@ -4741,8 +4751,9 @@ function renderUsersLock(){
 }
 window.askUnlockUsers=function(){
   if(!confirm('Unlock the Users page?\n\nThis page does NOT only affect the Daily Schedule. While it is unlocked:\n\n'
-    +'  • Removing a user takes them off the LIVE Vacation Auction roster\n'
-    +'  • Saving a login e-mail rebuilds the auction\'s bid-security map\n\n'
+    +'  • Adding a user or saving a name or e-mail changes the LIVE Vacation Auction roster\n'
+    +'  • Saving a login e-mail rebuilds the auction\'s bid-security map\n'
+    +'  • Removing someone from the roster is done on the Vacation admin site, never here\n\n'
     +'The Vacation Auction runs all year, so there is no safe window. Unlock only when you actually intend to change the roster.\n\n'
     +'It relocks when you lock it or reload the page. The unlock is recorded in the audit log.')) return;
   usersLocked=false; usersOpenedBy=_currentAdminEmail||'you';
@@ -4836,7 +4847,25 @@ window.saveAllSchedUsers=async function(){
   // in the cold-load window would have wiped every FTE in dailysched/fteMap. Exactly the
   // [48] shape, on the one flag that already existed for the job.
   if(!(usernamesLoaded&&emailsLoaded&&loginEmailsLoaded&&schedFteLoaded)){ schedToast('Still loading user data — try again in a moment','err'); return; }
+  // [139 · RA-6 B-2] The loaded-gate says the DATA arrived; it says nothing about the ROWS. The
+  // grid refuses to re-render while a cursor is in it ([64]) — the whole time, not 250 ms — so a
+  // person added on the auction site during an edit has no row, every box of theirs reads as
+  // blank, and blank meant deleteField(): their name, Google login and KP e-mail gone from the
+  // LIVE auction roster under a green "Saved all". Two guards, both needed. (1) Any roster
+  // member without a row on screen, or a stale grid, REFUSES the whole save and says why.
+  // (2) Only fields that actually CHANGED against the loaded data are written — a box that is
+  // blank because the value was never there is not a delete, and an untouched field is not a
+  // write at all (fewer writes to the shared documents, and no rewrite of a value another admin
+  // may be changing on the auction site).
+  const missing=names.filter(u=>!document.getElementById('ufn_'+u));
+  if(_usersStale||missing.length){
+    schedToast('NOT saved — the roster changed while you were editing'+(missing.length?' ('+missing.slice(0,3).join(', ')+(missing.length>3?'…':'')+' not on screen)':'')+'. Click outside the grid to refresh it, then save again.','err');
+    return;
+  }
   const unameMap={}, lemMap={}, emMap={}, fteMap={}; const bad=[];
+  const cur=(m,u)=>String((m&&m[u])||'').trim();
+  const diff=(map,u,v,have)=>{ if(v===have) return; map[u]=v||deleteField(); };
+  const seenLem={};   // EVERY row's login address, changed or not — the in-batch duplicate check reads this, never the diff map
   for(const u of names){
     const fn=(document.getElementById('ufn_'+u)?.value||'').trim();
     const lem=(document.getElementById('ulem_'+u)?.value||'').trim().toLowerCase();
@@ -4849,33 +4878,36 @@ window.saveAllSchedUsers=async function(){
     if(lem && !lem.includes('@')) bad.push(u+' — login e-mail');
     // [build 47 · DUPLICATE-LOGIN-EMAIL CRITICAL] catch duplicates INSIDE the submitted batch
     // too — two rows pasted with the same address would sail past a stored-data-only check.
-    if(lem){ for(const o of Object.keys(lemMap)){ if(lemMap[o]===lem){ bad.push(u+' + '+o+' — same login e-mail ('+lem+')'); break; } } }
+    if(lem){ for(const o of Object.keys(seenLem)){ if(seenLem[o]===lem){ bad.push(u+' + '+o+' — same login e-mail ('+lem+')'); break; } } seenLem[u]=lem; }
     // [build 48 · audit] and against ORPHANED stored entries (initials no longer on the roster —
     // e.g. a swallowed delete): the batch only rewrites roster rows, so an orphan's address
     // survives it and a duplicate against one would otherwise slip through to the backstop.
     if(lem){ const _oh=_schedLoginEmailOwner(lem,u); if(_oh&&!names.includes(_oh)) bad.push(u+' — '+lem+' still belongs to former user '+_oh); }
-    if(raw!==''){ const v=parseFloat(raw); if(isNaN(v)||v<0||v>1) bad.push(u+' — FTE'); else fteMap[u]=Math.round(v*10)/10; }
-    else fteMap[u]=deleteField();
-    unameMap[u]= fn||deleteField();
-    lemMap[u]= lem||deleteField();
-    emMap[u]= em||deleteField();
+    const haveFte=getSchedFTE(u);
+    if(raw!==''){ const v=parseFloat(raw); if(isNaN(v)||v<0||v>1) bad.push(u+' — FTE'); else if(Math.round(v*10)/10!==haveFte) fteMap[u]=Math.round(v*10)/10; }
+    else if(haveFte!==undefined) fteMap[u]=deleteField();
+    diff(unameMap,u,fn,cur(usernamesData,u));
+    diff(lemMap,u,lem,cur(loginEmailsData,u).toLowerCase());
+    diff(emMap,u,em,cur(emailsData,u));
   }
   if(bad.length){ schedToast('Fix before saving: '+bad.slice(0,4).join(', ')+(bad.length>4?'…':''),'err'); return; }
+  const nField=Object.keys(unameMap).length+Object.keys(lemMap).length+Object.keys(emMap).length+Object.keys(fteMap).length;
+  if(!nField){ schedToast('No changes to save','ok'); return; }
+  const touched=new Set([...Object.keys(unameMap),...Object.keys(lemMap),...Object.keys(emMap),...Object.keys(fteMap)]);
   // full name / login e-mail / secondary e-mail are shared with the Vacation Auction; FTE is this site's own.
   // [H-12] Do NOT swallow write errors — a permission-denied (schedule-only admin) or any
   // failure must be reported, not toasted as success.
   try{
-    await setDoc(usernamesRef,unameMap,{merge:true});
-    await setDoc(loginEmailsRef,lemMap,{merge:true});
-    await syncEmailToUserFromLogin();
-    await setDoc(emailsRef,emMap,{merge:true});
-    await setDoc(schedFteRef,fteMap,{merge:true});
+    if(Object.keys(unameMap).length) await setDoc(usernamesRef,unameMap,{merge:true});
+    if(Object.keys(lemMap).length){ await setDoc(loginEmailsRef,lemMap,{merge:true}); await syncEmailToUserFromLogin(); }
+    if(Object.keys(emMap).length) await setDoc(emailsRef,emMap,{merge:true});
+    if(Object.keys(fteMap).length) await setDoc(schedFteRef,fteMap,{merge:true});
   }catch(e){
     schedToast((e&&e.code==='permission-denied')?'Not saved — shared name/e-mail fields need a Vacation Auction admin':'Not saved — please try again','err');
     return;
   }
-  auditLog('user.saveAll','Batch-saved all user fields ('+names.length+' users)');
-  schedToast('Saved all '+names.length+' users','ok');
+  auditLog('user.saveAll','Batch-saved '+nField+' changed field(s) for '+touched.size+' user(s): '+[...touched].join(', '));
+  schedToast('Saved '+nField+' change'+(nField===1?'':'s')+' for '+touched.size+' user'+(touched.size===1?'':'s'),'ok');
 };
 window.clearAllSchedFte=async function(){
   if(usersLockedRefuse()) return;
@@ -4883,31 +4915,68 @@ window.clearAllSchedFte=async function(){
   await setDoc(schedFteRef,{}); // full overwrite (no merge) — wipes every user's value, including any left over from removed users
   auditLog('fte.clearAll','Cleared FTE for all users on the Daily Schedule site');
 };
-window.removeSchedUser=async function(u){
-  if(usersLockedRefuse()) return;
-  if(!confirm('Remove '+u+' from the shared roster?\n\nThis removes them from BOTH the Daily Schedule and the Vacation Auction — they will no longer be selectable anywhere. Any shifts or vacation weeks already assigned to them stay in the history but they will disappear from user lists. This cannot be undone from here.\n\n⚠️ IF A VACATION AUCTION PHASE IS LIVE, DO NOT remove the user here — use the Vacation admin site instead. Removing here leaves their auction bids orphaned and still competing.')) return;
-  // [M-12] userList is an auction-collection doc — a schedule-only admin can't write it.
-  // Surface the failure instead of leaving the roster half-changed with no message.
-  try{ await updateDoc(userListRef,{users:arrayRemove(u)}); }
-  catch(e){ schedToast((e&&e.code==='permission-denied')?'Only a Vacation Auction admin can remove users from the shared roster':'Could not remove user — please try again','err'); return; }
-  await updateDoc(usernamesRef,{[u]:deleteField()}).catch(()=>{});
-  await updateDoc(loginEmailsRef,{[u]:deleteField()}).catch(()=>{});
-  await syncEmailToUserFromLogin();
-  await updateDoc(emailsRef,{[u]:deleteField()}).catch(()=>{});
-  // [89 · §98] The ticks are dead data, so there is nothing to clean there any more — but a
-  // removed person can still be sitting in groups and in per-shift overrides, and leaving those
-  // behind would quietly re-admit them if their initials were ever reused.
-  await updateDoc(groupMembersRef,{[u]:deleteField()}).catch(()=>{});
-  await updateDoc(categoriesRef,{[u]:deleteField()}).catch(()=>{});
+// [139 · RA-6 B-7] Removing a person from the SHARED ROSTER is the Vacation Auction admin's job
+// now, and only its job. This handler used to strip them from vacations/userList and the three
+// name/e-mail mirrors and stop there — while the auction's own Remove also deletes their bids,
+// best-bids, bid times, bid phase and priority locks, walks every week's approvals and denials,
+// and KEEPS the FTE of anyone who won a week in a completed phase (so that week's capacity still
+// counts). Removed here, a departed physician's bids kept competing, their initials sat in the
+// approvals arrays, the auction's "who is missing an FTE" check kept finding them and BLOCKED
+// Begin Phase — and because they were off the roster, no per-user control could reach them.
+// Copying ten auction documents' worth of fairness-critical cleanup into this page would double
+// that logic and widen the one write surface §1 keeps narrow; so this page does its OWN half
+// (groups, categories, per-shift overrides, this site's FTE, the calendar-feed link) and sends
+// the admin to the auction site for the roster. NO auction document is written here any more —
+// the isolation guard pins that.
+const VACATION_ADMIN_URL='https://anesthesia-kp.github.io/vacation/admin/';
+function _schedOwnDataOps(u){
+  // Every place this site keys its own data by initials. Returns [ref, dottedOps] pairs.
+  const ops=[];
+  if(groupMembers&&groupMembers[u]!==undefined) ops.push([groupMembersRef,{[u]:deleteField()}]);
+  if(categories&&categories[u]!==undefined) ops.push([categoriesRef,{[u]:deleteField()}]);
   const _op={};
   for(const [sid,ssh] of Object.entries((catalog&&catalog.shifts)||{})){
     const e=(ssh&&ssh.elig)||{};
     if(e.allow&&e.allow[u]) _op['shifts.'+sid+'.elig.allow.'+u]=deleteField();
     if(e.block&&e.block[u]) _op['shifts.'+sid+'.elig.block.'+u]=deleteField();
   }
-  if(Object.keys(_op).length) await mergeFields(catalogRef,_op).catch(()=>{});
-  await updateDoc(schedFteRef,{[u]:deleteField()}).catch(()=>{});
-  auditLog('user.remove','Removed user '+u+' from the shared roster');
+  if(Object.keys(_op).length) ops.push([catalogRef,_op]);
+  if(schedFte&&schedFte[u]!==undefined) ops.push([schedFteRef,{[u]:deleteField()}]);
+  if(feedTokens&&feedTokens[u]!==undefined) ops.push([feedTokensRef,{[u]:deleteField()}]);
+  return ops;
+}
+window.removeSchedUser=async function(u){
+  if(usersLockedRefuse()) return;
+  const ops=_schedOwnDataOps(u);
+  if(!confirm('Remove '+u+'?\n\nTaking a person OFF THE SHARED ROSTER is done on the Vacation Auction admin site — that is the only place their auction bids, approvals and locks are deleted with them. Removing here never touches the auction.\n\nThis button clears '+u+'\'s DAILY SCHEDULE data only: group membership, category, per-shift eligibility overrides, this site\'s FTE and their calendar-feed link ('+(ops.length?ops.length+' document'+(ops.length===1?'':'s')+' to clear':'nothing to clear')+'). Shifts already assigned to them stay in the history.\n\nContinue?')) return;
+  let failed=0;
+  for(const [ref,dotted] of ops){ try{ await mergeFields(ref,dotted); }catch(e){ failed++; } }
+  if(failed){ schedToast('Could not clear all of '+u+'\'s schedule data ('+failed+' write'+(failed===1?'':'s')+' failed) — please try again','err'); return; }
+  auditLog('user.remove','Cleared '+u+"'s Daily Schedule data ("+ops.length+' document'+(ops.length===1?'':'s')+'). The shared roster is unchanged — roster removal is done on the Vacation Auction admin site');
+  const msg=document.getElementById('uMsg');
+  if(msg) msg.innerHTML='<span style="color:var(--t2)">'+esc(u)+'\'s Daily Schedule data is cleared. To take '+esc(u)+' off the shared roster — and delete their auction bids and approvals with them — use the <a href="'+VACATION_ADMIN_URL+'" target="_blank" rel="noopener"><b>Vacation Auction admin site → Users</b></a>.</span>';
+  schedToast('Cleared '+u+"'s schedule data — roster removal is on the Vacation admin site",'ok');
+};
+// [139 · B-7] The other half: a removal done on the auction site (now the only roster removal)
+// leaves this site's per-person data behind, and stale initials in a group or an override would
+// quietly re-admit a reused set of initials. An explicit sweep, never a listener-triggered write.
+window.cleanupDepartedSchedUsers=async function(){
+  if(usersLockedRefuse()) return;
+  if(!namesLoaded){ schedToast('Still loading the roster — try again in a moment','err'); return; }
+  const live=new Set(names);
+  const seen=new Set();
+  for(const k of Object.keys(groupMembers||{})) seen.add(k);
+  for(const k of Object.keys(categories||{})) seen.add(k);
+  for(const k of Object.keys(schedFte||{})) seen.add(k);
+  for(const k of Object.keys(feedTokens||{})) seen.add(k);
+  for(const ssh of Object.values((catalog&&catalog.shifts)||{})){ const e=(ssh&&ssh.elig)||{}; for(const k of Object.keys(e.allow||{})) seen.add(k); for(const k of Object.keys(e.block||{})) seen.add(k); }
+  const departed=[...seen].filter(k=>k&&!live.has(k)&&!k.startsWith('_')).sort();
+  if(!departed.length){ schedToast('Nothing to clean — every person in this site\'s data is on the roster','ok'); return; }
+  if(!confirm('Clear Daily Schedule data for '+departed.length+' departed '+(departed.length===1?'person':'people')+' no longer on the shared roster?\n\n'+departed.join(', ')+'\n\nThis clears their group membership, category, per-shift overrides, this site\'s FTE and calendar-feed link. It never touches the Vacation Auction. Shifts already assigned to them stay in the history.')) return;
+  let n=0, failed=0;
+  for(const u of departed){ for(const [ref,dotted] of _schedOwnDataOps(u)){ try{ await mergeFields(ref,dotted); n++; }catch(e){ failed++; } } }
+  auditLog('user.cleanup','Cleared Daily Schedule data for departed '+departed.join(', ')+' ('+n+' document write'+(n===1?'':'s')+(failed?', '+failed+' failed':'')+')');
+  schedToast(failed?('Cleared most — '+failed+' write'+(failed===1?'':'s')+' failed, try again'):('Cleared schedule data for '+departed.length+' departed '+(departed.length===1?'person':'people')),failed?'err':'ok');
 };
 
 // ── Eligibility [build 49 · readability rebuild] ────────────────────────────
@@ -9306,6 +9375,25 @@ function buildIcs(u,monthsData,now,vac){
       push('END:VEVENT');
     }
   }
+  // [141 · D-6] one marker per DRAFT month (null in monthsData), spanning its days inside the
+  // horizon. Transparent, so it never blocks the doctor's own calendar; keyed to the month so a
+  // publish replaces it cleanly with the real shifts on the next build.
+  for(const [mk,days] of Object.entries(monthsData)){
+    if(days!==null) continue;
+    const [y,m]=mk.split('-').map(Number);
+    const ms=new Date(y,m-1,1), me=new Date(y,m,0);
+    const a=ms>h.from?ms:new Date(h.from), b=me<h.to?me:new Date(h.to);
+    if(a>b) continue;
+    const nx=new Date(b); nx.setDate(nx.getDate()+1);
+    push('BEGIN:VEVENT');
+    push('UID:'+icsUid(u,mk+'-01','draft'));
+    push('DTSTAMP:'+stamp);
+    push('DTSTART;VALUE=DATE:'+icsDay(a));
+    push('DTEND;VALUE=DATE:'+icsDay(nx));
+    push('SUMMARY:'+icsEsc('Schedule not yet published — check back'));
+    push('TRANSP:TRANSPARENT');
+    push('END:VEVENT');
+  }
   for(const day of vacationDaysIn(u,vac||{},h.from,h.to)){
     const nx=new Date(day); nx.setDate(nx.getDate()+1);
     push('BEGIN:VEVENT');
@@ -9352,9 +9440,15 @@ window.buildFeedFor=async function(u){
   const now=new Date(), h=feedHorizon(now);
   const keys=[]; const cur=new Date(h.from.getFullYear(),h.from.getMonth(),1);
   while(cur<=h.to){ keys.push(ymKey(cur)); cur.setMonth(cur.getMonth()+1); }
-  const data={}; const missing=[];
+  // [141 · RA-6 D-6] readMonth has said `published` since 136 and this ignored it, so a month still
+  // under construction — always inside a 120-day horizon — went out to the doctor's calendar as
+  // if final, and every edit until publish day silently re-arranged their phone. A DRAFT month
+  // now contributes NO shifts (null, not {}), and buildIcs paints one all-day, transparent
+  // "not yet published" marker across its days instead — the calendar twin of the staff page's
+  // "Not published" pill (Stage 3): a blank must say why, because a blank reads as a day off.
+  const data={}; const missing=[]; const drafts=[];
   for(const mk of keys){
-    try{ const m=await readMonth(mk); data[mk]=(m&&m.days)||{}; }
+    try{ const m=await readMonth(mk); if(m&&m.published===false){ drafts.push(mk); data[mk]=null; } else data[mk]=(m&&m.days)||{}; }
     catch(e){ missing.push(mk); }
   }
   if(missing.length){
@@ -9364,8 +9458,9 @@ window.buildFeedFor=async function(u){
   }
   const ics=buildIcs(u,data,now,vacationDays());
   await setDoc(feedDocRef(tok),{ics:ics,at:Date.now(),for:u,
-    by:_currentAdminEmail||'unknown',from:dKey(h.from),to:dKey(h.to)});
-  auditLog('feed.build','Rebuilt '+displayName(u)+"'s calendar feed");
+    by:_currentAdminEmail||'unknown',from:dKey(h.from),to:dKey(h.to),drafts:drafts});
+  auditLog('feed.build','Rebuilt '+displayName(u)+"'s calendar feed"+(drafts.length?' — '+drafts.join(', ')+' not yet published, marked as such':''));
+  if(drafts.length) schedToast('Feed rebuilt — '+drafts.length+' month'+(drafts.length===1?'':'s')+' ('+drafts.join(', ')+') not yet published: marked in the calendar, no shifts sent','ok');
   return ics;
 };
 window.buildAllFeeds=async function(){
@@ -10356,8 +10451,12 @@ window.renderReports=renderReports;
 // the bare arrow from the HTML until the first click — and the moment the label is most useful
 // is before you have pressed it.
 try{ document.querySelectorAll('[id^="secta_"]').forEach(e=>sectApply(e.id.slice(6))); }catch(_){}
-setMonth(ymKey(new Date()));
+// [140 · Stage 5 · RA-6 D-1/B-5] setMonth attaches the month's two listeners, and it ran BEFORE
+// authReady — the one schedule read this page made without an admin's token. Under the Stage 5
+// rules that read is refused, and a refused listener never retries. Inside the gate now, with
+// every other listener; the month on screen is unchanged.
 authReady.then(()=>{
+  setMonth(ymKey(new Date()));
   onSnapshot(userListRef,snap=>{ const d=snap.exists()?snap.data():{}; if(Array.isArray(d.users)&&d.users.length) names=[...d.users].sort(); namesLoaded=true; renderAll(); });
   onSnapshot(schedFteRef,snap=>{ schedFte=snap.exists()?snap.data():{}; schedFteLoaded=true; renderAll(); });
   // [63] BOTH sources. The legacy array is read for ever and never written again; the

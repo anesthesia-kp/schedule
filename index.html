@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 46;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 48;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -789,9 +789,10 @@ window.vacationDaysFromProbe=vacationDaysFrom;   // the suite pins both copies a
 // ── Month navigation ──
 function setMonth(ym){
   curYM=ym;
-  syncQuickViewMonths();   // [26] independent of the month being browsed
-  if(unsubMonth) unsubMonth();
+  if(unsubMonth){ unsubMonth(); unsubMonth=null; }
   monthData={days:{}};
+  if(!me){ renderAll(); return; }   // [47 · Stage 5] no schedule reads before sign-in — the month attaches in finishSignIn
+  syncQuickViewMonths();   // [26] independent of the month being browsed
   unsubMonth=watchMonth(ym,m=>{ monthData=m; renderAll(); });
   renderAll();
 }
@@ -855,6 +856,7 @@ function qvMonths(){
 // until somebody reloaded. syncQuickViewMonths is a no-op while the answer is the same.
 setInterval(()=>{ try{ if(!curYM) return; const before=qvKeys; syncQuickViewMonths(); if(qvKeys!==before) renderAll(); }catch(_){} },60000);
 function syncQuickViewMonths(){
+  if(!me) return;   // [47 · Stage 5] Quick View reads months — only once signed in
   const months=qvMonths(), key=months.join(',');
   if(key===qvKeys) return;                 // nothing to change — avoids resubscribing on every render
   qvKeys=key;
@@ -1020,10 +1022,12 @@ window.applyOpen=async function(openId){
       const l=(lSnap.exists()&&Array.isArray(lSnap.data().list))?lSnap.data().list:[];
       if(iSnap.exists()&&iSnap.data().status==='pending') return;                       // already applied — no-op
       if(l.some(r=>r&&r.user===me&&r.openId===openId&&r.status==='pending')) return;    // legacy pending claim — no-op
-      if(iSnap.exists()){
-        const old=iSnap.data(); const archId=claimId+'_'+(old.decidedTs||old.ts||0);
-        tx.set(doc(reqItemsCol,archId),{...old,id:archId});                             // keep the decided history
-      }
+      // [47 · Stage 5 · RA-6 R-3] The decided history used to be kept by writing the OLD item under a
+      // dated id — a CREATE, by a physician, of a document carrying an admin's decision. The rules
+      // now let a physician create only a PENDING request of their own, so the history rides
+      // inside the new claim instead (prev: the decided item, newest first), and the write is an
+      // UPDATE of their own document from decided back to pending — which is what re-applying is.
+      if(iSnap.exists()){ const old={...iSnap.data()}; const hist=Array.isArray(old.prev)?old.prev:[]; delete old.prev; req.prev=[old,...hist].slice(0,10); }
       tx.set(iRef,req); claimed=true;
     });
   }catch(e){ _writeFail(e); }
@@ -1258,7 +1262,7 @@ function fillReqTypes(){
   if(cur&&[...sel.options].some(o=>o.value===cur)) sel.value=cur;
   onReqType();
 }
-onSnapshot(requestTypesRef,snap=>{ rtData=snap.exists()?snap.data():{}; fillReqTypes(); renderMyRequests(); });
+// [47 · Stage 5] the requestTypes listener moved into subscribeSchedule() — see the boot block.
 
 // ── Actions ──
 window.submitRequest=async function(){
@@ -1445,6 +1449,8 @@ function renderChanges(){
 window.renderChangesProbe=renderChanges;
 async function finishSignIn(u){
   me=u;
+  subscribeSchedule();   // [47 · Stage 5] the schedule's own documents, read with THIS sign-in's token
+  setMonth(curYM);       // and the month on screen, which setMonth left unwatched before sign-in
   watchChanges();
   // Remembering is opt-in via the checkbox — same rule as the Vacation
   // Auction's login. quickSignIn() pre-checks it before calling this, so
@@ -1571,6 +1577,7 @@ window.signShowPicker=function(){
   _schedRemembered=null;
   // Drop any active Google session so a DIFFERENT account can be chosen, then
   // re-establish the anonymous read session that keeps public data flowing.
+  me=null; unsubscribeSchedule();   // [47 · Stage 5] a listener outlives its token as a refusal, never a retry — drop them here, re-attach on the next sign-in
   try{ signOut(auth).catch(()=>{}); }catch(_){}
   try{ signInAnonymously(auth).catch(()=>{}); }catch(_){}
 };
@@ -1614,6 +1621,7 @@ window.switchUser=function(){
   const cb=document.getElementById('signRememberMe'); if(cb) cb.checked=true;
   // Drop the active Google session and re-establish the anonymous read session so
   // a DIFFERENT Google account can sign in.
+  me=null; unsubscribeSchedule();   // [47 · Stage 5] a listener outlives its token as a refusal, never a retry — drop them here, re-attach on the next sign-in
   try{ signOut(auth).catch(()=>{}); }catch(_){}
   try{ signInAnonymously(auth).catch(()=>{}); }catch(_){}
 };
@@ -1655,9 +1663,6 @@ onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; 
 onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); });
 // [C-2] Removed onSnapshot(vApprovalsRef,…) — the schedule site no longer reads live
 // auction approvals (privacy leak + H-4 rules now deny this read anyway).
-onSnapshot(catalogRef,snap=>{ catalog=snap.exists()?snap.data():{shifts:{}}; if(!catalog.shifts)catalog.shifts={}; renderAll(); });
-onSnapshot(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; fillReqShift(); });   // [46 · S-1] the two documents the checker needs
-onSnapshot(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; fillReqShift(); });
 // [30 · S4] Two listeners per list — the frozen legacy array and the item docs —
 // recombined into the same {list:[]} shape every renderer already reads. An item doc
 // wins over a legacy entry with its id; _gone tombstones drop out entirely.
@@ -1671,12 +1676,48 @@ let _reqLegacy=[], _reqItems=new Map(), _swapLegacy=[], _swapItems=new Map(), _o
 const _reMergeReq =()=>{ requests={list:mergeItems(_reqLegacy,_reqItems)};    renderMyRequests(); renderOpenShifts(); };
 const _reMergeSwap=()=>{ swaps={list:mergeItems(_swapLegacy,_swapItems)};     renderMySwaps(); };
 const _reMergeOpen=()=>{ openShifts={list:mergeItems(_openLegacy,_openItems)}; renderOpenShifts(); };
-onSnapshot(requestsRef,snap=>{ const d=snap.exists()?snap.data():{}; _reqLegacy=Array.isArray(d.list)?d.list:[]; _reMergeReq(); });
-onSnapshot(reqItemsCol,qs=>{ _reqItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeReq(); });
-onSnapshot(swapsRef,snap=>{ const d=snap.exists()?snap.data():{}; _swapLegacy=Array.isArray(d.list)?d.list:[]; _reMergeSwap(); });
-onSnapshot(swapItemsCol,qs=>{ _swapItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeSwap(); });
-onSnapshot(openRef,snap=>{ const d=snap.exists()?snap.data():{}; _openLegacy=Array.isArray(d.list)?d.list:[]; _reMergeOpen(); });
-onSnapshot(openItemsCol,qs=>{ _openItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeOpen(); });
+// [47 · Stage 5 · RA-6 S-3/D-1/B-5] EVERY dailysched listener now attaches AFTER Google sign-in,
+// and none before. The sign-in screen needs only the auction's roster documents (userList,
+// usernames, adminSettings) — verified: initSchedSigninScreen waits on exactly those three —
+// so nothing on the schedule side has to be readable by the anonymous internet any more, and
+// the rules can say so (the rules deploy lands AFTER this page is live, never before). A
+// listener attached before the token carries a verified e-mail would be refused once and never
+// retried — which is the shape §-invariant "auth gate" exists to prevent on the auction site.
+// Idempotent, and undone on sign-out so a second account on the same tab re-attaches cleanly.
+let _schedUnsubs=[];
+function subscribeSchedule(){
+  if(_schedUnsubs.length) return;
+  const on=(...a)=>{ _schedUnsubs.push(onSnapshot(...a)); };
+  on(requestTypesRef,snap=>{ rtData=snap.exists()?snap.data():{}; fillReqTypes(); renderMyRequests(); });
+  on(catalogRef,snap=>{ catalog=snap.exists()?snap.data():{shifts:{}}; if(!catalog.shifts)catalog.shifts={}; renderAll(); });
+  on(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; fillReqShift(); });   // [46 · S-1] the two documents the checker needs
+  on(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; fillReqShift(); });
+  on(requestsRef,snap=>{ const d=snap.exists()?snap.data():{}; _reqLegacy=Array.isArray(d.list)?d.list:[]; _reMergeReq(); });
+  // [48 · RA-6 S-3, the client half] This page uses exactly two slices of these collections — MY
+  // requests (user===me) and swaps I am PARTY to (from/to me, or a 3-way I am in) — and every
+  // renderer filters to them. It used to subscribe to the WHOLE of both, so every physician's
+  // requests, and the notes typed into them ("surgery on the 14th"), sat in every other
+  // physician's browser memory. The queries now ask for the slices themselves; the rules
+  // (Stage 5) still gate the read to a signed-in account, and this is the second half. Three
+  // swap queries feed one map, because Firestore has no OR: from me, to me, and the 3-ways
+  // that list me. Legacy arrays (nothing has written them since 30) are unchanged.
+  on(query(reqItemsCol,where('user','==',me)),qs=>{ _reqItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeReq(); });
+  on(swapsRef,snap=>{ const d=snap.exists()?snap.data():{}; _swapLegacy=Array.isArray(d.list)?d.list:[]; _reMergeSwap(); });
+  const _swapQ={};
+  const swapSlice=(k,q)=>on(q,qs=>{ _swapQ[k]=new Map(qs.docs.map(d=>[d.id,d.data()])); _swapItems=new Map([...(_swapQ.from||[]),...(_swapQ.to||[]),...(_swapQ.part||[])]); _reMergeSwap(); });
+  swapSlice('from',query(swapItemsCol,where('from','==',me)));
+  swapSlice('to',query(swapItemsCol,where('to','==',me)));
+  swapSlice('part',query(swapItemsCol,where('participants','array-contains',me)));
+  on(openRef,snap=>{ const d=snap.exists()?snap.data():{}; _openLegacy=Array.isArray(d.list)?d.list:[]; _reMergeOpen(); });
+  on(openItemsCol,qs=>{ _openItems=new Map(qs.docs.map(d=>[d.id,d.data()])); _reMergeOpen(); });
+}
+window.schedSubsCountForTest=()=>_schedUnsubs.length;   // module scope is invisible to page.evaluate
+window.itemsHeldForTest=()=>({ req:[..._reqItems.keys()], swap:[..._swapItems.keys()] });   // [48] what this browser actually holds
+function unsubscribeSchedule(){
+  _schedUnsubs.forEach(u=>{ try{u();}catch(_){} }); _schedUnsubs=[];
+  if(unsubMonth){ try{unsubMonth();}catch(_){} unsubMonth=null; }
+  qvUnsubs.forEach(u=>{ try{u();}catch(e){} }); qvUnsubs=[]; qvData={}; qvKeys='';
+}
 </script>
 </body>
 </html>
