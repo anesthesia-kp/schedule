@@ -1,6 +1,6 @@
 {
   "functions": [
-    { "source": ".", "codebase": "ics", "runtime": "nodejs20",
+    { "source": ".", "codebase": "ics", "runtime": "nodejs22",
       "ignore": ["node_modules", ".git", "DEPLOY.md", "*.log"] }
   ]
 }

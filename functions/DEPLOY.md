@@ -38,7 +38,9 @@ npx --yes firebase-tools deploy --only functions:ics --project vacation-25e8e
 (`npx` runs the CLI from a per-user cache — no `sudo`, no system-wide install. A global
 `npm install -g` on a stock Mac fails with `EACCES` on `/usr/local/lib`; hit 30 Aug 2026.)
 `firebase.json` beside this file tells the CLI the function's source is this folder and
-its runtime is Node 20; `node_modules/` here is git-ignored and `package-lock.json` is committed.
+its runtime is Node 22 (Node 20 is retired by Google on 30 Oct 2026 — the first deploy, 30 Aug, went
+out on 20 and was redeployed on 22 the same day); `node_modules/` here is git-ignored and
+`package-lock.json` is committed.
 
 The CLI prints the live URL. It will look like:
 
