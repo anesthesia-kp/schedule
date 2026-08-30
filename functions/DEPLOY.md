@@ -7,23 +7,22 @@ subscribe addresses on the admin's **Calendar Feeds** page do not answer, and th
 
 ## Before you deploy: two things that are NOT optional
 
-### 1 · The link list must be locked down in `firestore.rules` first
+### 1 · The link list must be locked down in `firestore.rules` first — DONE in the file, 30 Aug 2026 (§136)
 
-`dailysched/feedTokens` holds the secret that stands in for signing in. Under the current
-`dailysched` catch-all **any signed-in user can read it** — which means any doctor can read any
-other doctor's calendar. It must be added to `isSchedAdminOnlyDoc()`.
+`dailysched/feedTokens` holds the secret that stands in for signing in. The Stage 5 rules (§129,
+published 30 Aug) made it and `dailysched/feeds/items/*` admin-only to WRITE; §136 closes the READ
+side: the token list is readable by the schedule admin alone, and a rendered calendar by no client
+at all — only the endpoint reads it, with admin credentials that bypass rules entirely.
 
 `firestore.rules` lives in the **auction** repo and is closed by DECISIONS §92 without a specific
-decision. **This is a rules change, so it is an auction deploy** — gate it with auction
-discipline, publish it in the console, and publish it BEFORE the endpoint goes up, not after.
+decision (§136 is that decision). **A rules change is an auction deploy** — `RA-2.command` first,
+then publish it in the console, and publish it BEFORE the endpoint goes up, not after.
 
-`dailysched/feeds/items/{token}` should be **admin-write, and not client-readable at all** — only
-the endpoint reads it, and the endpoint uses admin credentials which bypass rules entirely.
+### 2 · Node on the Mac
 
-### 2 · The command-line developer tools are still missing on the Mac
-
-`xcode-select --install`, then `xcode-select -p` must print `/Library/Developer/CommandLineTools`.
-Recorded in `START-HERE.md` §6 as an open item; the Firebase CLI needs working Node tooling.
+The Firebase CLI is plain JavaScript: Node (which `RA-2.command` already uses) is all it needs.
+If `npm install -g firebase-tools` fails, `xcode-select --install` is the likely fix, not a
+prerequisite.
 
 ---
 
