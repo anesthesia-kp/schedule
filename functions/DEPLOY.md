@@ -29,12 +29,16 @@ prerequisite.
 ## The deploy
 
 ```
-npm install -g firebase-tools          # once
-firebase login                         # once
 cd ~/Documents/GitHub/schedule/functions
 npm install
-firebase deploy --only functions:ics --project vacation-25e8e
+npx --yes firebase-tools login                                              # once
+npx --yes firebase-tools deploy --only functions:ics --project vacation-25e8e
 ```
+
+(`npx` runs the CLI from a per-user cache — no `sudo`, no system-wide install. A global
+`npm install -g` on a stock Mac fails with `EACCES` on `/usr/local/lib`; hit 30 Aug 2026.)
+`firebase.json` beside this file tells the CLI the function's source is this folder and
+its runtime is Node 20; `node_modules/` here is git-ignored and `package-lock.json` is committed.
 
 The CLI prints the live URL. It will look like:
 

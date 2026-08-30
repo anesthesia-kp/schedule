@@ -12,3 +12,7 @@
 # Desktop too — which made it invisible in both places at once. This name is visible
 # in Finder and still never committed.
 COMMIT-MESSAGE.txt
+
+# The calendar endpoint's installed packages (functions/DEPLOY.md's `npm install`). Never
+# committed; package-lock.json IS committed so the deploy is reproducible.
+functions/node_modules/
