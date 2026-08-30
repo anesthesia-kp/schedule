@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 146;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 147;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -1363,6 +1363,22 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
       <button class="btn btn-danger" onclick="cmClearAll()">Remove everything</button>
       <button class="btn btn-primary" onclick="closeCellModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- [147 · RA-6 §7b] THE IN-PAGE CONFIRMATION. The three highest-stakes clicks on the site — Apply,
+     Publish, Add the standard request types — asked their question through the browser's native
+     confirm(), which cannot be styled, cannot show a LIST, and looks like an alert from somewhere
+     else. schedConfirm() opens this instead and resolves true/false; every other confirm() on the
+     page is unchanged. Escape and the backdrop answer "no"; the first button takes focus. -->
+<div class="modal" id="schedDlg" role="dialog" aria-modal="true" aria-labelledby="schedDlgTitle" onclick="if(event.target===this) schedDlgAnswer(false)">
+  <div class="mcard" style="max-width:560px">
+    <div style="font-weight:800;font-size:15px;margin-bottom:8px" id="schedDlgTitle"></div>
+    <div id="schedDlgBody" style="font-size:13px;line-height:1.55;color:var(--t1);max-height:60vh;overflow:auto"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button class="btn" id="schedDlgCancel" onclick="schedDlgAnswer(false)">Go back</button>
+      <button class="btn btn-primary" id="schedDlgOk" onclick="schedDlgAnswer(true)">Yes</button>
     </div>
   </div>
 </div>
@@ -2908,6 +2924,38 @@ function renderCellModal(){
 }
 window.closeCellModal=function(){ document.getElementById('cellModal').classList.remove('on'); cellSel=null; };
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.getElementById('cellModal').classList.contains('on')) closeCellModal(); });   // [144 · V-5]
+// [147 · RA-6 §7b] schedConfirm({title, html, ok, cancel, danger}) → Promise<boolean>. One at a time;
+// a second call while one is open answers the first "no" so nothing is ever left hanging.
+let _dlgResolve=null;
+function schedConfirm(o){
+  o=o||{};
+  if(_dlgResolve){ const r=_dlgResolve; _dlgResolve=null; r(false); }
+  const dlg=document.getElementById('schedDlg'); if(!dlg) return Promise.resolve(false);
+  document.getElementById('schedDlgTitle').textContent=o.title||'Are you sure?';
+  document.getElementById('schedDlgBody').innerHTML=o.html||'';
+  const ok=document.getElementById('schedDlgOk'), cancel=document.getElementById('schedDlgCancel');
+  ok.textContent=o.ok||'Yes'; cancel.textContent=o.cancel||'Go back';
+  ok.className='btn '+(o.danger?'btn-danger':'btn-primary');
+  dlg.classList.add('on');
+  return new Promise(res=>{ _dlgResolve=res; setTimeout(()=>{ try{ ok.focus(); }catch(_){} },0); });
+}
+window.schedDlgAnswer=function(v){ const dlg=document.getElementById('schedDlg'); if(dlg) dlg.classList.remove('on'); const r=_dlgResolve; _dlgResolve=null; if(r) r(!!v); };
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&_dlgResolve) schedDlgAnswer(false); });
+window.schedDlgOpenProbe=()=>!!_dlgResolve;
+// text with newlines → paragraphs and bullet lists, escaped
+function dlgText(t){
+  const lines=String(t||'').split('\n'); let out='', inList=false;
+  for(const l of lines){
+    const isB=/^\s*[•·\-–]\s+/.test(l);
+    if(isB&&!inList){ out+='<ul style="margin:4px 0 4px 18px;padding:0">'; inList=true; }
+    if(!isB&&inList){ out+='</ul>'; inList=false; }
+    if(isB) out+='<li>'+esc(l.replace(/^\s*[•·\-–]\s+/,''))+'</li>';
+    else if(l.trim()==='') out+='<div style="height:6px"></div>';
+    else out+='<div>'+esc(l)+'</div>';
+  }
+  if(inList) out+='</ul>';
+  return out;
+}
 // Live conflict check shown inside the modal, re-run on every field change —
 // this is the "flag it before Save" warning: on approved vacation, or a
 // contradictory Day off + shift combo. It doesn't block anything by itself;
@@ -3653,10 +3701,13 @@ window.engineApply=async function(){
   // kept", which the write did not do — it replaced each planned cell outright.
   // [128 · N-2] …and say when a day would end up with MORE people on a shift than it asks for.
   const oc=(plan.overCeiling||[]);
-  if(!confirm('Apply the engine\'s plan for '+MS[m-1]+' '+y+'?\n\n'+planSummary(plan)
-    +(oc.length?'\n\n⚠️ '+oc.length+' over the ceiling — more people on a shift than that shift asks for:\n'+oc.slice(0,8).join('\n')+(oc.length>8?'\n…and '+(oc.length-8)+' more':''):'')
-    +'\n\nEach shift is ADDED to whatever the cell already holds — an assignment made since you previewed is kept, and nothing is removed. Anyone MARKED OFF since you previewed is skipped for that day and named in the result. '
-    +(monthIsPublished()?'This month is PUBLISHED — staff see the result immediately.':'This month is a DRAFT — staff will not see it until you publish.'))) return;
+  // [147 · §7b] the in-page dialog: the plan summary, the over-ceiling days as a LIST, the state of the month
+  if(!await schedConfirm({title:'Apply the engine\'s plan for '+MS[m-1]+' '+y+'?', ok:'Apply the plan',
+    html:dlgText(planSummary(plan))
+      +(oc.length?'<div style="margin-top:10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:8px 10px"><b>⚠️ '+oc.length+' over the ceiling</b> — more people on a shift than that shift asks for:'
+        +'<ul style="margin:4px 0 0 18px;padding:0">'+oc.slice(0,12).map(x=>'<li>'+esc(x)+'</li>').join('')+(oc.length>12?'<li>…and '+(oc.length-12)+' more</li>':'')+'</ul></div>':'')
+      +'<div style="margin-top:10px;color:var(--t2)">Each shift is <b>added</b> to whatever the cell already holds — an assignment made since you previewed is kept, and nothing is removed. Anyone <b>marked off</b> since you previewed is skipped for that day and named in the result.</div>'
+      +'<div style="margin-top:8px;font-weight:700">'+(monthIsPublished()?'This month is PUBLISHED — staff see the result immediately.':'This month is a DRAFT — staff will not see it until you publish.')+'</div>'})) return;
   _engineFail=null; _engineSkip=null;
   // [129 · E-7] THE PLAN IS DISCARDED BEFORE THE WRITE, not after. It was always discarded — the
   // line below used to sit after `await engineWrite(plan)` — but the day-document writes echo
@@ -3688,9 +3739,13 @@ const listHtml=(title,items,n)=> items.length ? ('<div style="margin-top:8px"><d
 window.publishMonth=async function(){
   if(!curYM) return;
   const [y,m]=curYM.split('-').map(Number); const nm=MS[m-1]+' '+y;
-  const standing=(checkMonth(curYM,(monthData&&monthData.days)||{}).all||[]).length;
-  if(!confirm('Publish '+nm+'?\n\nStaff will see the whole month at once, and from then on every change — hand edits, approvals, the engine — lands for them immediately.'
-    +(standing?'\n\n⚠️ '+standing+' rule violation'+(standing===1?' is':'s are')+' standing in this month (see the Rules page). Publishing does not clear them.':'\n\nNo rule violations are standing.'))) return;
+  const viols=(checkMonth(curYM,(monthData&&monthData.days)||{}).all||[]); const standing=viols.length;
+  // [147 · §7b] the in-page dialog names the standing violations instead of counting them
+  if(!await schedConfirm({title:'Publish '+nm+'?', ok:'Publish',
+    html:'<div>Staff will see the whole month at once, and from then on every change — hand edits, approvals, the engine — lands for them immediately.</div>'
+      +(standing?'<div style="margin-top:10px;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:8px 10px"><b>⚠️ '+standing+' rule violation'+(standing===1?' is':'s are')+' standing</b> — publishing does not clear them:'
+          +'<ul style="margin:4px 0 0 18px;padding:0">'+viols.slice(0,10).map(v=>'<li>'+esc(String(v.dk||''))+' · '+esc(displayName(v.u))+' — <b>'+esc(v.label||'')+'</b>: '+esc(String(v.what||''))+'</li>').join('')+(standing>10?'<li>…and '+(standing-10)+' more on the Rules page</li>':'')+'</ul></div>'
+        :'<div style="margin-top:10px;color:var(--green);font-weight:700">No rule violations are standing.</div>')})) return;
   await mergeFields(monthRef(curYM),{published:true,publishedAt:Date.now(),publishedBy:_currentAdminEmail||'unknown'});
   auditLog('month.publish','Published '+nm+(standing?' with '+standing+' rule violation'+(standing===1?'':'s')+' standing':''));
   { // [122 · §6] "reaches people at publish" — one entry per person who holds anything in the month
@@ -8918,7 +8973,10 @@ window.seedStandardReqTypes=async function(){
     add['rt'+order.toString(36)+Math.floor(Math.random()*1e6).toString(36)]=t; n++;
   }
   if(!n){ schedToast('The standard list is already here.','ok'); return; }
-  if(!confirm('Add '+n+' standard request type'+(n===1?'':'s')+'?\n\nEvery "work" and "avoid" entry still needs its shift list picked here before staff can choose it; "No Call" points at the Overnight call tag already.')) return;
+  // [147 · §7b] the in-page dialog LISTS what is about to be added
+  if(!await schedConfirm({title:'Add '+n+' standard request type'+(n===1?'':'s')+'?', ok:'Add them',
+    html:'<ul style="margin:0 0 0 18px;padding:0;columns:2">'+Object.values(add).map(t=>'<li>'+esc(rtLabel(t))+' <span style="color:var(--t3)">('+esc(RT_KINDS[t.kind]||t.kind)+')</span></li>').join('')+'</ul>'
+      +'<div style="margin-top:10px;color:var(--t2)">Every "work" and "avoid" entry still needs its shift list picked here before staff can choose it; "No Call" points at the Overnight call tag already.</div>'})) return;
   await mergeFields(requestTypesRef,add);
   auditLog('reqtype.seed','Added '+n+' standard request types');
   schedToast('Added '+n+'. Now pick a shift list for each work/avoid entry.','ok');

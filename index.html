@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 49;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 50;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -213,6 +213,22 @@ table.grid th.stick1{background:var(--s2);z-index:3}
    submits — measured 21–30px tall; the guideline for a fingertip is 44px. On a touch screen or a
    narrow window every button grows to that; the inline paddings stay, min-height wins. */
 @media (max-width:700px), (pointer:coarse){ .btn{min-height:44px;min-width:44px} }
+/* [50 · RA-6 §7b · §134] the Full Schedule on a phone: one day per row. Hidden on a wide screen,
+   where the table is the right object; the table is hidden below 600px, where it was 1500px of
+   sideways scrolling. Same month, same cells, same chips — a style rule chooses the shape. */
+.daylist{display:none}
+.daylist .dl-day{border:1px solid var(--b1);border-radius:10px;background:var(--s1);margin-bottom:8px;overflow:hidden}
+.daylist .dl-head{display:flex;align-items:baseline;gap:8px;padding:7px 10px;background:var(--s2);font-weight:800;font-size:13px}
+.daylist .dl-head .dl-wd{font-size:11px;color:var(--t3);font-weight:700}
+.daylist .dl-day.today .dl-head{background:#dbeafe;color:#1e3a8a}
+.daylist .dl-day.wkend .dl-head{background:#f8fafc}
+.daylist .dl-row{display:flex;align-items:flex-start;gap:8px;padding:5px 10px;border-top:1px solid var(--b1);font-size:12.5px}
+.daylist .dl-row.me{background:#eff6ff}
+.daylist .dl-who{min-width:110px;font-weight:700;color:var(--t2)}
+.daylist .dl-row.me .dl-who{color:var(--blue)}
+.daylist .dl-what span{display:inline-block;margin:1px 4px 1px 0}
+.daylist .dl-none{padding:6px 10px;border-top:1px solid var(--b1);font-size:12px;color:var(--t3)}
+@media (max-width:600px){ #allGridFade{display:none} .daylist{display:block} }
 @media (max-width:700px){
   .wrap{padding:12px 8px 60px} table.grid{font-size:9px}
   /* [132 · RA-6 V-2] `align-items:flex-start` is right for the desktop row (the nav must not
@@ -233,8 +249,11 @@ table.grid th.stick1{background:var(--s2);z-index:3}
   /* [132 · RA-6 V-2] A picker is as wide as its longest option unless it is told otherwise —
      the My Requests shift picker was 9px wider than a 390px screen on its own. */
   .sel,.inp{max-width:100%}
-  .usernav{width:100%;display:flex;overflow-x:auto;border-right:none;border-bottom:1px solid var(--b1);padding:6px 8px;gap:2px}
-  .usernav a{flex-shrink:0;border-left:none;border-bottom:3px solid transparent;padding:8px 10px;white-space:nowrap}
+  /* [50 · §135] "no text where you need to swipe" — the tab strip was the last thing on the phone
+     that scrolled sideways (725px of tabs in a 390px screen, "Changes" off the edge). It WRAPS now:
+     as many tabs as fit per row, the rest on the next, nothing hidden, nothing to swipe. */
+  .usernav{width:100%;display:flex;flex-wrap:wrap;overflow:visible;border-right:none;border-bottom:1px solid var(--b1);padding:6px 8px;gap:2px}
+  .usernav a{flex:1 1 30%;text-align:center;border-left:none;border-bottom:3px solid transparent;padding:8px 6px;white-space:nowrap}
   .usernav a.on{border-left:none;border-bottom-color:var(--blue)}
 }
 
@@ -334,6 +353,10 @@ table.grid th.stick1{background:var(--s2);z-index:3}
       <div id="draftNoteFull" class="monthNote" style="display:none;margin:0 0 10px;padding:9px 12px;border-radius:8px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e;font-size:12.5px;font-weight:700"></div>
       <!-- [132 · RA-6 V-2] The table's own scroll box, with the "more to the right" fade on
            the wrapper outside it — same two classes as the admin grid. -->
+      <!-- [50 · RA-6 §7b · §134] ONE page, two shapes of the same month. On a wide screen the table
+           (people × days); on a phone the SAME data as one day per row — built in the same loop, from
+           the same cells and the same chips, and swapped by a style rule, never a second page. -->
+      <div class="daylist" id="allList"></div>
       <div class="gridfade" id="allGridFade">
         <div class="gridscroll" id="allGridWrap">
           <table class="grid" id="allGrid"></table>
@@ -956,16 +979,42 @@ function renderAll(){
   for(let d=1;d<=nDays;d++){ const wd=new Date(y,m-1,d).getDay(); head+='<th data-day="'+pad(d)+'" class="'+((wd===0||wd===6)?'wkend':'')+'">'+d+'<br>'+DS[wd]+'</th>'; }
   head+='</tr>';
   let rows='';
+  const byDay=[];   // [50 · §134] the same cells, gathered per day for the phone list
+  for(let d=1;d<=nDays;d++) byDay.push({rows:[]});
   for(const u of names){
     rows+='<tr><td class="stick1" style="text-align:left;font-weight:700'+(u===me?';color:var(--blue)':'')+'">'+esc(displayName(u))+'</td>';
     for(let d=1;d<=nDays;d++){
       const dk=curYM+'-'+pad(d); const wd=new Date(y,m-1,d).getDay();
-      rows+='<td class="'+(u===me?'me ':'')+((wd===0||wd===6)?'wkend':'')+'">'+cellHtml(u,dk,vac)+'</td>';
+      const cell=cellHtml(u,dk,vac);
+      rows+='<td class="'+(u===me?'me ':'')+((wd===0||wd===6)?'wkend':'')+'">'+cell+'</td>';
+      // a person appears under a day only when the day holds something for them (a shift, OFF, VAC,
+      // or a state pill) — the phone list is what is happening, not a 37-row grid of dots
+      if(!/^<span style="color:var\(--b2\)">·<\/span>$/.test(cell)) byDay[d-1].rows.push({u:u,cell:cell.replace(/<br>/g,' ')});
     }
     rows+='</tr>';
   }
   g.innerHTML=head+rows;
   allGridFadeSync();
+  { // [50 · RA-6 §7b · §134] one day per row, from the same cells
+    const list=document.getElementById('allList');
+    if(list){
+      let h='';
+      for(let d=1;d<=nDays;d++){
+        const dk=curYM+'-'+pad(d); const wd=new Date(y,m-1,d).getDay(); const day=byDay[d-1];
+        h+='<div class="dl-day'+(dk===todayK?' today':'')+((wd===0||wd===6)?' wkend':'')+'" data-day="'+pad(d)+'">'
+          +'<div class="dl-head"><span>'+d+'</span><span class="dl-wd">'+DS[wd]+(dk===todayK?' · today':'')+'</span></div>';
+        const st=monthStateOf(dk);
+        if(st!=='published'){ h+='<div class="dl-none">'+statePill(st)+'</div>'; }   // one pill per day, not one per person
+        else if(day.rows.length){
+          // me first, then the roster order
+          const mine=day.rows.filter(r=>r.u===me), rest=day.rows.filter(r=>r.u!==me);
+          for(const r of mine.concat(rest)) h+='<div class="dl-row'+(r.u===me?' me':'')+'"><span class="dl-who">'+esc(displayName(r.u))+'</span><span class="dl-what">'+r.cell+'</span></div>';
+        } else h+='<div class="dl-none">'+(mState==='published'?'Nothing scheduled':'')+'</div>';
+        h+='</div>';
+      }
+      list.innerHTML=h; list.className='daylist m-'+mState;
+    }
+  }
 
   renderMyRequests(); renderMySwaps(); fillSwapWith(); fillReqShift(); fillReqTypes(); renderChanges(); renderLegendFams(); renderQuickView(vac); renderOpenShifts();   // [49 · R-8 / D-14] both read the catalog: which types are offered, and what a feed entry is called
 }
