@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 50;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 51;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -512,7 +512,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, collection, query, where, getDoc, setDoc, updateDoc, arrayUnion, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, collection, query, where, orderBy, limit, getDoc, setDoc, updateDoc, arrayUnion, runTransaction, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 
@@ -1547,11 +1547,26 @@ function watchChanges(){
   if(_unsubChanges){ try{_unsubChanges();}catch(_){} _unsubChanges=null; }
   myChanges=[];
   if(!me) return;
-  _unsubChanges=onSnapshot(query(changesCol,where('u','==',me)),qs=>{
+  // [51 . D-7] Ordered and capped ON THE SERVER: newest 150 only, not every entry ever
+  // written (the admin's audit log made the same move long ago, one collection over).
+  // Ordered by `at` (present on every entry since day one) rather than `atServer`, which
+  // entries before build 143 lack -- orderBy EXCLUDES documents missing its field, so
+  // ordering by atServer would silently hide the older history. The client still sorts by
+  // chgAt() after download, so display order keeps preferring the server clock.
+  // The query needs a composite index (u ASC, at DESC on `items`); until the owner creates
+  // it in the console, Firestore refuses with failed-precondition -- the error callback
+  // falls back to the old unordered read so the page keeps working either way.
+  const handle=qs=>{
     myChanges=qs.docs.map(d=>d.data()).filter(c=>c&&c.u===me).sort((a,b)=>chgAt(b)-chgAt(a));
     renderChanges();
+  };
+  _unsubChanges=onSnapshot(query(changesCol,where('u','==',me),orderBy('at','desc'),limit(150)),handle,err=>{
+    console.warn('change feed: ordered query refused (index not built yet?) -- falling back to unordered',err&&err.code);
+    try{ if(_unsubChanges){_unsubChanges();} }catch(_){}
+    _unsubChanges=onSnapshot(query(changesCol,where('u','==',me)),handle);
   });
 }
+window.watchChangesProbe=watchChanges;
 function renderChanges(){
   const el=document.getElementById('chgList'), badge=document.getElementById('chgNavBadge');
   const seen=chgSeenAt();
@@ -1569,6 +1584,7 @@ function renderChanges(){
   }).join('')+(myChanges.length>100?'<div style="font-size:11px;color:var(--t3);margin-top:6px">Showing the newest 100.</div>':'');
 }
 window.renderChangesProbe=renderChanges;
+window.myChangesCountProbe=function(){ return myChanges.length; };   // [51 . D-7] the suite proves the server-side cap
 async function finishSignIn(u){
   me=u;
   subscribeSchedule();   // [47 · Stage 5] the schedule's own documents, read with THIS sign-in's token
