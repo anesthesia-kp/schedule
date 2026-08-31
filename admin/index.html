@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 148;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 149;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -821,7 +821,8 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <div style="margin-bottom:9px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <button class="btn btn-primary" style="font-size:12px" id="feedCreateAllBtn" onclick="createAllFeedLinks()">Create links for everyone without one</button>
           <button class="btn btn-ghost" style="font-size:12px" onclick="buildAllFeeds()">Rebuild every feed</button>
-          <span class="page-sub">Feeds are rebuilt when you click; they do not refresh themselves yet.</span>
+          <span class="page-sub">Feeds refresh themselves when a published month or announced vacation changes. This button is for when you want to be certain.</span>
+          <span class="page-sub" id="feedAutoLine" style="color:var(--t3)"></span>
         </div>
         <div id="feedBody"></div>
       </div>
@@ -1714,6 +1715,7 @@ async function emitChanges(list){
   // Never throws — a feed entry must not break the write it describes (same rule as auditLog).
   for(const c of (list||[])){
     if(!c||!c.u) continue;
+    try{ if(window.feedQueueRefresh) feedQueueRefresh(c.u); }catch(_e){}   // [149 · §140] a change to a published month makes that person's feed stale
     // [143 · D-13] `at` is this browser's clock, kept for display and for older readers;
     // `atServer` is Firestore's own clock, so "unread" on the staff page never compares an
     // admin's clock with a doctor's. Written as the sentinel; the server fills it in.
@@ -1723,6 +1725,7 @@ async function emitChanges(list){
   }
 }
 window.changeTextProbe=changeText;
+window.emitChanges=emitChanges;   // [149] the auto-refresh hangs off this — the suite drives the real seam
 const AUDIT_SHOWN  = 300;                                                   // how many the page displays, NOT how many are kept
 // Sorts by time and does not collide. The id is padded so a plain string sort is a time
 // sort, which is what makes the query cheap.
@@ -9546,6 +9549,13 @@ function vacationDaysIn(u,vac,from,to){
 // subscription later, so the prefix matters only to whoever subscribed during testing.
 // `released` is passed in (never read from page state) so the suite can drive both names.
 function icsCalName(u,released){ return (released?'':'TEST · ')+'KP Anesthesia Schedule'; }
+// [149 · §140] QGenda writes "autosync from qgenda" with a date/time into each event's notes and the
+// owner asked for the same: every event says when its feed was built, in Pacific time, so a doctor
+// can see how fresh the calendar is instead of trusting it blindly.
+function feedSyncNote(now){
+  return 'Auto-sync from KP Anesthesia Schedule · '
+    +now.toLocaleString('en-US',{timeZone:'America/Los_Angeles',month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});
+}
 function buildIcs(u,monthsData,now,vac,released){
   const h=feedHorizon(now);
   const L=[];
@@ -9582,6 +9592,7 @@ function buildIcs(u,monthsData,now,vac,released){
       }
       push('SUMMARY:'+icsEsc(sh.label||id));
       if(sh.site) push('LOCATION:'+icsEsc(sh.site));
+      push('DESCRIPTION:'+icsEsc(feedSyncNote(now)));   // [149 · §140]
       push('END:VEVENT');
     }
   }
@@ -9602,6 +9613,7 @@ function buildIcs(u,monthsData,now,vac,released){
     push('DTEND;VALUE=DATE:'+icsDay(nx));
     push('SUMMARY:'+icsEsc('Schedule not yet published — check back'));
     push('TRANSP:TRANSPARENT');
+    push('DESCRIPTION:'+icsEsc(feedSyncNote(now)));   // [149 · §140]
     push('END:VEVENT');
   }
   for(const day of vacationDaysIn(u,vac||{},h.from,h.to)){
@@ -9613,6 +9625,7 @@ function buildIcs(u,monthsData,now,vac,released){
     push('DTEND;VALUE=DATE:'+icsDay(nx));          // DTEND is EXCLUSIVE for an all-day event
     push('SUMMARY:Vacation');
     push('TRANSP:TRANSPARENT');
+    push('DESCRIPTION:'+icsEsc(feedSyncNote(now)));   // [149 · §140]
     push('END:VEVENT');
   }
   push('END:VCALENDAR');
@@ -9640,37 +9653,98 @@ window.clearFeedToken=async function(u){
   await mergeFields(feedTokensRef,{[u]:deleteField()});
   auditLog('feed.token','Removed '+displayName(u)+"'s calendar link");
 };
+// [149 · §140] ONE read of the horizon's months serves EVERY feed built from it. The old shape
+// re-read ~5 month documents plus their day subcollections PER PERSON (~155 reads each, 5,000+ for
+// a department-wide rebuild); now a rebuild of any number of people costs one horizon load. FB-3 input.
+async function loadFeedMonths(now){
+  const h=feedHorizon(now);
+  const keys=[]; const cur=new Date(h.from.getFullYear(),h.from.getMonth(),1);
+  while(cur<=h.to){ keys.push(ymKey(cur)); cur.setMonth(cur.getMonth()+1); }
+  const data={}; const missing=[]; const drafts=[];
+  for(const mk of keys){
+    try{ const m=await readMonth(mk); if(m&&m.published===false){ drafts.push(mk); data[mk]=null; } else data[mk]=(m&&m.days)||{}; }
+    catch(e){ missing.push(mk); }
+  }
+  return {now:now,h:h,data:data,missing:missing,drafts:drafts};
+}
+// [149 · §140] THE FEEDS KEEP THEMSELVES FRESH (the 26 Aug parking lifted by the owner: "unpark the
+// auto-refresh"). Every write path that changes a PUBLISHED month already names who was affected —
+// emitChanges (§6) — so the auto-refresh hangs off it: affected people are collected for a moment
+// (an engine run writing thirty days becomes ONE rebuild), then their feeds are rebuilt, only for
+// people with a link, only in the browser that made the change. Announced vacation changing in the
+// auction queues whoever's days actually differ (see the vPhases listener). Draft-month edits emit
+// nothing and therefore rebuild nothing — drafts send no shifts. Quiet by design: an audit entry and
+// the status line on the Feeds page, never a toast.
+const _feedQ=new Set(); let _feedQTimer=null; let _feedAutoLast=null; let _feedAutoBusy=false;
+window.feedQueueRefresh=function(u){
+  if(!u||!names.includes(u)) return;
+  _feedQ.add(u);
+  if(_feedQTimer) clearTimeout(_feedQTimer);
+  _feedQTimer=setTimeout(()=>{ _feedQTimer=null; autoRefreshFeeds(); },2500);
+};
+async function autoRefreshFeeds(){
+  if(_feedAutoBusy){ if(!_feedQTimer) _feedQTimer=setTimeout(()=>{ _feedQTimer=null; autoRefreshFeeds(); },2500); return; }
+  const who=[..._feedQ].filter(u=>feedTokenOf(u)); _feedQ.clear();
+  if(!who.length) return;
+  _feedAutoBusy=true;
+  try{
+    const pre=await loadFeedMonths(new Date());
+    let ok=0;
+    for(const u of who){ const r=await buildFeedFor(u,pre,true); if(r) ok++; }
+    _feedAutoLast={at:Date.now(),n:ok,of:who.length,missing:pre.missing.slice()};
+    auditLog('feed.auto','Auto-refreshed '+ok+' of '+who.length+' calendar feed'+(who.length===1?'':'s'));
+    markDirty('feeds');
+  } catch(e){ console.warn('feed auto-refresh failed',e); }
+  finally{ _feedAutoBusy=false; }
+}
+window.__feedAutoProbe=()=>_feedAutoLast;
+// [149] Announced vacation: rebuild only the people whose day-set actually changed. The map is
+// diffed against the last delivery, so an auction write that moves nobody's vacation writes nothing.
+let _feedVacSnap=null;
+window.feedVacMaybeRefresh=function(){
+  try{
+    const map=vacationDays();
+    if(_feedVacSnap!==null){
+      for(const u of names){
+        if(!feedTokenOf(u)) continue;
+        const a=Object.keys(_feedVacSnap).filter(k=>k.startsWith(u+'|')).sort().join(',');
+        const b=Object.keys(map).filter(k=>k.startsWith(u+'|')).sort().join(',');
+        if(a!==b) feedQueueRefresh(u);
+      }
+    }
+    _feedVacSnap=map;
+  }catch(e){ console.warn('feed vacation diff failed',e); }
+};
+
 // ⚠ REFUSES TO WRITE A FEED IT CANNOT BUILD IN FULL. If a month in the horizon could not be
 // read, the events in it would be MISSING from the file — and a calendar app treats a missing
 // event as a DELETED one. A short feed does not look wrong to the doctor; it looks like a day
 // off. So a partial read aborts rather than publishing.
-window.buildFeedFor=async function(u){
+window.buildFeedFor=async function(u,pre,quiet){
   const tok=feedTokenOf(u);
-  if(!tok){ schedToast('Make a link for '+displayName(u)+' first.','err'); return null; }
-  const now=new Date(), h=feedHorizon(now);
-  const keys=[]; const cur=new Date(h.from.getFullYear(),h.from.getMonth(),1);
-  while(cur<=h.to){ keys.push(ymKey(cur)); cur.setMonth(cur.getMonth()+1); }
+  if(!tok){ if(!quiet) schedToast('Make a link for '+displayName(u)+' first.','err'); return null; }
+  const now=pre?pre.now:new Date(), h=pre?pre.h:feedHorizon(now);
   // [141 · RA-6 D-6] readMonth has said `published` since 136 and this ignored it, so a month still
   // under construction — always inside a 120-day horizon — went out to the doctor's calendar as
   // if final, and every edit until publish day silently re-arranged their phone. A DRAFT month
   // now contributes NO shifts (null, not {}), and buildIcs paints one all-day, transparent
   // "not yet published" marker across its days instead — the calendar twin of the staff page's
   // "Not published" pill (Stage 3): a blank must say why, because a blank reads as a day off.
-  const data={}; const missing=[]; const drafts=[];
-  for(const mk of keys){
-    try{ const m=await readMonth(mk); if(m&&m.published===false){ drafts.push(mk); data[mk]=null; } else data[mk]=(m&&m.days)||{}; }
-    catch(e){ missing.push(mk); }
-  }
+  const loaded=pre||await loadFeedMonths(now);   // [149] one horizon load serves every caller
+  const data=loaded.data, missing=loaded.missing, drafts=loaded.drafts;
   if(missing.length){
-    schedToast('Not published: '+missing.length+' month'+(missing.length===1?'':'s')
-      +' could not be read ('+missing.join(', ')+'). A feed missing days reads as time off.','err');
+    const msg='Not published: '+missing.length+' month'+(missing.length===1?'':'s')
+      +' could not be read ('+missing.join(', ')+'). A feed missing days reads as time off.';
+    if(quiet) console.warn('feed auto-refresh: '+msg); else schedToast(msg,'err');
     return null;
   }
   const ics=buildIcs(u,data,now,vacationDays(),feedReleased);
   await setDoc(feedDocRef(tok),{ics:ics,at:Date.now(),for:u,
     by:_currentAdminEmail||'unknown',from:dKey(h.from),to:dKey(h.to),drafts:drafts});
-  auditLog('feed.build','Rebuilt '+displayName(u)+"'s calendar feed"+(drafts.length?' — '+drafts.join(', ')+' not yet published, marked as such':''));
-  if(drafts.length) schedToast('Feed rebuilt — '+drafts.length+' month'+(drafts.length===1?'':'s')+' ('+drafts.join(', ')+') not yet published: marked in the calendar, no shifts sent','ok');
+  if(!quiet){
+    auditLog('feed.build','Rebuilt '+displayName(u)+"'s calendar feed"+(drafts.length?' — '+drafts.join(', ')+' not yet published, marked as such':''));
+    if(drafts.length) schedToast('Feed rebuilt — '+drafts.length+' month'+(drafts.length===1?'':'s')+' ('+drafts.join(', ')+') not yet published: marked in the calendar, no shifts sent','ok');
+  }
   return ics;
 };
 // [148] `quiet` skips the question — used when the caller has just asked its own (bulk create,
@@ -9681,7 +9755,8 @@ window.buildAllFeeds=async function(quiet){
   if(!quiet && !await schedConfirm({title:'Rebuild the calendar feed for '+who.length+' '+(who.length===1?'person':'people')+'?', ok:'Rebuild',
     html:dlgText('Every phone subscribed to one of these links picks up the new calendar on its next refresh.')})) return null;
   let ok=0;
-  for(const u of who){ const r=await buildFeedFor(u); if(r) ok++; }
+  const pre=await loadFeedMonths(new Date());   // [149] one horizon load for the whole department
+  for(const u of who){ const r=await buildFeedFor(u,pre,quiet); if(r) ok++; }
   if(!quiet) schedToast('Rebuilt '+ok+' of '+who.length+'.', ok===who.length?'ok':'err');
   renderFeeds();
   return {ok:ok,of:who.length};
@@ -9738,6 +9813,11 @@ function renderFeedGate(){
 }
 function renderFeeds(){
   renderFeedGate();   // [148]
+  { const el=document.getElementById('feedAutoLine');   // [149]
+    if(el) el.textContent=_feedAutoLast?('Last auto-refresh: '
+      +new Date(_feedAutoLast.at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+      +' · '+_feedAutoLast.n+' feed'+(_feedAutoLast.n===1?'':'s')
+      +(_feedAutoLast.n<_feedAutoLast.of?' ('+(_feedAutoLast.of-_feedAutoLast.n)+' could not be built)':'')):''; }
   const host=document.getElementById('feedBody');
   if(!host) return;
   if(!feedTokensLoaded){ host.innerHTML='<div style="font-size:12px;color:var(--t3)">Loading…</div>'; return; }
@@ -10766,7 +10846,7 @@ authReady.then(()=>{
   onSnapshot(emailsRef,snap=>{ emailsData=snap.exists()?snap.data():{}; emailsLoaded=true; renderAll(); });
   onSnapshot(loginEmailsRef,snap=>{ loginEmailsData=snap.exists()?snap.data():{}; loginEmailsLoaded=true; markDirty('users'); });
   onSnapshot(adminAccessRef,snap=>{ adminAccessEmails=snap.exists()?(snap.data().emails||[]).map(x=>String(x).toLowerCase()):[]; markDirty('adminAccess'); });
-  onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); _enginePlanStale('Vacation changed since this preview'); }, e=>vacDenied('phases',e));   // [129 · E-7] [134 · B-4]
+  onSnapshot(vPhasesRef,snap=>{ vPhases=snap.exists()?snap.data():{}; renderAll(); _enginePlanStale('Vacation changed since this preview'); try{ if(window.feedVacMaybeRefresh) feedVacMaybeRefresh(); }catch(_e){} }, e=>vacDenied('phases',e));   // [129 · E-7] [134 · B-4] [149 · §140]
   // [138 · §127] the live approvals document is NOT read: only announced results reach this site.
   onSnapshot(catalogRef,async snap=>{
     if(!snap.exists()||!snap.data().shifts||!Object.keys(snap.data().shifts).length){
