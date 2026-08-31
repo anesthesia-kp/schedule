@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 149;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 150;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -821,6 +821,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
         <div style="margin-bottom:9px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <button class="btn btn-primary" style="font-size:12px" id="feedCreateAllBtn" onclick="createAllFeedLinks()">Create links for everyone without one</button>
           <button class="btn btn-ghost" style="font-size:12px" onclick="buildAllFeeds()">Rebuild every feed</button>
+          <button class="btn btn-ghost" style="font-size:12px" onclick="emailAllFeedLinks()">✉️ E-mail everyone their link</button>
           <span class="page-sub">Feeds refresh themselves when a published month or announced vacation changes. This button is for when you want to be certain.</span>
           <span class="page-sub" id="feedAutoLine" style="color:var(--t3)"></span>
         </div>
@@ -1441,7 +1442,7 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, collection, query, orderBy, limit, setDoc, updateDoc, deleteDoc, deleteField, getDoc, getDocs, writeBatch, arrayUnion, arrayRemove, runTransaction, serverTimestamp, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, doc, collection, query, orderBy, limit, setDoc, updateDoc, deleteDoc, deleteField, getDoc, getDocs, writeBatch, arrayUnion, arrayRemove, runTransaction, serverTimestamp, increment, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 
@@ -1489,6 +1490,8 @@ const printCfgRef     = doc(db,"dailysched","printConfig"); // [107] which shift
 const callArchiveRef  = doc(db,"dailysched","callArchive");  // [108] sealed per-year call totals
 const feedTokensRef   = doc(db,"dailysched","feedTokens");   // [110] {initials:token} — admin-only to read AND write since §136 (30 Aug)
 const feedConfigRef   = doc(db,"dailysched","feedConfig");   // [148 · §137] {released:bool} — the release gate (§54) as a stored switch
+const feedMailRef     = doc(db,"dailysched","feedMail");     // [150 · §137/§139] {initials:{at,to:[addresses]}} — when each person was e-mailed their link
+const schedMailStatsRef=doc(db,"dailysched","mailStats");    // [150] {YYYY-MM: count} — THIS SITE's sends. Never the auction's vacations/mailStats (§2 — the isolation guard forbids it); the EmailJS allowance itself is shared, so this is the schedule's share of it
 // [110] The rendered calendar itself: dailysched/feeds/items/{token}. One document per
 // doctor, holding finished .ics text, so the hosted endpoint is a lookup and nothing else.
 const rulesRef        = doc(db,"dailysched","rules");    // [105] Stage 5 rule instances
@@ -1808,6 +1811,7 @@ let printCfg={}, printCfgLoaded=false; // [107] printable sheets — see §S18
 let callArchive={}, callArchiveLoaded=false; // [108] across-years — see §S19
 let feedTokens={}, feedTokensLoaded=false;   // [110] calendar feed — see §S20
 let feedReleased=false, feedConfigLoaded=false;   // [148] shut until the owner opens it; every calendar is named TEST · … while shut
+let feedMail={}, feedMailLoaded=false;            // [150] who has been e-mailed their link, and when
 let groupsLoaded=false, membersLoaded=false, categoriesLoaded=false;
 // Stage 4 part A is INERT BY DESIGN (§56): groups can be created, staffed and looked at, and
 // NOTHING reads them to decide eligibility. allowed() is untouched. The cutover switch that
@@ -9781,6 +9785,116 @@ window.createAllFeedLinks=async function(){
   schedToast('Created '+n+' '+(n===1?'link':'links')+' and built '+(t?t.ok+' of '+t.of:'0')+' feeds.', (t&&t.ok===t.of)?'ok':'err');
   renderFeeds();
 };
+// ── [150 · §137 A / §139] THE LINK E-MAIL ─────────────────────────────────────────────────────
+// One message per doctor: their private address as a webcal:// link AND a copy-paste address
+// (mail apps do not reliably make webcal:// tappable — the paste path always works), then the
+// §139 instructions: iPhone in three steps; Android honestly (done once at calendar.google.com
+// on a computer, appears on the phone, Google refreshes on its own schedule); Outlook one line.
+// Sent to the Google sign-in address, plus the secondary when one is set — the auction's rule.
+//
+// THE MAILER LOADS LAZILY, at send time. A static <script> tag would fail to load in every
+// browser suite's local server and turn their "no page errors" assertions red; production
+// only pays for it when a send actually happens. Same service and template as the auction
+// (§2 — ONE EmailJS allowance): the template renders a free-text body. ⚠ THE SUBJECT LINE
+// LIVES IN THE EMAILJS TEMPLATE, not here — checked nowhere in code. Before the first real
+// send, send yourself one and read the subject; if it says something auction-ish, a second
+// template is two minutes in the EmailJS console and ONE constant changes here.
+const FEED_MAIL_SERVICE='service_wpprivw', FEED_MAIL_TEMPLATE='template_rss3fn3';
+let _mailerP=null;
+function loadMailer(){
+  if(window.emailjs) return Promise.resolve(window.emailjs);
+  if(_mailerP) return _mailerP;
+  _mailerP=new Promise((res,rej)=>{
+    const t=setTimeout(()=>rej(new Error('mailer load timed out')),15000);
+    const el=document.createElement('script');
+    el.src='https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js';
+    el.onload=()=>{ clearTimeout(t); try{ emailjs.init('M5DaguiYyyyR3VG6t'); }catch(_e){} res(window.emailjs); };
+    el.onerror=()=>{ clearTimeout(t); rej(new Error('mailer failed to load (ad-blocker, proxy, or offline)')); };
+    document.head.appendChild(el);
+  }).catch(e=>{ _mailerP=null; throw e; });
+  return _mailerP;
+}
+function feedMailAddresses(u){
+  const out=[]; const a=(loginEmailsData||{})[u], b=(emailsData||{})[u];
+  if(a&&/@/.test(a)) out.push(String(a).trim());
+  if(b&&/@/.test(b)&&String(b).trim().toLowerCase()!==String(a||'').trim().toLowerCase()) out.push(String(b).trim());
+  return out;
+}
+function feedMailBody(u){
+  const link=FEED_URL_BASE+feedTokenOf(u);
+  const webcal=link.replace(/^https:\/\//,'webcal://');
+  return 'Hello '+displayName(u)+',\n\n'
+    +'This is your personal calendar link for the KP Anesthesia Schedule. Add it once and your shifts and approved vacation appear in your phone\'s calendar and keep themselves up to date.\n\n'
+    +'YOUR LINK (private — do not forward; anyone with it can read your schedule):\n'
+    +webcal+'\n\n'
+    +'If tapping the link does not open your calendar, copy this address instead:\n'
+    +link+'\n\n'
+    +'IPHONE\n'
+    +'1. Tap the link above — or go to Settings > Calendar > Accounts > Add Account > Other > Add Subscribed Calendar.\n'
+    +'2. Paste the address and tap Next, then Save.\n'
+    +'3. It appears in your Calendar app as "KP Anesthesia Schedule".\n\n'
+    +'ANDROID / GOOGLE CALENDAR\n'
+    +'1. On a computer, open calendar.google.com and sign in with the Google account your phone uses.\n'
+    +'2. On the left, next to "Other calendars", click + and choose "From URL".\n'
+    +'3. Paste the address and click "Add calendar". It then appears on your phone automatically.\n'
+    +'Note: Google refreshes subscribed calendars on its own schedule — changes can take several hours to appear.\n\n'
+    +'OUTLOOK\n'
+    +'Calendar > Add calendar > Subscribe from web, then paste the address.\n\n'
+    +'Questions or a link that does not work: reply to this e-mail.';
+}
+async function sendFeedMailTo(u){
+  const addrs=feedMailAddresses(u);
+  if(!feedTokenOf(u)||!addrs.length) return {u:u,ok:false,why:!feedTokenOf(u)?'no link':'no e-mail address'};
+  const mailer=await loadMailer();
+  const body=feedMailBody(u);
+  const sent=[];
+  for(const to of addrs){
+    await mailer.send(FEED_MAIL_SERVICE,FEED_MAIL_TEMPLATE,{to_name:displayName(u),to_email:to,changes:body});
+    sent.push(to);
+    setDoc(schedMailStatsRef,{[ymKey(new Date())]:increment(1)},{merge:true}).catch(()=>{});
+  }
+  await mergeFields(feedMailRef,{[u]:{at:Date.now(),to:sent}});
+  return {u:u,ok:true,to:sent};
+}
+window.emailFeedLink=async function(u){
+  if(!feedTokenOf(u)){ schedToast('Make a link for '+displayName(u)+' first.','err'); return; }
+  const addrs=feedMailAddresses(u);
+  if(!addrs.length){ schedToast(displayName(u)+' has no e-mail address on the Users page.','err'); return; }
+  if(!await schedConfirm({title:'E-mail '+displayName(u)+' their calendar link?', ok:'Send it',
+    html:dlgText('One message to: '+addrs.join(', ')+'\n\nIt carries their private link and the phone instructions.'
+      +(feedReleased?'':'\n\nThe release gate is SHUT — this is for testing. The calendar they subscribe to is named "TEST · KP Anesthesia Schedule".'))})) return;
+  try{
+    const r=await sendFeedMailTo(u);
+    if(r.ok){ auditLog('feed.mail','E-mailed '+displayName(u)+' their calendar link ('+r.to.join(', ')+')'); schedToast('Sent to '+r.to.join(', ')+'.','ok'); }
+    else schedToast('Not sent — '+r.why+'.','err');
+  }catch(e){ schedToast('Not sent — '+((e&&e.message)||'the mailer refused').slice(0,120),'err'); }
+  renderFeeds();
+};
+window.emailAllFeedLinks=async function(){
+  // [150] The BULK send is behind §54's gate — the owner's boundary: no doctor is told until he opens it.
+  if(!feedReleased){
+    await schedConfirm({title:'The release gate is shut.', ok:'OK', cancel:'Close',
+      html:dlgText('E-mailing everyone is how doctors find out this exists — and your ruling is that nobody is told until the schedule is complete.\n\nOpen the release gate above first. (You can still e-mail yourself a single test with a row\'s E-mail button.)')});
+    return;
+  }
+  const who=names.filter(u=>feedTokenOf(u)&&feedMailAddresses(u).length);
+  const skipped=names.filter(u=>feedTokenOf(u)&&!feedMailAddresses(u).length);
+  if(!who.length){ schedToast('Nobody has both a link and an e-mail address.','err'); return; }
+  const nMsg=who.reduce((n,u)=>n+feedMailAddresses(u).length,0);
+  if(!await schedConfirm({title:'E-mail '+who.length+' '+(who.length===1?'person':'people')+' their calendar links?', ok:'Send '+nMsg+' messages',
+    html:dlgText(nMsg+' messages go out (sign-in address, plus the secondary where one is set). This draws on the same monthly EmailJS allowance as the auction\'s alerts.'
+      +(skipped.length?'\n\nNo e-mail address, so skipped: '+skipped.map(displayName).join(', '):'')
+      +'\n\n'+who.map(displayName).join(', '))})) return;
+  let ok=0; const failed=[];
+  for(const u of who){
+    try{ const r=await sendFeedMailTo(u); if(r.ok) ok++; else failed.push(displayName(u)); }
+    catch(e){ failed.push(displayName(u)); }
+  }
+  auditLog('feed.mail','E-mailed calendar links: '+ok+' of '+who.length+' sent'+(failed.length?' — failed: '+failed.join(', '):''));
+  schedToast(ok+' of '+who.length+' sent.'+(failed.length?' Failed: '+failed.slice(0,5).join(', ')+(failed.length>5?'…':''):''), failed.length?'err':'ok');
+  renderFeeds();
+};
+
 // [148 · §137] The release gate (§54) as a switch. Flipping it renames every calendar (TEST · on or
 // off), so every feed is rebuilt in the same action and subscribed phones pick the name up on
 // their next refresh. Nothing is sent to anyone here — that is a later build, and it reads this switch.
@@ -9826,17 +9940,20 @@ function renderFeeds(){
   const sum=document.getElementById('sectsum_feedlist');
   if(sum) sum.textContent=sectOpen.feedlist?'':(withTok+' of '+names.length+' have a link');
   host.innerHTML='<table class="grid" style="width:100%"><thead><tr>'
-    +'<th style="text-align:left">Person</th><th>Link</th><th style="text-align:left">Subscribe address</th><th></th></tr></thead><tbody>'
+    +'<th style="text-align:left">Person</th><th>Link</th><th style="text-align:left">Subscribe address</th><th>E-mailed</th><th></th></tr></thead><tbody>'
     +names.map(u=>{
       const tok=feedTokenOf(u);
+      const fm=(feedMail||{})[u];   // [150] when this person was e-mailed their link
       return '<tr><td style="text-align:left;font-weight:700">'+esc(displayName(u))+'</td>'
         +'<td>'+(tok?'<span style="color:var(--green);font-weight:700">yes</span>':'<span style="color:var(--t3)">—</span>')+'</td>'
         +'<td style="text-align:left" class="mono" style="font-size:10px">'
           +(tok?('<span style="font-size:10px;color:var(--t2)">'+esc(FEED_URL_BASE+tok)+'</span>')
                :'<span style="color:var(--t3);font-size:11px">no link yet</span>')+'</td>'
+        +'<td>'+(fm&&fm.at?('<span style="font-size:10.5px;color:var(--t2)" title="'+esc((fm.to||[]).join(', '))+'">'+new Date(fm.at).toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</span>'):'<span style="color:var(--t3)">—</span>')+'</td>'
         +'<td style="white-space:nowrap">'
           +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="makeFeedToken('+jsArg(u)+')">'+(tok?'Replace':'Create')+'</button>'
           +(tok?('<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="buildFeedFor('+jsArg(u)+').then(r=>{ if(r) schedToast(\'Feed rebuilt.\',\'ok\'); })">Build</button>'
+                +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px" onclick="emailFeedLink('+jsArg(u)+')">E-mail</button>'
                 +'<button class="btn btn-ghost" style="font-size:10.5px;padding:1px 7px;color:var(--red)" onclick="clearFeedToken('+jsArg(u)+')">Remove</button>'):'')
         +'</td></tr>';
     }).join('')+'</tbody></table>';
@@ -10962,6 +11079,7 @@ authReady.then(()=>{
   onSnapshot(callArchiveRef,snap=>{ callArchive=snap.exists()?snap.data():{}; callArchiveLoaded=true; markDirty('stats'); });
   onSnapshot(feedTokensRef,snap=>{ feedTokens=snap.exists()?snap.data():{}; feedTokensLoaded=true; markDirty('feeds'); });
   onSnapshot(feedConfigRef,snap=>{ feedReleased=!!(snap.exists()&&snap.data().released); feedConfigLoaded=true; markDirty('feeds'); });   // [148] one small document; FB-3 input
+  onSnapshot(feedMailRef,snap=>{ feedMail=snap.exists()?snap.data():{}; feedMailLoaded=true; markDirty('feeds'); });   // [150] one small document; FB-3 input
   onSnapshot(groupsRef,snap=>{ groupsData=snap.exists()?snap.data():{}; groupsLoaded=true; markDirty('groups','grid','reports','rules'); _enginePlanStale('Groups or categories changed since this preview'); });   // [129 · E-7]
   onSnapshot(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; membersLoaded=true; markDirty('groups','grid','reports','rules'); _enginePlanStale('Groups or categories changed since this preview'); });   // [129 · E-7]
   onSnapshot(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; categoriesLoaded=true; markDirty('groups','grid','reports','rules'); _enginePlanStale('Groups or categories changed since this preview'); });   // [129 · E-7]
