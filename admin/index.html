@@ -10,7 +10,7 @@
   // ever, per browser tab — see index.html's matching comment for why this
   // guard exists (it fixes a real reload-loop incident on the user site).
   var PAGE = 'admin';
-  var BUILD = 147;    // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 148;    // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('../versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -810,21 +810,19 @@ table.grid td.srow1{text-align:left;font-weight:700;max-width:190px;overflow:hid
     <div class="page-title" style="font-size:16px;margin-bottom:4px">Calendar Feeds</div>
     <div class="page-sub" style="margin-bottom:12px">A private link per doctor that their phone's calendar subscribes to once, after which their own shifts and approved vacation appear alongside everything else in their life, and keep up to date on their own. Nobody sees anyone else's schedule.</div>
 
-    <div class="card" style="border:2px solid #fca5a5;background:#fef2f2">
-      <div style="font-size:12.5px;color:#7f1d1d;line-height:1.6">
-        <b>⛔ NOT FOR DOCTORS YET — two things must happen first, and neither is on this page.</b><br>
-        <b>1 · The address below does not answer yet.</b> A calendar subscription needs something live to answer it, and GitHub Pages only serves files. The small hosted endpoint that returns these feeds is not deployed.<br>
-        <b>2 · The Stage 5 security rules must be published.</b> Until then the link list, the calendars themselves and every other schedule document are readable with no sign-in at all, and a signed-in doctor can overwrite a colleague's calendar. The rules file is written and waits on your RA-2 run and console paste (DECISIONS §129).<br>
-        <b>And the release gate itself is still shut</b> — your ruling: build it, but no doctor is told until the schedule is complete.
-      </div>
-    </div>
+    <!-- [148 · §137] The status card is LIVE, not prose: the two preconditions are done (the endpoint
+         answers since 30 Aug; the §136 rules are published) and the release gate is a stored switch. -->
+    <div class="card" id="feedGateCard"></div>
 
     <div class="card">
       <div class="card-title secth" onclick="toggleSect('feedlist')" title="Click to open or close this section"><span class="secta" id="secta_feedlist">&#9656;</span>Who has a link <span id="sectsum_feedlist" style="font-weight:400;font-size:11px;color:var(--t3);text-transform:none;letter-spacing:0"></span></div>
       <div id="sect_feedlist" style="display:none">
         <div class="page-sub" style="margin-bottom:8px">A link is a long random string that stands in for signing in, because calendar apps cannot sign in. <b>Replacing someone's link breaks whatever they already subscribed to</b> — which is how you revoke one that has leaked, and why it asks first.</div>
-        <div style="margin-bottom:9px"><button class="btn btn-primary" style="font-size:12px" onclick="buildAllFeeds()">Rebuild every feed</button>
-        <span class="page-sub" style="margin-left:8px">Feeds do not refresh themselves yet — that is the next build.</span></div>
+        <div style="margin-bottom:9px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-primary" style="font-size:12px" id="feedCreateAllBtn" onclick="createAllFeedLinks()">Create links for everyone without one</button>
+          <button class="btn btn-ghost" style="font-size:12px" onclick="buildAllFeeds()">Rebuild every feed</button>
+          <span class="page-sub">Feeds are rebuilt when you click; they do not refresh themselves yet.</span>
+        </div>
         <div id="feedBody"></div>
       </div>
     </div>
@@ -1488,7 +1486,8 @@ const catalogRef  = doc(db,"dailysched","shiftCatalog");
 const quotasRef       = doc(db,"dailysched","quotas");
 const printCfgRef     = doc(db,"dailysched","printConfig"); // [107] which shifts appear on a sheet
 const callArchiveRef  = doc(db,"dailysched","callArchive");  // [108] sealed per-year call totals
-const feedTokensRef   = doc(db,"dailysched","feedTokens");   // [110] {initials:token} — MUST become admin-only in rules
+const feedTokensRef   = doc(db,"dailysched","feedTokens");   // [110] {initials:token} — admin-only to read AND write since §136 (30 Aug)
+const feedConfigRef   = doc(db,"dailysched","feedConfig");   // [148 · §137] {released:bool} — the release gate (§54) as a stored switch
 // [110] The rendered calendar itself: dailysched/feeds/items/{token}. One document per
 // doctor, holding finished .ics text, so the hosted endpoint is a lookup and nothing else.
 const rulesRef        = doc(db,"dailysched","rules");    // [105] Stage 5 rule instances
@@ -1805,6 +1804,7 @@ let rtData={}, rtLoaded=false;         // [125] request types — {id:{label,kin
 let printCfg={}, printCfgLoaded=false; // [107] printable sheets — see §S18
 let callArchive={}, callArchiveLoaded=false; // [108] across-years — see §S19
 let feedTokens={}, feedTokensLoaded=false;   // [110] calendar feed — see §S20
+let feedReleased=false, feedConfigLoaded=false;   // [148] shut until the owner opens it; every calendar is named TEST · … while shut
 let groupsLoaded=false, membersLoaded=false, categoriesLoaded=false;
 // Stage 4 part A is INERT BY DESIGN (§56): groups can be created, staffed and looked at, and
 // NOTHING reads them to decide eligibility. allowed() is untouched. The cutover switch that
@@ -9460,16 +9460,13 @@ window.renderStatsYears=renderStatsYears;
 // nothing in the endpoint to get wrong" — the only version of this worth putting on the project
 // that runs the live auction (§2). It also makes a poll ONE document read instead of ~120.
 //
-// ⛔ AND THE BLOCKER THAT GATES RELEASE, NOT THIS BUILD: `dailysched/feedTokens` MUST become
-// admin-only in `firestore.rules`. Under the dailysched catch-all any registered user can read
-// it today — and a readable token list means any doctor can read any other doctor's calendar.
-// The rules live in the AUCTION repo and are CLOSED by §92 without a specific decision. Nothing
-// here works around that; it is recorded in TODO as a release blocker.
+// [148] Both preconditions are DONE (30 Aug 2026): the endpoint is deployed (functions/DEPLOY.md)
+// and the §136 rules make feedTokens admin-only to read and feeds/items readable by no client.
+// What remains shut is the RELEASE GATE (§54) — a stored switch, dailysched/feedConfig, below.
 // ══════════════════════════════════════════════════════════════════════════════
 const ICS_PRODID='-//KP East Bay Anesthesia//Daily Schedule//EN';
-// [110] Where the hosted endpoint WILL live. It is not deployed, so this address does not
-// answer yet; the page says so in red rather than handing out a link that silently fails.
-// When the endpoint exists this is the one line that changes.
+// [110] Where the hosted endpoint lives — deployed 30 Aug 2026 (functions/DEPLOY.md). If it is
+// ever redeployed elsewhere this is the one line that changes.
 const FEED_URL_BASE='https://us-central1-vacation-25e8e.cloudfunctions.net/ics/';
 const FEED_BACK_DAYS=30, FEED_FWD_DAYS=120;
 
@@ -9543,7 +9540,13 @@ function vacationDaysIn(u,vac,from,to){
 }
 // The calendar text for ONE person. Pure apart from the catalog it reads, so the suite can
 // drive it with a hand-built month and check the bytes.
-function buildIcs(u,monthsData,now,vac){
+// [148 · §137/§138] The calendar names itself on every phone: "KP Anesthesia Schedule" (his words), and
+// "TEST · " in front of it while the release gate is shut, so a testing feed is never mistaken for the
+// real one. A calendar app reads the name when the person SUBSCRIBES; Apple's does not rename an existing
+// subscription later, so the prefix matters only to whoever subscribed during testing.
+// `released` is passed in (never read from page state) so the suite can drive both names.
+function icsCalName(u,released){ return (released?'':'TEST · ')+'KP Anesthesia Schedule'; }
+function buildIcs(u,monthsData,now,vac,released){
   const h=feedHorizon(now);
   const L=[];
   const push=x=>L.push(icsFold(x));
@@ -9552,7 +9555,7 @@ function buildIcs(u,monthsData,now,vac){
   push('PRODID:'+ICS_PRODID);
   push('CALSCALE:GREGORIAN');
   push('METHOD:PUBLISH');
-  push('X-WR-CALNAME:'+icsEsc(displayName(u)+' — schedule'));
+  push('X-WR-CALNAME:'+icsEsc(icsCalName(u,released)));
   const stamp=icsUtc(now);
   for(let d=new Date(h.from); d<=h.to; d.setDate(d.getDate()+1)){
     const days=monthsData[ymKey(d)];
@@ -9623,9 +9626,8 @@ window.feedHorizonProbe=feedHorizon;
 window.makeFeedToken=async function(u){
   if(!names.includes(u)) return;
   const had=feedTokenOf(u);
-  if(had && !confirm('Replace '+displayName(u)+"'s calendar link?\n\n"
-    +'The old link stops working immediately. If they have already subscribed, their calendar '
-    +'will quietly stop updating until they subscribe again with the new one.')) return;
+  if(had && !await schedConfirm({title:'Replace '+displayName(u)+"'s calendar link?", ok:'Replace it', danger:true,
+    html:dlgText('The old link stops working immediately. If they have already subscribed, their calendar will quietly stop updating until they subscribe again with the new one.')})) return;   // [148] in-page, like 147
   const tok=newFeedToken();
   await mergeFields(feedTokensRef,{[u]:tok});
   auditLog('feed.token',(had?'Replaced ':'Created ')+displayName(u)+"'s calendar link");
@@ -9633,7 +9635,8 @@ window.makeFeedToken=async function(u){
 };
 window.clearFeedToken=async function(u){
   if(!feedTokenOf(u)) return;
-  if(!confirm('Remove '+displayName(u)+"'s calendar link?\n\nAnything subscribed to it stops updating.")) return;
+  if(!await schedConfirm({title:'Remove '+displayName(u)+"'s calendar link?", ok:'Remove it', danger:true,
+    html:dlgText('Anything subscribed to it stops updating.')})) return;   // [148] in-page, like 147
   await mergeFields(feedTokensRef,{[u]:deleteField()});
   auditLog('feed.token','Removed '+displayName(u)+"'s calendar link");
 };
@@ -9663,23 +9666,78 @@ window.buildFeedFor=async function(u){
       +' could not be read ('+missing.join(', ')+'). A feed missing days reads as time off.','err');
     return null;
   }
-  const ics=buildIcs(u,data,now,vacationDays());
+  const ics=buildIcs(u,data,now,vacationDays(),feedReleased);
   await setDoc(feedDocRef(tok),{ics:ics,at:Date.now(),for:u,
     by:_currentAdminEmail||'unknown',from:dKey(h.from),to:dKey(h.to),drafts:drafts});
   auditLog('feed.build','Rebuilt '+displayName(u)+"'s calendar feed"+(drafts.length?' — '+drafts.join(', ')+' not yet published, marked as such':''));
   if(drafts.length) schedToast('Feed rebuilt — '+drafts.length+' month'+(drafts.length===1?'':'s')+' ('+drafts.join(', ')+') not yet published: marked in the calendar, no shifts sent','ok');
   return ics;
 };
-window.buildAllFeeds=async function(){
+// [148] `quiet` skips the question — used when the caller has just asked its own (bulk create,
+// the gate flip). Returns {ok, of} so the caller can report the tally.
+window.buildAllFeeds=async function(quiet){
   const who=names.filter(u=>feedTokenOf(u));
-  if(!who.length){ schedToast('Nobody has a calendar link yet.','err'); return; }
-  if(!confirm('Rebuild the calendar feed for '+who.length+' '+(who.length===1?'person':'people')+'?')) return;
+  if(!who.length){ schedToast('Nobody has a calendar link yet.','err'); return {ok:0,of:0}; }
+  if(!quiet && !await schedConfirm({title:'Rebuild the calendar feed for '+who.length+' '+(who.length===1?'person':'people')+'?', ok:'Rebuild',
+    html:dlgText('Every phone subscribed to one of these links picks up the new calendar on its next refresh.')})) return null;
   let ok=0;
   for(const u of who){ const r=await buildFeedFor(u); if(r) ok++; }
-  schedToast('Rebuilt '+ok+' of '+who.length+'.', ok===who.length?'ok':'err');
+  if(!quiet) schedToast('Rebuilt '+ok+' of '+who.length+'.', ok===who.length?'ok':'err');
+  renderFeeds();
+  return {ok:ok,of:who.length};
+};
+// [148 · owner, 30 Aug: "why create each docs 1 at a time?"] Creating a link breaks nothing — the
+// per-person caution belongs to REPLACE — so everyone without one gets one in a single write, and
+// every feed is built in the same go. Replace and Remove stay per-person and still ask.
+window.createAllFeedLinks=async function(){
+  if(!feedTokensLoaded){ schedToast('Still loading the link list.','err'); return; }
+  const missing=names.filter(u=>!feedTokenOf(u));
+  if(!missing.length){ schedToast('Everyone already has a link.','ok'); return; }
+  const n=missing.length;
+  if(!await schedConfirm({title:'Create calendar links for '+n+' '+(n===1?'person':'people')+'?', ok:'Create '+n+(n===1?' link':' links'),
+    html:dlgText('Everyone without a link gets one, and every feed is built right after. Nobody who already has a link is touched — their subscriptions keep working.'
+      +(feedReleased?'':'\n\nThe release gate is shut, so each calendar is named "TEST · KP Anesthesia Schedule" until you open it.')
+      +'\n\n'+missing.map(displayName).join(', '))})) return;
+  const upd={}; for(const u of missing) upd[u]=newFeedToken();
+  await mergeFields(feedTokensRef,upd);
+  for(const u of missing) feedTokens[u]=upd[u];   // the listener will confirm; do not wait on it to build
+  auditLog('feed.token','Created calendar links for '+n+' '+(n===1?'person':'people')+': '+missing.join(', '));
+  const t=await buildAllFeeds(true);
+  schedToast('Created '+n+' '+(n===1?'link':'links')+' and built '+(t?t.ok+' of '+t.of:'0')+' feeds.', (t&&t.ok===t.of)?'ok':'err');
   renderFeeds();
 };
+// [148 · §137] The release gate (§54) as a switch. Flipping it renames every calendar (TEST · on or
+// off), so every feed is rebuilt in the same action and subscribed phones pick the name up on
+// their next refresh. Nothing is sent to anyone here — that is a later build, and it reads this switch.
+window.setFeedReleased=async function(v){
+  v=!!v;
+  if(v===feedReleased) return;
+  const withTok=names.filter(u=>feedTokenOf(u)).length;
+  const okTxt=v?'Open the gate':'Close the gate';
+  if(!await schedConfirm({title:v?'Open the calendar release gate?':'Close the calendar release gate?', ok:okTxt, danger:v,
+    html:dlgText((v?'Every feed is rebuilt named "KP Anesthesia Schedule", without the "TEST · " prefix. Nothing is sent to anyone by this — it only says the feeds are real.'
+                   :'Every feed is rebuilt named "TEST · KP Anesthesia Schedule" again. Nothing is sent to anyone by this.')
+      +'\n\n'+(withTok?withTok+' existing '+(withTok===1?'feed is':'feeds are')+' rebuilt now. A phone that subscribed BEFORE this keeps the old name — a calendar app reads the name when it subscribes, so anyone subscribed during testing removes and re-adds it.':'Nobody has a link yet, so nothing is rebuilt.'))})) return;
+  await setDoc(feedConfigRef,{released:v,at:Date.now(),by:_currentAdminEmail||'unknown'},{merge:true});
+  feedReleased=v;
+  auditLog('feed.gate',(v?'Opened':'Closed')+' the calendar release gate');
+  const t=withTok?await buildAllFeeds(true):null;
+  schedToast((v?'Gate open':'Gate closed')+(t?' — '+t.ok+' of '+t.of+' feeds renamed.':'.'), (!t||t.ok===t.of)?'ok':'err');
+  renderFeeds();
+};
+function renderFeedGate(){
+  const card=document.getElementById('feedGateCard'); if(!card) return;
+  if(!feedConfigLoaded){ card.innerHTML='<div style="font-size:12px;color:var(--t3)">Loading…</div>'; return; }
+  const on=feedReleased;
+  card.style.border='2px solid '+(on?'#86efac':'#fcd34d'); card.style.background=on?'#f0fdf4':'#fffbeb';
+  card.innerHTML='<div style="font-size:12.5px;color:'+(on?'#14532d':'#78350f')+';line-height:1.6">'
+    +'<b>'+(on?'✅ RELEASED — the feeds are real, named "KP Anesthesia Schedule".':'🧪 TESTING — no doctor has been told, and every calendar is named "TEST · KP Anesthesia Schedule".')+'</b><br>'
+    +'The endpoint answers (deployed 30 Aug 2026) and the §136 security rules are published: the link list is the admin\'s alone and the calendars are readable by nobody but the endpoint. '
+    +(on?'Links can be handed out.':'Open the gate when the schedule is complete (§54); doctors subscribe after that and see the plain name from the start.')
+    +'</div><div style="margin-top:8px"><button class="btn '+(on?'btn-ghost':'btn-primary')+'" style="font-size:12px" id="feedGateBtn" onclick="setFeedReleased('+(on?'false':'true')+')">'+(on?'Close the release gate':'Open the release gate')+'</button></div>';
+}
 function renderFeeds(){
+  renderFeedGate();   // [148]
   const host=document.getElementById('feedBody');
   if(!host) return;
   if(!feedTokensLoaded){ host.innerHTML='<div style="font-size:12px;color:var(--t3)">Loading…</div>'; return; }
@@ -10823,6 +10881,7 @@ authReady.then(()=>{
   onSnapshot(printCfgRef,snap=>{ printCfg=snap.exists()?snap.data():{}; printCfgLoaded=true; markDirty('print'); });
   onSnapshot(callArchiveRef,snap=>{ callArchive=snap.exists()?snap.data():{}; callArchiveLoaded=true; markDirty('stats'); });
   onSnapshot(feedTokensRef,snap=>{ feedTokens=snap.exists()?snap.data():{}; feedTokensLoaded=true; markDirty('feeds'); });
+  onSnapshot(feedConfigRef,snap=>{ feedReleased=!!(snap.exists()&&snap.data().released); feedConfigLoaded=true; markDirty('feeds'); });   // [148] one small document; FB-3 input
   onSnapshot(groupsRef,snap=>{ groupsData=snap.exists()?snap.data():{}; groupsLoaded=true; markDirty('groups','grid','reports','rules'); _enginePlanStale('Groups or categories changed since this preview'); });   // [129 · E-7]
   onSnapshot(groupMembersRef,snap=>{ groupMembers=snap.exists()?snap.data():{}; membersLoaded=true; markDirty('groups','grid','reports','rules'); _enginePlanStale('Groups or categories changed since this preview'); });   // [129 · E-7]
   onSnapshot(categoriesRef,snap=>{ categories=snap.exists()?snap.data():{}; categoriesLoaded=true; markDirty('groups','grid','reports','rules'); _enginePlanStale('Groups or categories changed since this preview'); });   // [129 · E-7]
