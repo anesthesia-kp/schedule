@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 51;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 52;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -100,28 +100,28 @@
 </script>
 <style>
 :root{
-  --bg:#f4f7fa; --s1:#ffffff; --s2:#f8fafc; --s3:#eef2f7;
-  --b1:#e3e9f0; --b2:#cbd5e1;
-  --t1:#1e293b; --t2:#5b6b7c; --t3:#94a3b8;
-  --blue:#2563eb; --green:#059669; --red:#dc2626; --yellow:#b45309; --purple:#7c3aed;
-  --mono:'SF Mono',Consolas,Menlo,monospace;
+  --bg:#eeebe2; --s1:#ffffff; --s2:#eeebe2; --s3:#eeebe2;
+  --b1:#e2ddd1; --b2:#e2ddd1;
+  --t1:#1f2329; --t2:#4a505a; --t3:#4a505a;
+  --blue:#1f2329; --green:#458359; --red:#5c1f15; --yellow:#4a4f5a; --purple:#e9c542;
+  --mono:'Hanken Grotesk',system-ui,-apple-system,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px}
+body{background:var(--bg);color:var(--t1);font-family:'Hanken Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px}
 .top{background:var(--s1);border-bottom:1px solid var(--b1);padding:14px 22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:sticky;top:0;z-index:50}
 .top h1{font-size:17px;font-weight:800;letter-spacing:.01em}
 .top .sub{font-size:12px;color:var(--t2)}
 .wrap{max-width:1500px;margin:0 auto;padding:18px 22px 60px}
-.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:18px 20px;margin-bottom:16px;box-shadow:0 1px 2px rgba(31,35,41,.04)}
 .card-title{font-size:12px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
 .btn{border:1px solid var(--b2);background:var(--s1);color:var(--t1);border-radius:8px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer}
 .btn:hover{background:var(--s3)}
-.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff}
-.btn-primary:hover{background:#1d4ed8}
+.btn-primary{background:var(--blue);border-color:var(--blue);color:#ffffff}
+.btn-primary:hover{background:#4e5e36}
 /* [41 · RA-6 S-12] Accept and Decline used these two classes and this page never defined
    them, so both rendered as the same plain grey button. Copied from admin/index.html. */
-.btn-success{background:var(--green);border-color:var(--green);color:#fff}
-.btn-danger{background:#fee2e2;border-color:#fca5a5;color:var(--red)}
+.btn-success{background:var(--green);border-color:var(--green);color:#ffffff}
+.btn-danger{background:#efe9e8;border-color:#d6c7c4;color:var(--red)}
 .btn-ghost{background:transparent}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .sel,.inp{border:1px solid var(--b2);border-radius:8px;padding:7px 10px;font-size:13px;background:var(--s1);color:var(--t1)}
@@ -129,7 +129,7 @@ body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSyst
 table.grid{border-collapse:collapse;width:100%;font-size:11px}
 table.grid th,table.grid td{border:1px solid var(--b1);padding:3px 4px;text-align:center;white-space:nowrap}
 table.grid th{background:var(--s2);font-size:10px;color:var(--t2)}
-table.grid td.me{background:#eff6ff}
+table.grid td.me{background:#eeebe2}
 table.grid .wkend{background:var(--s3)}
 /* [132 · RA-6 V-2] THE FULL SCHEDULE SCROLLS INSIDE ITS OWN BOX, and the name column stays.
    The wrapper already carried overflow-x:auto and it was never the problem: `.app` is a column
@@ -145,10 +145,10 @@ table.grid .wkend{background:var(--s3)}
 .gridfade{position:relative}
 .gridfade::after{content:'';position:absolute;top:0;right:0;bottom:0;width:34px;pointer-events:none;
   opacity:0;transition:opacity .14s ease;z-index:6;
-  background:linear-gradient(to left,rgba(15,23,42,.16),rgba(15,23,42,0))}
+  background:linear-gradient(to left,rgba(31,35,41,.16),rgba(31,35,41,0))}
 .gridfade.more::after{opacity:1}
 table.grid .stick1{position:sticky;left:0;z-index:2;background:var(--s1);border-right:2px solid var(--b2);
-  box-shadow:2px 0 0 var(--b2),5px 0 7px -5px rgba(15,23,42,.22)}
+  box-shadow:2px 0 0 var(--b2),5px 0 7px -5px rgba(31,35,41,.22)}
 table.grid th.stick1{background:var(--s2);z-index:3}
 .cell-day{color:var(--blue);font-weight:700}
 .cell-call{color:var(--purple);font-weight:700}
@@ -162,12 +162,12 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 /* [44 · RA-6 V-17] A blank day says why it is blank. Three states that cannot be confused
    with each other or with a published day that has nothing on it. */
 .st{display:inline-block;border-radius:4px;padding:0 5px;font-weight:700;font-size:10px;white-space:nowrap;line-height:16px}
-.st-draft{background:#fef3c7;color:#92400e;border:1px dashed #f59e0b}
-.st-error{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}
+.st-draft{background:#fbf3d9;color:#4a4f5a;border:1px dashed #6f6a60}
+.st-error{background:#efe9e8;color:#4a1911;border:1px solid #d6c7c4}
 .st-loading{background:var(--s3);color:var(--t3);font-weight:600}
 .st-none{color:var(--t3);font-weight:600;font-size:10px}
-.m-draft .d,table.grid.m-draft td:not(.stick1){background:#fffbeb}
-.m-error .d,table.grid.m-error td:not(.stick1){background:#fef2f2}
+.m-draft .d,table.grid.m-draft td:not(.stick1){background:#fbf3d9}
+.m-error .d,table.grid.m-error td:not(.stick1){background:#efe9e8}
 /* [44 · RA-6 V-21] Quick View days get the same card as a calendar day — they were bare boxes. */
 #quickView .d{background:var(--s2);border:1px solid var(--b1);border-radius:9px;padding:5px 7px;font-size:11px}
 #quickView .d .dn{font-size:10px;color:var(--t3);font-weight:700}
@@ -179,19 +179,19 @@ table.grid th.stick1{background:var(--s2);z-index:3}
    Vacation Auction's login screen, so the two sites feel like one product.
    No year here (this site isn't year-scoped the way the auction is), so
    "Anesthesia Scheduling" itself takes the large hero position instead. */
-#signGate{position:fixed;inset:0;background:#fff;display:flex;align-items:center;justify-content:center;z-index:200;zoom:1.15}
-#signCard{display:flex;width:100vw;height:100vh;overflow:hidden;background:#fff;text-align:left}
-.login-hero-panel{flex:0 0 42%;background:linear-gradient(160deg,#0f2744 0%,#00507e 60%,#006ba6 100%);color:#fff;padding:36px 44px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+#signGate{position:fixed;inset:0;background:#ffffff;display:flex;align-items:center;justify-content:center;z-index:200;zoom:1.15}
+#signCard{display:flex;width:100vw;height:100vh;overflow:hidden;background:#ffffff;text-align:left}
+.login-hero-panel{flex:0 0 42%;background:linear-gradient(160deg,#1f2329 0%,#1f2329 60%,#1f2329 100%);color:#ffffff;padding:36px 44px;display:flex;flex-direction:column;justify-content:center;gap:6px}
 .login-logo{margin-bottom:14px}
 .login-hero-title-solo{font-size:clamp(2.1rem,4.6vw,3.3rem);font-weight:900;line-height:1.08;letter-spacing:.01em}
 .login-form-panel{flex:1 1 58%;padding:36px 44px;display:flex;flex-direction:column;justify-content:center;overflow-y:auto}
 .login-form-inner{width:100%;max-width:380px;margin:0 auto}
-.login-form-inner .modal-title{font-size:1.2rem;font-weight:700;margin-bottom:4px;color:#132f49}
-.login-form-inner .modal-sub{font-size:.8rem;color:#48607a;margin-bottom:16px}
-#signCard input#signUsername,#signCard input#signPass,#signCard input#signWelcomePass{width:100%;padding:12px 14px;font-size:1.05rem;font-weight:600;border:2px solid #9fb4c6;border-radius:10px;background:#fff;color:#111827;box-sizing:border-box;margin-bottom:12px}
-#signCard input#signUsername:focus,#signCard input#signPass:focus,#signCard input#signWelcomePass:focus{outline:none;border-color:#006ba6}
-#signCard .btn-primary{background:linear-gradient(135deg,#006ba6,#3b82f6);border:none;color:#fff;width:100%;padding:13px;font-size:1rem;border-radius:10px;margin-top:4px}
-#signCard .btn-primary:hover{background:linear-gradient(135deg,#006ba6,#3b82f6);transform:translateY(-1px);box-shadow:0 6px 16px rgba(96,165,250,.3)}
+.login-form-inner .modal-title{font-size:1.2rem;font-weight:700;margin-bottom:4px;color:#1f2329}
+.login-form-inner .modal-sub{font-size:.8rem;color:#1f2329;margin-bottom:16px}
+#signCard input#signUsername,#signCard input#signPass,#signCard input#signWelcomePass{width:100%;padding:12px 14px;font-size:1.05rem;font-weight:600;border:2px solid #cbc4b5;border-radius:10px;background:#ffffff;color:#1f2329;box-sizing:border-box;margin-bottom:12px}
+#signCard input#signUsername:focus,#signCard input#signPass:focus,#signCard input#signWelcomePass:focus{outline:none;border-color:#1f2329}
+#signCard .btn-primary{background:linear-gradient(135deg,#1f2329,#1f2329);border:none;color:#ffffff;width:100%;padding:13px;font-size:1rem;border-radius:10px;margin-top:4px}
+#signCard .btn-primary:hover{background:linear-gradient(135deg,#1f2329,#1f2329);transform:translateY(-1px);box-shadow:0 6px 16px rgba(31,35,41,.3)}
 @media (max-width:760px){
   #signCard{flex-direction:column;overflow-y:auto}
   .login-hero-panel{flex:none;padding:34px 24px 26px;text-align:center;align-items:center}
@@ -203,12 +203,12 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 .usernav a{display:block;padding:9px 16px;font-size:13px;font-weight:600;color:var(--t2);cursor:pointer;text-decoration:none;border-left:3px solid transparent}
 .usernav a:hover{background:var(--s2)}
 .usernav a.on{color:var(--blue);border-left-color:var(--blue);background:var(--s2)}
-.usernav .navbadge{display:inline-block;background:var(--red);color:#fff;font-size:10px;font-weight:800;border-radius:9px;padding:0 6px;margin-left:2px}
+.usernav .navbadge{display:inline-block;background:var(--red);color:#ffffff;font-size:10px;font-weight:800;border-radius:9px;padding:0 6px;margin-left:2px}
 .content{flex:1;min-width:0}
 .panel{display:none}
 .panel.on{display:block}
 .day-flash{animation:dayFlash 1.6s ease-out}
-@keyframes dayFlash{0%,35%{background:#fef08a!important}100%{background:inherit}}
+@keyframes dayFlash{0%,35%{background:#fbf3d9!important}100%{background:inherit}}
 /* [49 · RA-6 S-13] The controls that commit a schedule change — Accept, Decline, Withdraw, the
    submits — measured 21–30px tall; the guideline for a fingertip is 44px. On a touch screen or a
    narrow window every button grows to that; the inline paddings stay, min-height wins. */
@@ -220,10 +220,10 @@ table.grid th.stick1{background:var(--s2);z-index:3}
 .daylist .dl-day{border:1px solid var(--b1);border-radius:10px;background:var(--s1);margin-bottom:8px;overflow:hidden}
 .daylist .dl-head{display:flex;align-items:baseline;gap:8px;padding:7px 10px;background:var(--s2);font-weight:800;font-size:13px}
 .daylist .dl-head .dl-wd{font-size:11px;color:var(--t3);font-weight:700}
-.daylist .dl-day.today .dl-head{background:#dbeafe;color:#1e3a8a}
-.daylist .dl-day.wkend .dl-head{background:#f8fafc}
+.daylist .dl-day.today .dl-head{background:#e2ddd1;color:#1f2329}
+.daylist .dl-day.wkend .dl-head{background:#eeebe2}
 .daylist .dl-row{display:flex;align-items:flex-start;gap:8px;padding:5px 10px;border-top:1px solid var(--b1);font-size:12.5px}
-.daylist .dl-row.me{background:#eff6ff}
+.daylist .dl-row.me{background:#eeebe2}
 .daylist .dl-who{min-width:110px;font-weight:700;color:var(--t2)}
 .daylist .dl-row.me .dl-who{color:var(--blue)}
 .daylist .dl-what span{display:inline-block;margin:1px 4px 1px 0}
@@ -270,31 +270,32 @@ table.grid th.stick1{background:var(--s2);z-index:3}
    back — showing the badge and carrying the attribution are the only two permitted
    positions, and there is nothing in between. */
 </style>
+<style id="redesign-looks">@font-face{font-family:'Hanken Grotesk';font-style:normal;font-weight:100 900;font-display:swap;src:url(fonts/HankenGrotesk-Variable.woff2) format('woff2')}@font-face{font-family:'Hanken Grotesk';font-style:italic;font-weight:100 900;font-display:swap;src:url(fonts/HankenGrotesk-Italic-Variable.woff2) format('woff2')}:root{--rd-page:#EBF0E6;--rd-surface:#FFFFFF;--rd-tint:#EEEBE2;--rd-line:#E2DDD1;--rd-line2:#CBC4B5;--rd-ink:#1F2329;--rd-muted:#4A505A;--rd-accent:#1F2329;--rd-shade:#1F2329;--rd-lockBg:#ECE9E1;--rd-lockLine:#D6D1C6;--rd-win:#36694A;--rd-winFill:#458359;--rd-review:#8A6414;--rd-reviewFill:#E9C542;--rd-reviewOn:#2B2000;--rd-lose:#5C1F15;--rd-loseFill:#5C1F15;--rd-warn:#6F6A60;--rd-comp:#4A4F5A;accent-color:#458359}button,input,select,textarea{color:inherit}:root :is(button,input,select,textarea){font-family:'Hanken Grotesk',-apple-system,system-ui,sans-serif!important}:root body{color:var(--rd-ink);font-family:'Hanken Grotesk',-apple-system,system-ui,sans-serif!important;font-weight:500}:root body:where(:not([style*="background"])){background:var(--rd-page)!important}:root :is(button,select,input,textarea,table,.btn,.sel,.inp,.pill,.wtag,.ub-chip,.cl-pill,.tab,.bb-sort-btn,.mono,code,kbd,.stat-value,.ovcard-name,.wcard-name,.tdig-val,.bar-logo span,.dr-weeklabel,.dr-bid,.cl-time,.chev){font-family:'Hanken Grotesk',-apple-system,system-ui,sans-serif!important;font-variant-numeric:tabular-nums}:root .page-title{font-family:'Hanken Grotesk',system-ui,sans-serif;font-weight:800;letter-spacing:-.02em;color:var(--rd-ink)}:root :is(.card-title,.stat-label,thead th,.nav-section,.cl-day,.bar-logo span){font-weight:700}:root :is(.card-title,.stat-label,thead th,.nav-section,.cl-day,.bar-logo span):where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:var(--rd-muted)!important}:root :is(.dr-week,.trow-label,.ovcard-name,.wcard-name,.dr-user){font-weight:700}:root :is(.card,.dr-card,.cmodal-box){border-radius:20px!important}:root :is(.card,.dr-card,.cmodal-box):where(:not([style*="background"])){background:var(--rd-surface)!important}:root :is(.card,.dr-card,.cmodal-box):where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:0!important}:root :is(.card,.dr-card,.cmodal-box):where(:not([style*="box-shadow"])){box-shadow:0 1px 2px color-mix(in srgb,var(--rd-shade) 8%,transparent),0 12px 30px -12px color-mix(in srgb,var(--rd-shade) 20%,transparent)!important}:root :is(.stat,.wcard,.ovcard,.timer-block,.tdig){border-radius:14px!important}:root :is(.stat,.wcard,.ovcard,.timer-block,.tdig):where(:not([style*="background"])){background:var(--rd-surface)!important}:root :is(.stat,.wcard,.ovcard,.timer-block,.tdig):where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:0!important}:root :is(.stat,.wcard,.ovcard,.timer-block,.tdig):where(:not([style*="box-shadow"])){box-shadow:0 1px 2px color-mix(in srgb,var(--rd-shade) 9%,transparent),0 6px 16px -6px color-mix(in srgb,var(--rd-shade) 18%,transparent)!important}:root .tdig:where(:not([style*="background"])){background:var(--rd-tint)!important}:root .tdig:where(:not([style*="box-shadow"])){box-shadow:none!important}:root .wcard.locked:where(:not([style*="background"])){background:var(--rd-lockBg)!important}:root .wcard.locked:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:1px solid var(--rd-lockLine)!important}:root .wcard.locked:where(:not([style*="box-shadow"])){box-shadow:none!important}:root .rp-frame{border-radius:14px!important;box-shadow:0 1px 2px color-mix(in srgb,var(--rd-shade) 9%,transparent),0 6px 16px -6px color-mix(in srgb,var(--rd-shade) 18%,transparent)}:root .rp-frame:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:0!important}:root #toast{border-radius:999px!important;border:0!important}:root #toast:is(.t-ok,.t-err,.t-warn){border-left:0!important}:root .bar:where(:not([style*="background"])){background:var(--rd-surface)!important}:root .bar:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border-right:0!important}:root .bar:not(.open):where(:not([style*="box-shadow"])){box-shadow:none!important}:root .bar-logo:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border-bottom:0!important}:root .nav a{margin:1px 10px;padding:8px 12px;border-radius:12px;color:var(--rd-muted);font-weight:600}:root .nav a:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border-left:0!important}:root .nav a.on{font-weight:800}:root .nav a.on:where(:not([style*="background"])){background:var(--rd-tint)!important}:root .nav a.on:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:var(--rd-ink)!important}:root #navToggle{border:0!important;border-radius:14px!important;background:var(--rd-surface)!important;color:var(--rd-ink)!important;box-shadow:0 1px 2px color-mix(in srgb,var(--rd-shade) 9%,transparent),0 6px 16px -6px color-mix(in srgb,var(--rd-shade) 18%,transparent)!important}:root .btn{border-radius:999px!important;font-weight:700}:root .btn-primary:where(:not([style*="background"])){background:var(--rd-accent)!important}:root .btn-primary:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:1px solid var(--rd-accent)!important}:root .btn-primary:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:#FFFFFF!important}:root .btn-success:where(:not([style*="background"])){background:var(--rd-winFill)!important}:root .btn-success:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:1px solid var(--rd-winFill)!important}:root .btn-success:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:#FFFFFF!important}:root .btn-danger:where(:not([style*="background"])){background:color-mix(in srgb,var(--rd-lose) 8%,var(--rd-surface))!important}:root .btn-danger:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:1px solid color-mix(in srgb,var(--rd-lose) 35%,var(--rd-surface))!important}:root .btn-danger:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:var(--rd-lose)!important}:root .btn-ghost:where(:not([style*="background"])){background:var(--rd-surface)!important}:root .btn-ghost:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:1px solid var(--rd-line2)!important}:root .btn-ghost:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:var(--rd-ink)!important}:root .btn:disabled{opacity:.55}:root .btn-success:disabled{opacity:.8}:root ::placeholder{color:#6F6A60;opacity:1}:root .tog:where(:not([style*="background"])){background:var(--rd-line2)!important}:root .tog.on:where(:not([style*="background"])){background:var(--rd-winFill)!important}:root .tog.on-orange:where(:not([style*="background"])){background:var(--rd-comp)!important}:root .tog.on-blue:where(:not([style*="background"])){background:var(--rd-accent)!important}:root .tog.on-red:where(:not([style*="background"])){background:var(--rd-loseFill)!important}:root input[type=range]:where(:not([style*="background"]))::-webkit-slider-thumb{background:var(--rd-accent)!important}:root :is(.sel,.inp,select,input[type=text],input[type=number],input[type=email],input[type=search],textarea){border-radius:12px!important}:root :is(.sel,.inp,select,input[type=text],input[type=number],input[type=email],input[type=search],textarea):where(:not([style*="background"])){background-color:var(--rd-surface)!important}:root :is(.sel,.inp,select,input[type=text],input[type=number],input[type=email],input[type=search],textarea):where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:1px solid var(--rd-line2)!important}:root :is(.sel,.inp,select,input[type=text],input[type=number],input[type=email],input[type=search],textarea):where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:var(--rd-ink)!important}:root :is(.tab,.bb-sort-btn){border-radius:999px!important}:root :is(.tab,.bb-sort-btn):where(:not([style*="background"])){background:var(--rd-surface)!important}:root :is(.tab,.bb-sort-btn):where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:1px solid var(--rd-line2)!important}:root :is(.tab,.bb-sort-btn):where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:var(--rd-muted)!important}:root .bb-sort-group{gap:4px}:root .bb-sort-group:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:0!important}:root :is(.tab.on,.bb-sort-btn.active):where(:not([style*="background"])){background:var(--rd-accent)!important}:root :is(.tab.on,.bb-sort-btn.active):where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border-color:var(--rd-accent)!important}:root :is(.tab.on,.bb-sort-btn.active):where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:#FFFFFF!important}:root table{background:#FFFFFF}:root :is(.card,.dr-card,.cmodal-box) table{background:var(--rd-surface)}:root thead th:where(:not([style*="background"])){background:var(--rd-tint)!important}:root thead th:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border-bottom:1px solid var(--rd-line)!important}:root tbody td:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border-bottom-color:var(--rd-line)!important}:root :is(.pill,.wtag,.ub-chip,.cl-pill){border-radius:999px!important}:root .wtag.win:where(:not([style*="background"])){background:var(--rd-winFill)!important}:root .wtag.win:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:#FFFFFF!important}:root .wtag.review:where(:not([style*="background"])){background:var(--rd-reviewFill)!important}:root .wtag.review:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:var(--rd-reviewOn)!important}:root .wtag.lose:where(:not([style*="background"])){background:var(--rd-loseFill)!important}:root .wtag.lose:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:#FFFFFF!important}:root .pill.p-green:where(:not([style*="background"])){background:var(--rd-winFill)!important}:root .pill.p-green:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:#FFFFFF!important}:root .pill.p-purple:where(:not([style*="background"])){background:var(--rd-reviewFill)!important}:root .pill.p-purple:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:var(--rd-reviewOn)!important}:root .pill.p-red:where(:not([style*="background"])){background:var(--rd-loseFill)!important}:root .pill.p-red:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:#FFFFFF!important}:root .ub-chip.ub-live:where(:not([style*="background"])){background:color-mix(in srgb,var(--rd-reviewFill) 30%,var(--rd-surface))!important}:root .ub-chip.ub-live:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border-color:var(--rd-reviewFill)!important}:root .ub-chip.ub-live:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:var(--rd-reviewOn)!important}:root :is(button,input,select,textarea,table,.mono,code){font-family:'Hanken Grotesk',-apple-system,system-ui,sans-serif!important;font-variant-numeric:tabular-nums}:root .top{box-shadow:0 1px 2px color-mix(in srgb,var(--rd-shade) 9%,transparent),0 6px 16px -6px color-mix(in srgb,var(--rd-shade) 18%,transparent)}:root .top:where(:not([style*="background"])){background:var(--rd-surface)!important}:root .top:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border-bottom:0!important}:root :is(.usernav,nav):where(:not([style*="background"])){background:var(--rd-surface)!important}:root :is(.usernav,nav):where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border-right:0!important}:root :is(.usernav a,nav a){border-radius:12px;margin:1px 8px;color:var(--rd-muted)}:root :is(.usernav a,nav a):where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border-left:0!important}:root :is(.usernav a.on,nav a.on){font-weight:800}:root :is(.usernav a.on,nav a.on):where(:not([style*="background"])){background:var(--rd-tint)!important}:root :is(.usernav a.on,nav a.on):where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:var(--rd-ink)!important}:root .card{border-radius:20px!important}:root .card:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:0!important}:root .card:where(:not([style*="box-shadow"])){box-shadow:0 1px 2px color-mix(in srgb,var(--rd-shade) 8%,transparent),0 12px 30px -12px color-mix(in srgb,var(--rd-shade) 20%,transparent)!important}:root .card-title:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:var(--rd-muted)!important}:root .btn{border-radius:999px!important}:root .btn:not(.btn-primary):not(.btn-success):not(.btn-danger){background:var(--rd-surface);color:var(--rd-ink)}:root .btn:not(.btn-primary):not(.btn-success):not(.btn-danger):where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:1px solid var(--rd-line2)!important}:root .btn-primary:where(:not([style*="background"])){background:var(--rd-accent)!important}:root .btn-primary:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border-color:var(--rd-accent)!important}:root .btn-primary:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:#FFFFFF!important}:root .btn-success:where(:not([style*="background"])){background:var(--rd-winFill)!important}:root .btn-success:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border-color:var(--rd-winFill)!important}:root .btn-success:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:#FFFFFF!important}:root .btn-danger:where(:not([style*="background"])){background:color-mix(in srgb,var(--rd-lose) 8%,var(--rd-surface))!important}:root .btn-danger:where(:not([style*="border:"],[style*="border-color"],[style*="border-style"],[style*="border-width"],[style*="border-top"],[style*="border-right"],[style*="border-bottom"],[style*="border-left"])){border:1px solid color-mix(in srgb,var(--rd-lose) 35%,var(--rd-surface))!important}:root .btn-danger:where(:not([style^="color"],[style*=";color"],[style*=" color:"])){color:var(--rd-lose)!important}:root :is(#userGoogleBtn,.ag-gbtn){border:1px solid var(--rd-line2)!important;border-radius:999px!important}:root .bd-stat{border-radius:999px!important}.login-logo{display:none}:root .login-hero-panel{border-top:24px solid #1F2329}:root :is(#myCal,#allGrid) span[style="color:var(--b2)"]{color:#6F6A60!important}:root .btn:hover:where(:not([style*="background"])){background:var(--s3)!important}:root .btn-primary:hover:where(:not([style*="background"])){background:#4e5e36!important}:root #signCard input#signUsername:focus{border-color:#1f2329!important}:root #signCard input#signPass:focus{border-color:#1f2329!important}:root #signCard input#signWelcomePass:focus{border-color:#1f2329!important}</style>
 </head>
 <body>
 <div class="top">
-  <h1>📅 Daily Schedule</h1>
+  <h1>Daily Schedule</h1>
   <span class="sub">Anesthesia — call, shifts, days off &amp; vacation</span>
   <span style="margin-left:auto"></span>
   <span id="whoamiEmail" style="font-size:12px;color:var(--t3);word-break:break-all"></span>
-  <span id="whoami" style="font-size:12px;color:var(--t2);font-weight:700;background:rgba(15,39,68,.06);padding:2px 8px;border-radius:7px"></span>
+  <span id="whoami" style="font-size:12px;color:var(--t2);font-weight:700;background:rgba(31,35,41,.06);padding:2px 8px;border-radius:7px"></span>
   <span id="buildStamp" title="Which version of this page you are looking at — quote it if you report a problem" style="font-size:11px;color:var(--t3);font-family:var(--mono)"></span>
   <button class="btn btn-ghost" style="font-size:12px" onclick="switchUser()">Sign out</button>
-  <a class="btn" style="text-decoration:none;font-size:12px" href="https://anesthesia-kp.github.io/vacation/" target="_blank" rel="noopener">🏖️ Vacation Auction →</a>
+  <a class="btn" style="text-decoration:none;font-size:12px" href="https://anesthesia-kp.github.io/vacation/" target="_blank" rel="noopener">Vacation Auction →</a>
 </div>
 
 <div class="app">
   <nav class="usernav">
-    <a onclick="nav('home',this)" class="on">🏠 Home</a>
-    <a onclick="nav('full',this)">🗓️ Full Schedule</a>
-    <a onclick="nav('open',this)">📢 Open Shifts</a>
-    <a onclick="nav('requests',this)">📥 My Requests <span class="navbadge" id="reqNavBadge" style="display:none"></span></a>
-    <a onclick="nav('swaps',this)">🔁 My Swaps <span class="navbadge" id="swapNavBadge" style="display:none"></span></a>
-    <a onclick="nav('changes',this)">🔔 Changes <span class="navbadge" id="chgNavBadge" style="display:none"></span></a>
+    <a onclick="nav('home',this)" class="on">Home</a>
+    <a onclick="nav('full',this)">Full Schedule</a>
+    <a onclick="nav('open',this)">Open Shifts</a>
+    <a onclick="nav('requests',this)">My Requests <span class="navbadge" id="reqNavBadge" style="display:none"></span></a>
+    <a onclick="nav('swaps',this)">My Swaps <span class="navbadge" id="swapNavBadge" style="display:none"></span></a>
+    <a onclick="nav('changes',this)">Changes <span class="navbadge" id="chgNavBadge" style="display:none"></span></a>
   </nav>
   <div class="content"><div class="wrap">
     <!-- [49 · RA-6 S-11] the one place a failed READ is reported; hidden until one fails -->
-    <div id="readErr" hidden style="background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;border-radius:10px;padding:8px 12px;font-size:12.5px;margin-bottom:10px"></div>
+    <div id="readErr" hidden style="background:#efe9e8;border:1px solid #d6c7c4;color:#4a1911;border-radius:10px;padding:8px 12px;font-size:12.5px;margin-bottom:10px"></div>
 
   <!-- HOME: quick view + my personal calendar -->
   <div class="panel on" id="panel-home">
@@ -322,14 +323,14 @@ table.grid th.stick1{background:var(--s2);z-index:3}
         <!-- [49 · RA-6 V-7] the swatches were saturated CSS colours while the chips are the pale
              family tints the admin chose — matching a chip to the legend was guesswork. The legend
              is drawn from the catalog's families in their own colours (renderLegendFams). -->
-        <span id="legendFams"><span><b style="color:#fef9c3">■</b> day shift</span> <span><b style="color:#ede9fe">■</b> call</span></span>
+        <span id="legendFams"><span><b style="color:#fbf3d9">■</b> day shift</span> <span><b style="color:#eeebe2">■</b> call</span></span>
         <span><b class="cell-off">■</b> day off</span>
         <span><b class="cell-vac">■</b> vacation (from auction)</span>
         <span><span class="st st-none">·</span> nothing scheduled</span>
         <span><span class="st st-draft">Not published</span> still being built</span>
         <span><span class="st st-error">Couldn’t load</span> ask an admin</span>
       </div>
-      <div id="draftNote" style="display:none;margin:0 0 10px;padding:9px 12px;border-radius:8px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e;font-size:12.5px;font-weight:700"></div>
+      <div id="draftNote" style="display:none;margin:0 0 10px;padding:9px 12px;border-radius:8px;background:#fbf3d9;border:1px solid #f3df97;color:#4a4f5a;font-size:12.5px;font-weight:700"></div>
       <div class="cal" id="myCal"></div>
     </div>
   </div>
@@ -350,7 +351,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
     <div class="card">
       <div class="card-title">Everyone</div>
       <!-- [44 · RA-6 D-2] the month notice lives on THIS panel too, not only on Home -->
-      <div id="draftNoteFull" class="monthNote" style="display:none;margin:0 0 10px;padding:9px 12px;border-radius:8px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e;font-size:12.5px;font-weight:700"></div>
+      <div id="draftNoteFull" class="monthNote" style="display:none;margin:0 0 10px;padding:9px 12px;border-radius:8px;background:#fbf3d9;border:1px solid #f3df97;color:#4a4f5a;font-size:12.5px;font-weight:700"></div>
       <!-- [132 · RA-6 V-2] The table's own scroll box, with the "more to the right" fade on
            the wrapper outside it — same two classes as the admin grid. -->
       <!-- [50 · RA-6 §7b · §134] ONE page, two shapes of the same month. On a wide screen the table
@@ -468,7 +469,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
     <!-- LEFT: branded hero — same gradient/icon treatment as the Vacation Auction's login -->
     <div class="login-hero-panel">
       <div class="login-logo" aria-hidden="true">
-        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M8 2.5v4M16 2.5v4"/><path d="M8.5 14.5l2.2 2.2 4.3-4.6"/>
         </svg>
       </div>
@@ -481,22 +482,22 @@ table.grid th.stick1{background:var(--s2);z-index:3}
              always land on this sign-in screen, remember WHO last signed in, but
              still require a click (and passcode, if enabled) to actually continue. -->
         <div id="signWelcome" style="display:none">
-          <div style="font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#48607a;margin-bottom:6px">Welcome back</div>
-          <div id="signWelcomeName" style="font-size:1.9rem;font-weight:800;color:#006ba6;margin:0 0 18px"></div>
+          <div style="font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#1f2329;margin-bottom:6px">Welcome back</div>
+          <div id="signWelcomeName" style="font-size:1.9rem;font-weight:800;color:#1f2329;margin:0 0 18px"></div>
           <button class="btn btn-primary" id="signQuickContinueBtn" onclick="quickSignIn()">Continue</button>
-          <div id="signWelcomeErr" style="font-size:12px;color:#b91c1c;margin-top:8px"></div>
-          <div style="margin-top:14px"><a onclick="signShowPicker()" style="cursor:pointer;color:#006ba6;text-decoration:underline;font-size:.85rem">Sign in as someone else</a></div>
+          <div id="signWelcomeErr" style="font-size:12px;color:#4a1911;margin-top:8px"></div>
+          <div style="margin-top:14px"><a onclick="signShowPicker()" style="cursor:pointer;color:#1f2329;text-decoration:underline;font-size:.85rem">Sign in as someone else</a></div>
         </div>
         <!-- Google-only sign-in -->
         <div id="signPicker">
           <h2 class="modal-title">Sign in</h2>
           <div class="modal-sub">Sign in with your Google account to continue.</div>
-          <button id="userGoogleBtn" onclick="userGoogleSignIn()" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#1f2937;border:1.5px solid #d9e2ec;border-radius:10px;padding:13px 22px;font-size:15px;font-weight:700;cursor:pointer;transition:border-color .15s,box-shadow .15s" onmouseover="this.style.borderColor='#006ba6';this.style.boxShadow='0 6px 18px rgba(0,107,166,.15)'" onmouseout="this.style.borderColor='#d9e2ec';this.style.boxShadow='none'">
+          <button id="userGoogleBtn" onclick="userGoogleSignIn()" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#ffffff;color:#1f2329;border:1.5px solid #e2ddd1;border-radius:10px;padding:13px 22px;font-size:15px;font-weight:700;cursor:pointer;transition:border-color .15s,box-shadow .15s" onmouseover="this.style.borderColor='#1f2329';this.style.boxShadow='0 6px 18px rgba(31,35,41,.15)'" onmouseout="this.style.borderColor='#e2ddd1';this.style.boxShadow='none'">
             <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
             Sign in with Google
           </button>
-          <div id="signErr" style="font-size:12px;color:#b91c1c;margin-top:8px"></div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:#3b566d;cursor:pointer;margin-top:14px"><input type="checkbox" id="signRememberMe" checked> Remember me on this device</label>
+          <div id="signErr" style="font-size:12px;color:#4a1911;margin-top:8px"></div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:#1f2329;cursor:pointer;margin-top:14px"><input type="checkbox" id="signRememberMe" checked> Remember me on this device</label>
         </div>
         <!-- [build 34 · FB-6] OUTSIDE both sign-in panels ON PURPOSE. This box was inside the
              picker panel, and "Remember me" is checked by default — so every returning user got the
@@ -504,7 +505,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
              since build 283/148 hid the reCAPTCHA badge, the attribution Google REQUIRES to be
              visible in the user flow. One copy here, under whichever panel is showing — do not
              duplicate it into the panels, that only drifts. -->
-        <div style="margin-top:14px;font-size:.72rem;line-height:1.5;color:#5b7088;background:rgba(0,107,166,.06);border:1px solid rgba(0,107,166,.16);border-radius:8px;padding:8px 10px"><span style="display:block;font-size:.82rem;font-weight:700;color:#006ba6;margin-bottom:3px">🔒 Secured by Google sign-in and reCAPTCHA.</span>This site never sees or stores your password.<span style="display:block;margin-top:7px;font-size:.64rem;line-height:1.45;color:#7a8b9c">This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" style="color:#7a8b9c;text-decoration:underline">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" style="color:#7a8b9c;text-decoration:underline">Terms of Service</a> apply.</span></div>
+        <div style="margin-top:14px;font-size:.72rem;line-height:1.5;color:#1f2329;background:rgba(31,35,41,.06);border:1px solid rgba(31,35,41,.16);border-radius:8px;padding:8px 10px"><span style="display:block;font-size:.82rem;font-weight:700;color:#1f2329;margin-bottom:3px">Secured by Google sign-in and reCAPTCHA.</span>This site never sees or stores your password.<span style="display:block;margin-top:7px;font-size:.64rem;line-height:1.45;color:#4a505a">This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" style="color:#4a505a;text-decoration:underline">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" style="color:#4a505a;text-decoration:underline">Terms of Service</a> apply.</span></div>
       </div>
     </div>
   </div>
@@ -709,12 +710,12 @@ async function sha256(t){ const b=await crypto.subtle.digest('SHA-256',new TextE
 function schedToast(msg,type){
   let t=document.getElementById('_schedToast');
   if(!t){ t=document.createElement('div'); t.id='_schedToast'; t.setAttribute('role','status');
-    t.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:100000;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.18);transition:opacity .3s;max-width:92vw;text-align:center';
+    t.style.cssText='position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:100000;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 6px 24px rgba(31,35,41,.18);transition:opacity .3s;max-width:92vw;text-align:center';
     document.body.appendChild(t); }
   t.textContent=msg;
-  t.style.background=type==='err'?'#fde8e8':'#e6f6ec';
-  t.style.color=type==='err'?'#b42318':'#087443';
-  t.style.border='1px solid '+(type==='err'?'#f3b4b4':'#a6e0bd');
+  t.style.background=type==='err'?'#efe9e8':'#e5eee8';
+  t.style.color=type==='err'?'#5c1f15':'#36694a';
+  t.style.border='1px solid '+(type==='err'?'#cebcb9':'#b8d0c0');
   t.style.opacity='1';
   clearTimeout(t._h); t._h=setTimeout(()=>{ t.style.opacity='0'; },3200);
 }
@@ -915,11 +916,11 @@ function renderLegendFams(){
   const fams=catalog.families||{}; const used=new Map();
   for(const s of Object.values(catalog.shifts||{})){ const k=s&&s.family; if(k&&fams[k]&&!used.has(k)) used.set(k,fams[k]); }
   if(!used.size) return;   // keep the generic two until the catalog names families
-  el.innerHTML=[...used.entries()].map(([k,f])=>'<span><b style="color:'+esc(f.color||'#e2e8f0')+'">■</b> '+esc(f.label||k)+'</span>').join(' ');
+  el.innerHTML=[...used.entries()].map(([k,f])=>'<span><b style="color:'+esc(f.color||'#e2ddd1')+'">■</b> '+esc(f.label||k)+'</span>').join(' ');
 }
 function chip(id){
-  const s=catalog.shifts?.[id]||{}; const bg=s.color||(s.kind==='call'?'#ede9fe':'#fef9c3');
-  return '<span style="display:inline-block;background:'+esc(bg)+';color:#1e293b;border-radius:4px;padding:0 4px;font-weight:700">'+esc(s.label||id)+'</span>';
+  const s=catalog.shifts?.[id]||{}; const bg=s.color||(s.kind==='call'?'#eeebe2':'#fbf3d9');
+  return '<span style="display:inline-block;background:'+esc(bg)+';color:#1f2329;border-radius:4px;padding:0 4px;font-weight:700">'+esc(s.label||id)+'</span>';
 }
 // [44 · RA-6 D-3 / V-21] `emptyText`, when given, replaces the bare dot on a PUBLISHED day
 // with nothing on it (Quick View says "Nothing scheduled"; the grids keep the dot and the
@@ -928,10 +929,10 @@ function chip(id){
 // be confused. Vacation still paints: it comes from the auction, not from the month.
 function cellHtml(u,dk,vac,emptyText){
   const c=cellOf(u,dk); const bits=[];
-  if(vac[u+'|'+dk]) bits.push('<span style="display:inline-block;background:#bbf7d0;color:#065f46;border-radius:4px;padding:0 4px;font-weight:800">VAC</span>');
+  if(vac[u+'|'+dk]) bits.push('<span style="display:inline-block;background:#b8d0c0;color:#2b5540;border-radius:4px;padding:0 4px;font-weight:800">VAC</span>');
   const state=monthStateOf(dk);
   if(state!=='published'){ bits.push(statePill(state)); return bits.join('<br>'); }
-  if(c.off) bits.push('<span style="display:inline-block;background:#e2e8f0;color:#475569;border-radius:4px;padding:0 4px;font-weight:700">OFF</span>');
+  if(c.off) bits.push('<span style="display:inline-block;background:#e2ddd1;color:#1f2329;border-radius:4px;padding:0 4px;font-weight:700">OFF</span>');
   for(const id of shiftsOf(c)) bits.push(chip(id));   // [52] a list, however many
   return bits.join('<br>')||(emptyText?'<span class="st st-none">'+esc(emptyText)+'</span>':'<span style="color:var(--b2)">·</span>');
 }
@@ -951,9 +952,9 @@ function renderAll(){
                : '';
     ['draftNote','draftNoteFull'].forEach(id=>{ const dn=document.getElementById(id); if(!dn) return;
       dn.style.display=text?'block':'none'; dn.textContent=text;
-      dn.style.background = mState==='error' ? '#fee2e2' : '#fef3c7';
-      dn.style.borderColor = mState==='error' ? '#fca5a5' : '#fcd34d';
-      dn.style.color = mState==='error' ? '#991b1b' : '#92400e'; }); }
+      dn.style.background = mState==='error' ? '#efe9e8' : '#fbf3d9';
+      dn.style.borderColor = mState==='error' ? '#d6c7c4' : '#f3df97';
+      dn.style.color = mState==='error' ? '#4a1911' : '#4a4f5a'; }); }
 
   // My calendar
   if(me){
@@ -1060,7 +1061,7 @@ function renderOpenShifts(){
       ${chip(o.shiftId)}
       ${o.note?'<span style="color:var(--t2)">'+esc(o.note)+'</span>':''}
       <span style="margin-left:auto">${appliedById.has(o.id)
-        ?'<span class="status-pending">⏳ applied</span> <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawRequest('+jsArg(appliedById.get(o.id))+')">✗ Withdraw</button>'
+        ?'<span class="status-pending">applied</span> <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawRequest('+jsArg(appliedById.get(o.id))+')">✗ Withdraw</button>'
         :'<button class="btn btn-primary" style="font-size:12px;padding:4px 12px" onclick="applyOpen('+jsArg(o.id)+')">Apply</button>'}</span>
     </div>`).join('');
 }
@@ -1152,13 +1153,13 @@ function renderMyRequests(){
       <span class="mono" style="font-size:12px">${esc(r.date||'—')}</span>
       <span style="font-weight:700">${lblOf(r)}${r.shiftId?': '+esc(shiftLabel(r.shiftId)):''}</span>
       ${r.note?'<span style="color:var(--t2)">“'+esc(r.note)+'”</span>':''}
-      ${(r.status==='denied'&&(r.reason||r.autoDenied))?'<span style="color:#b42318;font-size:12px">— '+esc(r.reason||r.autoDenied)+'</span>':''}
+      ${(r.status==='denied'&&(r.reason||r.autoDenied))?'<span style="color:#5c1f15;font-size:12px">— '+esc(r.reason||r.autoDenied)+'</span>':''}
       <span style="margin-left:auto" class="status-${r.status}">${
         r.status==='pending'
-          ? '⏳ pending <button class="btn btn-danger" style="font-size:11px;padding:3px 9px;margin-left:6px" onclick="withdrawRequest('+jsArg(r.id)+')">✗ Withdraw</button>'
-          : r.status==='approved' ? '✅ approved'
-          : r.status==='withdrawn' ? '↩︎ withdrawn'
-          : '❌ denied'}</span>
+          ? 'pending <button class="btn btn-danger" style="font-size:11px;padding:3px 9px;margin-left:6px" onclick="withdrawRequest('+jsArg(r.id)+')">✗ Withdraw</button>'
+          : r.status==='approved' ? 'approved'
+          : r.status==='withdrawn' ? 'withdrawn'
+          : 'denied'}</span>
     </div>`).join(''):'<div style="font-size:12px;color:var(--t3)">No requests yet.</div>';
 }
 // A user "still owes a decision" on a 3-way swap if they're one of the two
@@ -1209,16 +1210,16 @@ function renderMySwaps(){
       if(s.to===me) return `<button class="btn btn-success" style="font-size:12px" onclick="acceptSwap(${jsArg(s.id)})">✓ Accept</button>
         <button class="btn btn-danger" style="font-size:12px" onclick="declineSwap(${jsArg(s.id)})">✗ Decline</button>`;
       // [37 · defect 15] the proposer can take it back while it is still only on the target
-      if(s.from===me) return `<span class="status-pending">⏳ waiting on ${esc(displayName(s.to))}</span>
+      if(s.from===me) return `<span class="status-pending">waiting on ${esc(displayName(s.to))}</span>
         <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawSwap(${jsArg(s.id)})">✗ Withdraw</button>`;
-      return `<span class="status-pending">⏳ waiting on ${esc(displayName(s.to))}</span>`;
+      return `<span class="status-pending">waiting on ${esc(displayName(s.to))}</span>`;
     }
-    if(s.status==='pending_admin') return '<span class="status-pending">⏳ waiting on admin</span>';
-    if(s.status==='declined_by_target') return `<span class="status-denied">❌ ${esc(displayName(s.to))} declined</span>`;
-    if(s.status==='approved') return '<span class="status-approved">✅ approved</span>';
-    if(s.status==='withdrawn') return '<span class="status-denied">↩︎ withdrawn</span>';
-    if(s.reason) return `<span class="status-denied">❌ denied by admin — ${esc(s.reason)}</span>`;
-    return '<span class="status-denied">❌ denied by admin</span>';
+    if(s.status==='pending_admin') return '<span class="status-pending">waiting on admin</span>';
+    if(s.status==='declined_by_target') return `<span class="status-denied">${esc(displayName(s.to))} declined</span>`;
+    if(s.status==='approved') return '<span class="status-approved">approved</span>';
+    if(s.status==='withdrawn') return '<span class="status-denied">withdrawn</span>';
+    if(s.reason) return `<span class="status-denied">denied by admin — ${esc(s.reason)}</span>`;
+    return '<span class="status-denied">denied by admin</span>';
   };
   const statusHtml3=s=>{
     const [a,b,c]=s.participants;
@@ -1226,17 +1227,17 @@ function renderMySwaps(){
       if(my3wayTurn(s)) return `<button class="btn btn-success" style="font-size:12px" onclick="acceptSwap3(${jsArg(s.id)})">✓ Accept</button>
         <button class="btn btn-danger" style="font-size:12px" onclick="declineSwap3(${jsArg(s.id)})">✗ Decline</button>`;
       const waiting=[b,c].filter(u=>!s.acceptances?.[u]);
-      const wait=`<span class="status-pending">⏳ waiting on ${waiting.map(u=>esc(displayName(u))).join(' &amp; ')}</span>`;
+      const wait=`<span class="status-pending">waiting on ${waiting.map(u=>esc(displayName(u))).join(' &amp; ')}</span>`;
       // [37 · defect 15] participants[0] proposed it; anyone else's turn is handled above
       if(me===a) return wait+` <button class="btn btn-danger" style="font-size:11px;padding:3px 9px" onclick="withdrawSwap(${jsArg(s.id)})">✗ Withdraw</button>`;
       return wait;
     }
-    if(s.status==='pending_admin') return '<span class="status-pending">⏳ waiting on admin</span>';
-    if(s.status==='declined_by_target') return `<span class="status-denied">❌ ${esc(displayName(s.declinedBy))} declined</span>`;
-    if(s.status==='approved') return '<span class="status-approved">✅ approved</span>';
-    if(s.status==='withdrawn') return '<span class="status-denied">↩︎ withdrawn</span>';
-    if(s.reason) return `<span class="status-denied">❌ denied by admin — ${esc(s.reason)}</span>`;
-    return '<span class="status-denied">❌ denied by admin</span>';
+    if(s.status==='pending_admin') return '<span class="status-pending">waiting on admin</span>';
+    if(s.status==='declined_by_target') return `<span class="status-denied">${esc(displayName(s.declinedBy))} declined</span>`;
+    if(s.status==='approved') return '<span class="status-approved">approved</span>';
+    if(s.status==='withdrawn') return '<span class="status-denied">withdrawn</span>';
+    if(s.reason) return `<span class="status-denied">denied by admin — ${esc(s.reason)}</span>`;
+    return '<span class="status-denied">denied by admin</span>';
   };
   const row2=s=>`
     <div class="rowline">
@@ -1251,7 +1252,7 @@ function renderMySwaps(){
     const leg=i=>esc(s.legs[i].date)+' '+(s.legs[i].part==='call'?'Call':'Day');
     return `
     <div class="rowline">
-      <span style="font-weight:700;color:var(--t2)">🔁 3-way</span>
+      <span style="font-weight:700;color:var(--t2)">3-way</span>
       <span style="color:var(--t2)">${esc(displayName(a))} → ${esc(displayName(b))} → ${esc(displayName(c))} → ${esc(displayName(a))}</span>
       <span class="mono" style="font-size:11px;color:var(--t3)">${leg(0)} • ${leg(1)} • ${leg(2)}</span>
       ${s.note?'<span style="color:var(--t2)">“'+esc(s.note)+'”</span>':''}
@@ -1577,8 +1578,8 @@ function renderChanges(){
   el.innerHTML=myChanges.slice(0,100).map(c=>{
     const when=chgAt(c)?new Date(chgAt(c)).toLocaleString():'';
     const fresh=chgAt(c)>seen;
-    return '<div class="rowline" style="'+(fresh?'background:#fffbeb;':'')+'padding:6px 8px;border-radius:6px">'
-      +(fresh?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;margin-right:6px" title="New since you last looked"></span>':'')
+    return '<div class="rowline" style="'+(fresh?'background:#fbf3d9;':'')+'padding:6px 8px;border-radius:6px">'
+      +(fresh?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#6f6a60;margin-right:6px" title="New since you last looked"></span>':'')
       +'<span style="font-size:12.5px">'+esc(changeText(c))+'</span>'
       +'<span class="mono" style="margin-left:auto;font-size:11px;color:var(--t3)">'+esc(when)+'</span></div>';
   }).join('')+(myChanges.length>100?'<div style="font-size:11px;color:var(--t3);margin-top:6px">Showing the newest 100.</div>':'');
