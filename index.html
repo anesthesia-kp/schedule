@@ -15,7 +15,7 @@
   // real incident: the tab's favicon/refresh icon flickered continuously
   // and the page never became interactive.
   var PAGE = 'index';
-  var BUILD = 53;      // bump this AND versions.json[PAGE] on each deploy of this file
+  var BUILD = 54;      // bump this AND versions.json[PAGE] on each deploy of this file
   (function(){
     function chk(){
       fetch('versions.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json();}).then(function(v){
@@ -484,7 +484,7 @@ table.grid th.stick1{background:var(--s2);z-index:3}
         <div id="signWelcome" style="display:none">
           <div style="font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#1f2329;margin-bottom:6px">Welcome back</div>
           <div id="signWelcomeName" style="font-size:1.9rem;font-weight:800;color:#1f2329;margin:0 0 18px"></div>
-          <button class="btn btn-primary" id="signQuickContinueBtn" onclick="quickSignIn()">Continue</button>
+          <button class="btn btn-primary" id="signQuickContinueBtn" style="background:#2B5540" onclick="quickSignIn()">Continue</button>
           <div id="signWelcomeErr" style="font-size:12px;color:#4a1911;margin-top:8px"></div>
           <div style="margin-top:14px"><a onclick="signShowPicker()" style="cursor:pointer;color:#1f2329;text-decoration:underline;font-size:.85rem">Sign in as someone else</a></div>
         </div>
