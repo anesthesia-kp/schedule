@@ -29,7 +29,7 @@ prerequisite.
 ## The deploy
 
 ```
-cd ~/Documents/GitHub/schedule/functions
+cd ~/GitHub/schedule/functions
 npm install
 npx --yes firebase-tools login                                              # once
 npx --yes firebase-tools deploy --only functions:ics --project vacation-25e8e
