@@ -1,0 +1,36 @@
+{
+  "id": "/schedule/",
+  "name": "Schedule",
+  "short_name": "Schedule",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#6B5B95",
+  "theme_color": "#6B5B95",
+  "icons": [
+    {
+      "src": "img/app-icons/schedule-staff-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "img/app-icons/schedule-staff-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "img/app-icons/schedule-staff-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "img/app-icons/schedule-staff-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
